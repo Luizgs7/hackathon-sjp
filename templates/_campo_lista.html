@@ -1,0 +1,20 @@
+{% import "_macros.html" as m %}
+<div data-ultima="{{ ultima }}"></div>
+<div class="hud">
+  <div><small>Nível</small><br><b>{{ nivel }}</b></div>
+  <div style="text-align:right"><small>Pontos na temporada</small><br><b>{{ pts.d }}</b>
+    {% if pts.p %}<small> +{{ pts.p }} a confirmar</small>{% endif %}</div>
+</div>
+{% if medalhas %}<p class="medalhas">{% for i, n in medalhas %}<span title="{{ n }}">{{ i }}</span>{% endfor %}</p>{% endif %}
+<h3>Minhas missões ({{ tarefas|length }})</h3>
+{% for t in tarefas %}
+<a class="missao {{ 'nova' if t.status == 'atribuida' }}" href="/campo/{{ t.id }}">
+  {{ m.prio(t.prioridade) }} {{ m.status(t.status) }}
+  <h4 style="margin:.4rem 0">{{ t.titulo }}</h4>
+  <small>📍 {{ t.local }}</small>
+</a>
+{% else %}
+<p>Nenhuma missão ativa. Aguarde novas missões. 🛡️</p>
+{% endfor %}
+{% if feitas %}<details><summary>Missões cumpridas recentes</summary>
+  {% for t in feitas %}<p><small>🏆 #{{ t.id }} {{ t.titulo }} {{ '★' * (t.nota or 0) }}</small></p>{% endfor %}</details>{% endif %}

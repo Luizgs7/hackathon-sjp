@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Painel do gestor · Missões SJP{% endblock %}
+{% block nav %}{{ m.nav_painel(u) }}{% endblock %}
+{% block main %}
+<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+  <h3 style="margin:0">Painel de missões <small class="htmx-indicator" id="ind">⟳</small></h3>
+  <form style="margin:0;display:flex;gap:.5rem" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change">
+    <select name="setor_id" style="margin:0" aria-label="Filtrar por setor">
+      <option value="">Todos os setores</option><option value="1">TI – Help Desk</option><option value="2">Manutenção Predial</option>
+    </select>
+    <a href="/atendente" role="button" class="outline">+ Nova tarefa</a>
+  </form>
+</div>
+<p><small>Atualiza automaticamente a cada 3 s. Passe o mouse sobre os indicadores para ver como são calculados.</small></p>
+<div id="quadro" hx-get="/gestor/quadro" hx-trigger="load, every 3s" hx-include="[name=setor_id]" hx-indicator="#ind"></div>
+{% endblock %}

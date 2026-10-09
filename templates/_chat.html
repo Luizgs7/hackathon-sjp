@@ -1,0 +1,7 @@
+{% for c in chat %}
+<div class="msg {{ c.autor }}">{% if c.autor == 'copiloto' %}<small>🤖 Copiloto{{ ' (base de conhecimento)' if c.fonte == 'regras' }}</small>
+{% endif %}{{ c.texto }}</div>
+{% else %}
+<p><small>Dica: descreva o sintoma. O copiloto usa os procedimentos internos e casos já resolvidos.</small></p>
+{% endfor %}
+<script>(() => { const c = document.getElementById('chat'); if (c) c.scrollTop = c.scrollHeight; })();</script>

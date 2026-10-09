@@ -1,0 +1,19 @@
+{% macro status(s) -%}
+<span class="st st-{{ s }}">{{ STATUS[s][0] }} {{ STATUS[s][1] }}</span>
+{%- endmacro %}
+
+{% macro prio(p) -%}
+{% if p %}<span class="prio prio-{{ p }}" title="Criticidade {{ PRIORIDADES[p] }}">{{ p }} · {{ PRIORIDADES[p] }}</span>{% else %}<span class="selo">sem prioridade</span>{% endif %}
+{%- endmacro %}
+
+{% macro fonte(f) -%}
+{% if f == 'llm' %}<span class="selo" title="Modelo {{ LLM_MODEL }} via endpoint externo de testes">🤖 IA (LLM)</span>
+{% elif f == 'regras' %}<span class="selo selo-regras" title="LLM indisponível — fallback determinístico">⚙️ sugestão por regras</span>{% endif %}
+{%- endmacro %}
+
+{% macro nav_painel(u) -%}
+{% if 'atendente' in u.papeis %}<li><a href="/atendente">Atendimento</a></li>{% endif %}
+{% if 'gestor' in u.papeis %}<li><a href="/gestor">Painel</a></li><li><a href="/config">Configurar</a></li>{% endif %}
+<li><a href="/ranking">Ranking</a></li>
+<li><small>{{ u.avatar }} {{ u.nome }}</small> · <a href="/sair?area=painel">sair</a></li>
+{%- endmacro %}

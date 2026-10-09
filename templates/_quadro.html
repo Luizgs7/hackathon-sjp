@@ -1,0 +1,42 @@
+{% import "_macros.html" as m %}
+<section class="kpis" aria-label="Indicadores">
+  <div class="kpi" title="Total de tarefas registradas (tabela tarefas)"><b>{{ ind.recebidas }}</b><small>📥 recebidas</small></div>
+  <div class="kpi" title="Tarefas em Atribuída, A caminho ou Em execução"><b>{{ ind.em_execucao }}</b><small>🔧 em andamento</small></div>
+  <div class="kpi {{ 'alerta' if ind.impedidas }}" title="Tarefas com impedimento aberto"><b>{{ ind.impedidas }}</b><small>⛔ impedidas</small></div>
+  <div class="kpi" title="Concluídas pelo executor e ainda não confirmadas pela demandante"><b>{{ ind.aguardando }}</b><small>✅ aguardando validação</small></div>
+  <div class="kpi" title="Resolução confirmada pela demandante"><b>{{ ind.resolvidas }}</b><small>🏆 resolvidas</small></div>
+  <div class="kpi" title="Média entre o evento 'Atribuída' e o primeiro 'Em execução' (tabela eventos)"><b>{{ ind.tempo_inicio }}</b><small>⏱️ até iniciar</small></div>
+  <div class="kpi" title="Média entre 'Concluída' (executor) e 'Resolvida' (demandante)"><b>{{ ind.tempo_confirmacao }}</b><small>⏱️ até confirmar</small></div>
+  <div class="kpi" title="Média das notas 1–5 dadas pelos demandantes (quantidade entre parênteses)"><b>{{ ind.csat }}</b><small>😊 satisfação</small></div>
+  <div class="kpi" title="Soma de reaberturas por pendência indicada pela demandante"><b>{{ ind.reaberturas }}</b><small>🔁 reaberturas</small></div>
+  <div class="kpi" title="Conversas do autoatendimento em que o servidor marcou 'Resolvido' (chamados evitados)"><b>{{ ind.auto_resolvidos }}</b><small>💬 resolvidos pelo assistente</small></div>
+  <div class="kpi" title="Solicitações de servidores aguardando conferência e registro pelo atendente"><b>{{ ind.solicitacoes_aguardando }}</b><small>📨 solicitações a registrar</small></div>
+  <div class="kpi {{ 'alerta' if ind.outbox_pendente }}" title="Atualizações aguardando entrega ao sistema de origem (outbox)"><b>{{ ind.outbox_pendente }}</b><small>🔄 sync pendente</small></div>
+</section>
+{% if ind.motivos %}<p><small><b>Principais motivos de impedimento:</b>
+  {% for r in ind.motivos %}{{ r.motivo }} ({{ r.n }}){{ ', ' if not loop.last }}{% endfor %}</small></p>{% endif %}
+
+{% macro cartao(t) -%}
+<a class="cartao" href="/tarefa/{{ t.id }}">
+  {{ m.prio(t.prioridade) }} {% if t.ia_status == 'analisando' %}<span class="selo">🤖 triando…</span>{% elif t.ia_status == 'sugerida' %}<span class="selo">🤖 sugestão p/ conferir</span>{% endif %}
+  <span class="t">#{{ t.id }} {{ t.titulo }}</span>
+  <small>📍 {{ t.local or '—' }}</small>
+  <small>{% if t.executor %}{{ t.avatar }} {{ t.executor }}{% else %}sem executor{% endif %} · {{ t.atualizado_em|hora }}</small>
+  {% if t.origem != 'web' %}<small>🔗 {{ SISTEMAS[t.origem].nome }} {{ t.external_id }}</small>{% endif %}
+</a>
+{%- endmacro %}
+
+<section class="impedidas" aria-label="Tarefas impedidas">
+  <h4 style="margin:0 0 .5rem">⛔ Impedidas — precisam de ação da gestão ({{ colunas.impedida|length }})</h4>
+  <div class="linha-impedidas">
+    {% for t in colunas.impedida %}{{ cartao(t) }}{% else %}<small>Nenhuma tarefa impedida. 👍</small>{% endfor %}
+  </div>
+</section>
+<div class="quadro">
+  {% for s in ['recebida', 'reaberta', 'atribuida', 'a_caminho', 'em_execucao', 'concluida', 'resolvida'] %}
+  <div class="coluna">
+    <h4>{{ STATUS[s][0] }} {{ STATUS[s][1] }} ({{ colunas[s]|length }})</h4>
+    {% for t in colunas[s] %}{{ cartao(t) }}{% endfor %}
+  </div>
+  {% endfor %}
+</div>

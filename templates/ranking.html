@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Ranking · Missões SJP{% endblock %}
+{% block body_class %}{{ 'campo' if campo }}{% endblock %}
+{% block nav %}{% if campo %}<li><a href="/campo">← Missões</a></li>{% else %}{{ m.nav_painel(u) }}{% endif %}{% endblock %}
+{% block main %}
+<h2>🏆 Guardiões de SJP — Ranking</h2>
+<form method="get" class="grid">
+  <label>Temporada
+    <select name="temporada" onchange="this.form.submit()">{% for tp in temporadas %}
+      <option value="{{ tp.numero }}" {{ 'selected' if tp.numero == temporada }}>{{ tp.nome }}{{ ' (atual)' if not tp.fim else ' (encerrada)' }}</option>{% endfor %}</select></label>
+  <label>Setor
+    <select name="setor_id" onchange="this.form.submit()"><option value="">Todos</option>{% for s in setores %}
+      <option value="{{ s.id }}" {{ 'selected' if s.id == setor_id }}>{{ s.nome }}</option>{% endfor %}</select></label>
+</form>
+<div class="grade2">
+  <article>
+    <header><strong>Individual</strong></header>
+    <table class="rank"><thead><tr><th>#</th><th>Servidor</th><th>Pontos</th><th>Medalhas</th></tr></thead><tbody>
+    {% for r in individual %}
+      <tr><td>{{ ['🥇', '🥈', '🥉'][loop.index0] if loop.index <= 3 else loop.index }}</td>
+        <td>{{ r.avatar }} {{ r.nome }}<br><small>{{ r.equipe or 'Gestão' }}</small></td>
+        <td><b>{{ r.pontos }}</b>{% if r.provisorios %}<br><small>+{{ r.provisorios }} a confirmar</small>{% endif %}</td>
+        <td class="medalhas">{% for i, n in medalhas[r.id] %}<span title="{{ n }}">{{ i }}</span>{% endfor %}</td></tr>
+    {% endfor %}</tbody></table>
+  </article>
+  <div>
+    <article>
+      <header><strong>Por equipe</strong></header>
+      <table class="rank"><tbody>{% for e in equipes %}
+        <tr><td>{{ loop.index }}</td><td>{{ e.nome }}<br><small>{{ e.setor }}</small></td><td><b>{{ e.pontos }}</b></td></tr>{% endfor %}</tbody></table>
+    </article>
+    <article>
+      <header><strong>📜 Regras de pontuação (configuráveis)</strong></header>
+      <ul>
+        <li><b>Entrega:</b> {{ rg.pontos_por_complexidade }} pts × complexidade (1–5), <i>provisórios</i> ao concluir.</li>
+        <li><b>Qualidade:</b> ao confirmar, multiplica pela nota da demandante
+          ({% for k, v in rg.multiplicador_nota.items() %}{{ k }}★×{{ v }}{{ ', ' if not loop.last }}{% endfor %}).</li>
+        <li><b>Prazo:</b> +{{ rg.bonus_sla }} se dentro do SLA da criticidade. Impedimentos externos (material, terceiros) <b>pausam o relógio</b> e não penalizam.</li>
+        <li><b>Sem reabertura:</b> +{{ rg.bonus_sem_reabertura }}. Se a demandante indicar pendência, os pontos ficam suspensos até a resolução.</li>
+        <li><b>Colaboração:</b> +{{ rg.bonus_apoio_colega }} para quem apoia a missão de um colega; +{{ rg.bonus_desbloqueio_gestor }} para o gestor que remove um impedimento.</li>
+        <li>O placar reinicia a cada temporada (ex.: mensal) e o histórico fica preservado.</li>
+      </ul>
+    </article>
+  </div>
+</div>
+{% endblock %}

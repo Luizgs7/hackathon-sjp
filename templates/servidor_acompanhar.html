@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Solicitação {{ s.protocolo }} · Help Desk SJP{% endblock %}
+{% block nav %}<li><a href="/servidor">Assistente</a></li><li><a href="/servidor/solicitar">Abrir solicitação</a></li>{% endblock %}
+{% block main %}
+<div hx-get="/servidor/acompanhar/{{ s.token }}" hx-trigger="every 5s" hx-select="#acomp" hx-target="#acomp" hx-swap="outerHTML"></div>
+<div id="acomp">
+<hgroup>
+  <h2>Solicitação {{ s.protocolo }}</h2>
+  <p>{{ s.titulo }} · 📍 {{ s.local }}</p>
+</hgroup>
+<article>
+  {% if s.status == 'aguardando' %}
+    <p><span class="st st-recebida">⏳ Aguardando atendente</span></p>
+    <p>Um atendente vai conferir e registrar seu chamado. Guarde o protocolo <b>{{ s.protocolo }}</b>
+      e este endereço para acompanhar.</p>
+  {% elif s.status == 'descartada' %}
+    <p><span class="st st-recebida">ℹ️ Encerrada sem chamado</span></p>
+    <p>{{ s.motivo_descarte }} ({{ s.registrada_por }})</p>
+  {% elif t %}
+    <p>Chamado registrado por {{ s.registrada_por }} em {{ s.registrada_em|datahora }}: <b>tarefa #{{ t.id }}</b></p>
+    <p>{{ m.status(t.status) }} {{ m.prio(t.prioridade) }}</p>
+    {% if t.status == 'concluida' %}
+      <p>O técnico informou a conclusão. <a href="/validar/{{ t.token }}" role="button">Confirmar e avaliar o atendimento</a></p>
+    {% elif t.status in ('resolvida', 'reaberta') %}
+      <p><a href="/validar/{{ t.token }}">Ver detalhes do atendimento</a></p>
+    {% endif %}
+  {% endif %}
+</article>
+</div>
+<p><a href="/servidor">Precisa de outra coisa? Fale com o assistente →</a></p>
+{% endblock %}

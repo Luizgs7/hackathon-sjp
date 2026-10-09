@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Confirme seu atendimento · Prefeitura de São José dos Pinhais{% endblock %}
+{% block body_class %}campo{% endblock %}
+{% block main %}
+<hgroup>
+  <h2>Olá, {{ t.solicitante.split()[0] if t.solicitante else '' }}!</h2>
+  <p>Seu pedido <b>"{{ t.titulo }}"</b> (protocolo {{ t.external_id or ('#' ~ t.id) }})</p>
+</hgroup>
+<p>{{ m.status(t.status) }}</p>
+
+{% if t.status == 'concluida' %}
+<article>
+  <p>{% if executor %}{{ executor.avatar }} <b>{{ executor.nome }}</b> informou:{% endif %}<br>
+    {{ t.resumo_ia or t.relato }}</p>
+  {% if t.evidencia %}<img class="evid" src="/uploads/{{ t.evidencia }}" alt="Foto do serviço realizado">{% endif %}
+</article>
+<form method="post">
+  <h3>O problema foi resolvido?</h3>
+  <div class="opcoes">
+    <label><input type="radio" name="resultado" value="resolvido" required> ✔ Sim, resolvido</label>
+    <label><input type="radio" name="resultado" value="pendente"> ✖ Ainda com problema</label>
+  </div>
+  <h3 style="margin-top:1rem">Como foi o atendimento?</h3>
+  <div class="estrelas" role="radiogroup" aria-label="Nota de 1 a 5">
+    {% for n in [5, 4, 3, 2, 1] %}<input type="radio" id="n{{ n }}" name="nota" value="{{ n }}" required {{ 'checked' if n == 5 }}>
+    <label for="n{{ n }}" title="{{ n }} estrela(s)">★</label>{% endfor %}
+  </div>
+  <label>Comentário (obrigatório se ainda houver problema) <textarea name="comentario" rows="2"></textarea></label>
+  <button class="btn-grande">Enviar resposta</button>
+</form>
+{% elif t.status == 'resolvida' %}
+<article><b>✔ Obrigado!</b> Você confirmou a resolução e avaliou com {{ '★' * (t.nota or 0) }}.</article>
+{% elif t.status == 'reaberta' %}
+<article><b>🔁 Recebemos sua pendência.</b> O atendimento foi reaberto e a equipe vai retomar. Você receberá um novo link ao final.</article>
+{% else %}
+<article>Seu pedido está em andamento. Você receberá um link para confirmar quando o serviço for concluído.</article>
+{% endif %}
+
+<details><summary>Acompanhamento</summary>
+  <ul class="timeline">{% for e in linha %}<li><small>{{ e.criado_em|datahora }}</small> {{ m.status(e.para) }}</li>{% endfor %}</ul>
+</details>
+{% endblock %}

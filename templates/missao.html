@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Missão #{{ t.id }} · Missões SJP{% endblock %}
+{% block body_class %}campo{% endblock %}
+{% block nav %}<li><a href="/campo">← Missões</a></li><li><small>{{ u.avatar }} {{ u.nome.split()[0] }}</small></li>{% endblock %}
+{% block main %}
+<div hx-get="/campo/{{ t.id }}/estado?v={{ t.atualizado_em|urlencode }}" hx-trigger="every 3s" hx-swap="none"></div>
+<p>{{ m.prio(t.prioridade) }} {{ m.status(t.status) }}</p>
+<h2 style="margin-bottom:.3rem">{{ t.titulo }}</h2>
+<p>📍 <b>{{ t.local }}</b><br>🙋 {{ t.solicitante }}{% if t.contato %} · <a href="tel:{{ t.contato }}">☎️ {{ t.contato }}</a>{% endif %}</p>
+<p>{{ t.descricao }}</p>
+{% if ia and ia.resumo %}<p><span class="selo">🤖 resumo IA</span> {{ ia.resumo }}</p>{% endif %}
+{% if ia and ia.informacoes_faltantes %}<p><small>⚠️ Confirmar no local: {{ ia.informacoes_faltantes|join('; ') }}</small></p>{% endif %}
+
+{# Um único botão primário por estado: poucos toques, adequado ao campo #}
+{% if t.status == 'atribuida' %}
+  <form method="post" action="/campo/{{ t.id }}/avancar"><input type="hidden" name="para" value="a_caminho">
+    <button class="btn-grande">🚗 Aceitar e ir ao local</button></form>
+{% elif t.status == 'a_caminho' %}
+  <form method="post" action="/campo/{{ t.id }}/avancar"><input type="hidden" name="para" value="em_execucao">
+    <button class="btn-grande">📍 Cheguei — iniciar atendimento</button></form>
+{% elif t.status == 'em_execucao' %}
+  <details>
+    <summary role="button" class="btn-grande">✅ Concluir missão</summary>
+    <form method="post" action="/campo/{{ t.id }}/concluir" enctype="multipart/form-data">
+      <label>O que foi feito? <textarea name="relato" required rows="3" placeholder="Ex.: Keystone do ponto 12 danificado, substituído. Testado com testador e notebook."></textarea></label>
+      <label>📷 Foto da evidência <input type="file" name="foto" accept="image/*" capture="environment"></label>
+      <button class="btn-grande">Enviar conclusão</button>
+    </form>
+  </details>
+  <details>
+    <summary role="button" class="btn-grande btn-imp outline">⛔ Reportar impedimento</summary>
+    <form method="post" action="/campo/{{ t.id }}/impedimento" enctype="multipart/form-data">
+      <fieldset>{% for mo in MOTIVOS %}
+        <label><input type="radio" name="motivo" value="{{ mo }}" required {{ 'checked' if loop.first }}> {{ mo }}</label>{% endfor %}</fieldset>
+      <label>Detalhe <input name="detalhe" placeholder="Ex.: keystone Cat6 danificado, sem peça reserva"></label>
+      <label>📷 Foto (opcional) <input type="file" name="foto" accept="image/*" capture="environment"></label>
+      <button class="btn-grande">Enviar impedimento ao gestor</button>
+    </form>
+  </details>
+{% elif t.status == 'impedida' %}
+  <article style="border:2px solid var(--alerta)">
+    <b>⛔ Aguardando providência do gestor</b><br>{{ impedimento.motivo }}{% if impedimento.detalhe %} — {{ impedimento.detalhe }}{% endif %}
+    {% if impedimento.externo %}<br><small>⏸️ Motivo externo: o relógio do SLA está pausado e você não perde pontos.</small>{% endif %}
+  </article>
+{% elif t.status == 'concluida' %}
+  <article><b>✅ Conclusão enviada.</b> Aguardando a confirmação de {{ t.solicitante }}.
+    {% for p in pontos if p.tipo == 'provisorio' %}<br>🏅 <b>+{{ p.pontos }} pts provisórios</b>{% endfor %}</article>
+{% elif t.status == 'resolvida' %}
+  <article><b>🏆 Missão cumprida!</b> {{ t.solicitante }} confirmou: {{ '★' * (t.nota or 0) }}
+    {% for p in pontos if p.tipo in ('definitivo', 'bonus') %}<br><small>+{{ p.pontos }} – {{ p.descricao }}</small>{% endfor %}</article>
+{% elif t.status == 'reaberta' %}
+  <article style="border:2px solid var(--alerta)"><b>🔁 Reaberta pela demandante:</b> {{ t.comentario_demandante }}<br><small>Aguardando nova atribuição do gestor.</small></article>
+{% endif %}
+
+{% if t.status in ('atribuida', 'a_caminho', 'em_execucao', 'impedida') %}
+<article>
+  <header><strong>🤖 Copiloto de campo</strong> <small>— pergunte como resolver</small></header>
+  <div id="chat" class="chat">{% include "_chat.html" %}</div>
+  <form hx-post="/campo/{{ t.id }}/chat" hx-target="#chat" hx-indicator="#pensando" hx-on::after-request="this.reset()">
+    <fieldset role="group">
+      <input name="pergunta" required placeholder="Ex.: o ponto está sem link e o LED do switch apagado">
+      <button>Enviar</button>
+    </fieldset>
+    <small id="pensando" class="htmx-indicator">🤖 pensando… (pode levar alguns segundos)</small>
+  </form>
+</article>
+{% endif %}
+
+<details><summary>Histórico</summary>
+  <ul class="timeline">{% for e in eventos %}<li><small>{{ e.criado_em|datahora }} · {{ e.usuario }}</small><br>{{ e.texto }}</li>{% endfor %}</ul>
+</details>
+{% endblock %}

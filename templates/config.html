@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Configuração · Missões SJP{% endblock %}
+{% block nav %}{{ m.nav_painel(u) }}{% endblock %}
+{% block main %}
+<h2>⚙️ Configuração</h2>
+<div class="grade2">
+<div>
+  <article>
+    <header><strong>🎮 Regras de pontuação</strong> <small>(JSON editável)</small></header>
+    <form method="post" action="/config/regras">
+      <textarea name="regras_json" rows="18" style="font-family:monospace;font-size:.85rem">{{ regras_json }}</textarea>
+      <button>Salvar regras</button>
+    </form>
+  </article>
+  <article>
+    <header><strong>🗓️ Temporadas do placar</strong></header>
+    <ul>{% for tp in temporadas %}<li>{{ tp.nome }} — {{ tp.inicio|datahora }}{{ ' → ' ~ (tp.fim|datahora) if tp.fim else ' (atual)' }}</li>{% endfor %}</ul>
+    <form method="post" action="/config/temporada" onsubmit="return confirm('Encerrar a temporada atual e zerar o placar? O histórico é preservado.')">
+      <fieldset role="group"><input name="nome" required placeholder="Ex.: Temporada de Novembro"><button>Encerrar e iniciar nova</button></fieldset>
+    </form>
+  </article>
+  <article>
+    <header><strong>🔄 Integração: fila de saída (outbox)</strong></header>
+    <form method="post" action="/integracoes/reprocessar"><button class="outline">Reprocessar pendentes agora</button>
+      <small>(o reenvio também é automático a cada 5 s)</small></form>
+    <table><thead><tr><th>#</th><th>Chamado</th><th>Atualização</th><th>Situação</th></tr></thead><tbody>
+    {% for o in outbox %}{% set p = o.payload|fromjson %}
+      <tr><td>{{ o.id }}</td><td>{{ p.external_id }}</td><td>{{ p.status_label }}</td>
+        <td>{% if o.status == 'entregue' %}✔ entregue{% else %}⏳ pendente · {{ o.tentativas }} tent.<br><small>{{ o.erro or '' }}</small>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4">Sem mensagens.</td></tr>{% endfor %}</tbody></table>
+  </article>
+</div>
+<div>
+  <article>
+    <header><strong>🏢 Setores</strong></header>
+    <ul>{% for s in setores %}<li>{{ s.nome }}</li>{% endfor %}</ul>
+    <form method="post" action="/config/setor"><fieldset role="group"><input name="nome" required placeholder="Novo setor"><button>Adicionar</button></fieldset></form>
+  </article>
+  <article>
+    <header><strong>👥 Equipes</strong></header>
+    <ul>{% for e in equipes %}<li>{{ e.nome }} <small>({{ e.setor }})</small></li>{% endfor %}</ul>
+    <form method="post" action="/config/equipe" class="grid">
+      <input name="nome" required placeholder="Nova equipe">
+      <select name="setor_id">{% for s in setores %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}</select>
+      <button>Adicionar</button></form>
+  </article>
+  <article>
+    <header><strong>🧩 Tipos de tarefa</strong></header>
+    <table><tbody>{% for tp in tipos %}<tr><td>{{ tp.nome }}<br><small>{{ tp.setor }}</small></td><td>complex. {{ tp.complexidade }}</td>
+      <td><small>{{ tp.palavras }}</small></td></tr>{% endfor %}</tbody></table>
+    <form method="post" action="/config/tipo">
+      <div class="grid"><input name="nome" required placeholder="Novo tipo">
+        <select name="setor_id">{% for s in setores %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}</select>
+        <input name="complexidade" type="number" min="1" max="5" value="2" aria-label="Complexidade"></div>
+      <input name="palavras" placeholder="Palavras-chave para triagem (separadas por vírgula)">
+      <button>Adicionar tipo</button></form>
+  </article>
+  <article>
+    <header><strong>🔐 Perfis e permissões</strong></header>
+    <ul>
+      <li><b>Atendente:</b> cadastra tarefas e consulta a fila.</li>
+      <li><b>Gestor:</b> confere a triagem da IA, atribui, resolve impedimentos, configura e vê indicadores.</li>
+      <li><b>Executor:</b> vê e atualiza apenas as próprias missões (interface de campo).</li>
+      <li><b>Demandante:</b> acessa só a própria tarefa, por link com token único.</li>
+    </ul>
+  </article>
+</div>
+</div>
+{% endblock %}

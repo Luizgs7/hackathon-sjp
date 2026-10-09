@@ -1,0 +1,22 @@
+# Segredos (chave da API de IA, sessão, etc.)
+.env
+.env.*
+!.env.example
+
+# Chave privada VAPID (gerada automaticamente ao iniciar)
+*.pem
+
+# Bancos SQLite locais (recriados ao iniciar)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Arquivos enviados pelos usuários
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Precisa de ajuda? · Help Desk SJP{% endblock %}
+{% block nav %}<li><a href="/servidor">Assistente</a></li><li><a href="/servidor/solicitar">Abrir solicitação</a></li>{% endblock %}
+{% block main %}
+<div class="auto-grade">
+  <section class="auto-chat" aria-label="Assistente virtual">
+    <header class="auto-topo">
+      <div class="auto-avatar" aria-hidden="true">🤖</div>
+      <div>
+        <h2>Olá! Sou o Assistente Virtual do Help Desk.</h2>
+        <p>Conte o que está acontecendo. Muitos problemas se resolvem em minutos, sem precisar ligar. Se não der,
+          eu já preparo a solicitação para o atendente com tudo o que conversamos.</p>
+      </div>
+    </header>
+
+    <div id="conversa" class="auto-conversa" aria-live="polite">{% include "_servidor_chat.html" %}</div>
+
+    {% if not conversa %}
+    <div class="chips" id="chips">
+      {% for s in ['Estou sem internet no computador', 'A impressora não imprime', 'Esqueci minha senha do sistema',
+                   'O Wi-fi não conecta', 'Tem uma lâmpada queimada na sala', 'Está pingando água do teto'] %}
+      <button type="button" class="outline chip" hx-post="/servidor/chat" hx-vals='{"pergunta": "{{ s }}"}'
+              hx-target="#conversa" hx-indicator="#digitando" onclick="mostrarPergunta(this.textContent)">{{ s }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <form id="form-chat" hx-post="/servidor/chat" hx-target="#conversa" hx-indicator="#digitando"
+          hx-on::before-request="mostrarPergunta(this.pergunta.value)" hx-on::after-request="this.reset(); this.pergunta.focus()">
+      <fieldset role="group">
+        <input name="pergunta" required autocomplete="off" autofocus aria-label="Sua mensagem"
+               placeholder="Descreva o problema. Ex.: o computador da recepção está sem internet desde cedo">
+        <button>Enviar</button>
+      </fieldset>
+    </form>
+    <small class="auto-aviso">🔒 Nunca informe senhas. · Assistente com IA: as respostas podem conter erros; em caso de
+      risco (fogo, choque, vazamento forte), afaste as pessoas e abra a solicitação imediatamente.</small>
+  </section>
+
+  <aside>
+    <article class="auto-sem-ia">
+      <header><strong>Prefere não usar o assistente?</strong></header>
+      <p>Você pode enviar sua solicitação diretamente. Um atendente vai conferir e registrar o chamado.</p>
+      <a href="/servidor/solicitar" role="button" class="secondary outline" style="width:100%">📝 Abrir solicitação sem o assistente</a>
+    </article>
+    <article>
+      <header><strong>Como funciona</strong></header>
+      <ol>
+        <li>Converse com o assistente e tente as orientações.</li>
+        <li>Resolveu? Clique em <b>Resolvido</b>. Nenhum chamado é necessário.</li>
+        <li>Não resolveu? <b>Abrir solicitação</b> gera o pedido com o resumo da conversa.</li>
+        <li>Um atendente confere e registra o chamado, e você acompanha pelo protocolo.</li>
+      </ol>
+      <small>Urgências também pelo telefone do Help Desk: (41) 3381-0000.</small>
+    </article>
+  </aside>
+</div>
+<script>
+  function mostrarPergunta(texto) {
+    if (!texto || !texto.trim()) return;
+    const conv = document.getElementById('conversa');
+    conv.querySelector('.auto-vazio')?.remove();
+    document.getElementById('chips')?.remove();
+    const d = document.createElement('div');
+    d.className = 'msg servidor'; d.textContent = texto;
+    conv.insertBefore(d, document.getElementById('digitando'));
+    conv.scrollTop = conv.scrollHeight;
+  }
+</script>
+{% endblock %}

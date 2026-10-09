@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Atendimento · Missões SJP{% endblock %}
+{% block nav %}{{ m.nav_painel(u) }}{% endblock %}
+{% block main %}
+<article class="fila-sol">
+  <header><strong>📨 Solicitações dos servidores aguardando registro ({{ solicitacoes|length }})</strong><br>
+    <small>Enviadas pelo <a href="/servidor" target="_blank">autoatendimento</a>. Confira, ajuste se necessário e registre o chamado.</small></header>
+  {% for s in solicitacoes %}
+  <details {{ 'open' if loop.first }}>
+    <summary><b>{{ s.protocolo }}</b> · {{ s.titulo }} · {{ s.nome }} · {{ s.criado_em|datahora }}
+      {% if s.via_ia %}<span class="selo">🤖 via assistente</span>{% else %}<span class="selo selo-regras">formulário sem IA</span>{% endif %}</summary>
+    <form method="post" action="/solicitacoes/{{ s.id }}/registrar">
+      <div class="grid">
+        <label>Assunto <input name="titulo" required value="{{ s.titulo }}"></label>
+        <label>Setor <select name="setor_id">{% for st in setores %}<option value="{{ st.id }}" {{ 'selected' if st.id == s.setor_id }}>{{ st.nome }}</option>{% endfor %}</select></label>
+      </div>
+      <label>Descrição <textarea name="descricao" rows="2" required>{{ s.descricao }}</textarea></label>
+      <label>Local <input name="local" required value="{{ s.local }}"></label>
+      <p><small>🙋 {{ s.nome }}{% if s.contato %} · ☎️ {{ s.contato }}{% endif %}{% if s.tentativas %} · Já tentou: {{ s.tentativas }}{% endif %}</small></p>
+      {% if s.conversa %}<details><summary><small>Ver conversa com o assistente</small></summary><pre style="white-space:pre-wrap;font-size:.8rem">{{ s.conversa }}</pre></details>{% endif %}
+      <button>✔ Registrar chamado</button>
+    </form>
+    <form method="post" action="/solicitacoes/{{ s.id }}/descartar">
+      <fieldset role="group"><input name="motivo" required placeholder="Motivo para não abrir (ex.: resolvido por telefone)"><button class="secondary outline">Encerrar sem chamado</button></fieldset>
+    </form>
+  </details>
+  {% else %}
+  <p><small>Nenhuma solicitação pendente.</small></p>
+  {% endfor %}
+</article>
+<div class="grade2">
+  <article>
+    <header><strong>📝 Nova tarefa — cadastro direto</strong><br>
+      <small>Para setores sem sistema próprio. No Help Desk de TI o chamado é registrado no
+        <a href="http://localhost:8001" target="_blank">SisChamados Legado</a> e chega pela integração.</small></header>
+    <form method="post" action="/tarefas">
+      <label>Setor responsável
+        <select name="setor_id" required>{% for s in setores %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}</select></label>
+      <label>Título <input name="titulo" required placeholder="Ex.: Infiltração no teto da sala 3"></label>
+      <label>Descrição do problema <textarea name="descricao" required rows="3"></textarea></label>
+      <label>Local (unidade, sala, andar) <input name="local" placeholder="Ex.: CMEI Jardim Ipê – sala 3"></label>
+      <div class="grid">
+        <label>Solicitante <input name="solicitante" required></label>
+        <label>Telefone/ramal <input name="contato"></label>
+      </div>
+      <button>Registrar tarefa</button>
+      <small>A IA fará a triagem (tipo, criticidade, informações faltantes) para conferência do gestor.</small>
+    </form>
+  </article>
+  <article>
+    <header><strong>Últimas tarefas</strong></header>
+    {% for t in tarefas %}
+    <a class="cartao" href="/tarefa/{{ t.id }}">{{ m.status(t.status) }} {{ m.prio(t.prioridade) }}
+      <span class="t">#{{ t.id }} {{ t.titulo }}</span>
+      <small>{{ 'Origem: ' ~ SISTEMAS[t.origem].nome ~ ' ' ~ t.external_id if t.origem != 'web' else 'Cadastro web' }} · {{ t.criado_em|datahora }}</small></a>
+    {% endfor %}
+  </article>
+</div>
+{% endblock %}
