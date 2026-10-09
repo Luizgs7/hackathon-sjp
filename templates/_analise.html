@@ -1,0 +1,24 @@
+{% import "_macros.html" as m %}
+{% if analise and analise.status == 'gerando' %}
+<div hx-get="/gestor/metricas/analise" hx-trigger="every 3s" hx-target="#analise" hx-swap="innerHTML">
+  <p aria-busy="true">Analisando a recorrência de chamados dos últimos {{ analise.dias }} dias por secretaria e tipo… (pode levar até 1 minuto)</p>
+</div>
+{% elif analise and analise.acoes is defined %}
+<p>{{ m.fonte(analise.fonte) }} <small>Gerada em {{ analise.gerada_em|datahora }} · últimos {{ analise.dias }} dias</small></p>
+<p><b>Diagnóstico:</b> {{ analise.resumo }}</p>
+<div class="acoes-cap">
+{% for a in analise.acoes %}
+  <div class="acao-cap impacto-{{ a.impacto|default('médio')|replace('é', 'e') }}">
+    <div class="acao-topo"><span class="selo">🏛️ {{ a.secretaria }}</span>
+      <span class="selo selo-impacto">impacto {{ a.impacto|default('médio') }}</span></div>
+    <h5>{{ a.tema }}</h5>
+    <p><small><b>Formato:</b> {{ a.formato }} · <b>Público:</b> {{ a.publico }}</small></p>
+    <p><small><b>Evidência:</b> {{ a.evidencia }}</small></p>
+    <p><small>{{ a.justificativa }}</small></p>
+    {% if a.chamados_evitaveis_mes %}<p class="evitaveis">≈ {{ a.chamados_evitaveis_mes|dec if a.chamados_evitaveis_mes is number else a.chamados_evitaveis_mes }} chamados/mês evitáveis <small>(estimativa)</small></p>{% endif %}
+  </div>
+{% endfor %}
+</div>
+{% else %}
+<p><small>Nenhuma análise gerada ainda. Clique em <b>Gerar análise</b> para a IA propor ações de capacitação a partir dos dados acima.</small></p>
+{% endif %}

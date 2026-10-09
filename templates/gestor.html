@@ -2,6 +2,7 @@
 {% block title %}Painel do gestor · Missões SJP{% endblock %}
 {% block nav %}{{ m.nav_painel(u) }}{% endblock %}
 {% block main %}
+{{ m.abas_gestor('quadro') }}
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
   <h3 style="margin:0">Painel de missões <small class="htmx-indicator" id="ind">⟳</small></h3>
   <form style="margin:0;display:flex;gap:.5rem" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change">

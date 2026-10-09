@@ -20,7 +20,7 @@
 <a class="cartao" href="/tarefa/{{ t.id }}">
   {{ m.prio(t.prioridade) }} {% if t.ia_status == 'analisando' %}<span class="selo">🤖 triando…</span>{% elif t.ia_status == 'sugerida' %}<span class="selo">🤖 sugestão p/ conferir</span>{% endif %}
   <span class="t">#{{ t.id }} {{ t.titulo }}</span>
-  <small>📍 {{ t.local or '—' }}</small>
+  <small>📍 {{ t.local or '—' }}{{ ' · 🏛️ ' ~ t.secretaria if t.secretaria }}</small>
   <small>{% if t.executor %}{{ t.avatar }} {{ t.executor }}{% else %}sem executor{% endif %} · {{ t.atualizado_em|hora }}</small>
   {% if t.origem != 'web' %}<small>🔗 {{ SISTEMAS[t.origem].nome }} {{ t.external_id }}</small>{% endif %}
 </a>
@@ -35,7 +35,8 @@
 <div class="quadro">
   {% for s in ['recebida', 'reaberta', 'atribuida', 'a_caminho', 'em_execucao', 'concluida', 'resolvida'] %}
   <div class="coluna">
-    <h4>{{ STATUS[s][0] }} {{ STATUS[s][1] }} ({{ colunas[s]|length }})</h4>
+    <h4>{{ STATUS[s][0] }} {{ STATUS[s][1] }} ({{ totais[s] }})</h4>
+    {% if totais[s] > colunas[s]|length %}<small>Mostrando as {{ colunas[s]|length }} mais recentes · histórico em <a href="/gestor/metricas">Métricas</a></small>{% endif %}
     {% for t in colunas[s] %}{{ cartao(t) }}{% endfor %}
   </div>
   {% endfor %}

@@ -67,6 +67,8 @@ O painel web (atendente/gestor) e o campo (executor) usam **sessões separadas**
 | R4 Rastreabilidade e acesso | Tabela `eventos` (quem/quando/de→para/texto/anexo), evidências em foto, validação por token, permissões por papel |
 | R5 Gamificação configurável | Ledger `pontos` com temporada. Regras em JSON editável. Ranking individual e por equipe, por setor e temporada |
 | R6 IA | Triagem (tipo, criticidade, faltantes, executor) com aceite/edição/rejeição, copiloto de campo, sugestão de apoio no impedimento e resumo para a demandante. Fallback por regras |
+| Métricas e capacitação | Aba `/gestor/metricas`: abertos × resolvidos por semana, tempo de resolução, SLA, satisfação, produtividade por executor e recorrência secretaria × tipo. A IA sugere ações massivas de capacitação/prevenção por secretaria (fallback por regras). Um histórico fictício de 12 semanas é criado na primeira execução (desligue com `SEED_HISTORICO=false`) |
+| Criticidade manual | Atendente e gestor ajustam a criticidade sugerida pela IA na página da tarefa, com motivo obrigatório registrado na linha do tempo |
 | R7 Hospedagem municipal | Python + SQLite, sem serviços de nuvem obrigatórios. Código-fonte completo e dependências listadas abaixo |
 
 ## Funcional × simulado × futuro

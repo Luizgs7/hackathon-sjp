@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}Métricas e capacitação · Missões SJP{% endblock %}
+{% block nav %}{{ m.nav_painel(u) }}{% endblock %}
+{% block main %}
+{{ m.abas_gestor('metricas') }}
+<div class="filtros">
+  <h3 style="margin:0">Métricas de atendimento</h3>
+  <form method="get" action="/gestor/metricas" onchange="this.submit()">
+    <select name="dias" aria-label="Período">{% for d, nome in periodos.items() %}
+      <option value="{{ d }}" {{ 'selected' if d == mt.dias }}>{{ nome }}</option>{% endfor %}</select>
+    <select name="setor_id" aria-label="Setor responsável"><option value="">Todos os setores</option>{% for s in setores %}
+      <option value="{{ s.id }}" {{ 'selected' if s.id == setor_id }}>{{ s.nome }}</option>{% endfor %}</select>
+    <noscript><button>Filtrar</button></noscript>
+  </form>
+</div>
+<p><small>Desde {{ mt.inicio }} (semanas de segunda a domingo). Passe o mouse sobre os números e gráficos para ver detalhes.</small></p>
+
+<section class="kpis" aria-label="Indicadores do período">
+  <div class="kpi" title="Chamados abertos no período"><b>{{ mt.abertos }}</b><small>📥 abertos</small></div>
+  <div class="kpi" title="Chamados abertos no período com resolução confirmada pela demandante"><b>{{ mt.resolvidos }}</b><small>🏆 resolvidos</small></div>
+  <div class="kpi" title="Média entre a abertura e a confirmação da demandante"><b>{{ mt.horas_media|duracao }}</b><small>⏱️ tempo médio de resolução</small></div>
+  <div class="kpi" title="Resolvidos dentro do SLA da criticidade (tempo líquido entre atribuição e conclusão, sem impedimentos externos)"><b>{{ mt.sla|dec(0) }}{{ '%' if mt.sla is not none }}</b><small>🎯 dentro do SLA</small></div>
+  <div class="kpi" title="Média das notas 1–5 dadas pelas demandantes ({{ mt.n_notas }} avaliações)"><b>{{ mt.csat|dec }}{{ '★' if mt.csat }}</b><small>😊 satisfação</small></div>
+  <div class="kpi" title="Resolvidos que precisaram ser reabertos ao menos uma vez"><b>{{ mt.reabertura|dec(0) }}{{ '%' if mt.reabertura is not none }}</b><small>🔁 reabertura</small></div>
+  <div class="kpi" title="Chamados em que a criticidade final é igual à sugerida pela IA ({{ mt.ajustes_ia }} ajustados manualmente)"><b>{{ mt.concordancia_ia|dec(0) }}{{ '%' if mt.concordancia_ia is not none }}</b><small>🤖 criticidade igual à IA</small></div>
+  <div class="kpi" title="Conversas do autoatendimento que o servidor marcou como resolvidas (chamados evitados)"><b>{{ mt.auto_resolvidos }}</b><small>💬 evitados pelo assistente</small></div>
+</section>
+
+<div class="grade-graf">
+  {# ---------- Abertos × resolvidos por semana ---------- #}
+  {% set L = mt.linhas %}
+  <article class="grafico">
+    <header><strong>Chamados abertos × resolvidos por semana</strong>
+      <div class="legenda"><span><i style="background:var(--serie-1)"></i>Abertos</span><span><i style="background:var(--serie-2)"></i>Resolvidos</span></div></header>
+    <svg viewBox="0 0 {{ L.W }} {{ L.H }}" role="img" aria-label="Linhas semanais de chamados abertos e resolvidos">
+      {% for v, y in L.ticks %}<line class="grade" x1="{{ L.ml }}" x2="{{ L.W - L.mr }}" y1="{{ y }}" y2="{{ y }}"/>
+        <text class="eixo" x="{{ L.ml - 6 }}" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>{% endfor %}
+      {% for x in mt.serie %}{% if loop.first or loop.last or loop.index0 % 2 == 0 %}<text class="eixo" x="{{ x.x }}" y="{{ L.H - 8 }}" text-anchor="middle">{{ x.rotulo }}</text>{% endif %}{% endfor %}
+      <polyline class="linha" style="stroke:var(--serie-1)" points="{{ L.abertos }}"/>
+      <polyline class="linha" style="stroke:var(--serie-2)" points="{{ L.resolvidos }}"/>
+      {% set ult = mt.serie[-1] %}
+      <circle class="ponto" cx="{{ ult.x }}" cy="{{ ult.y_ab }}" r="4" style="fill:var(--serie-1)"/>
+      <circle class="ponto" cx="{{ ult.x }}" cy="{{ ult.y_res }}" r="4" style="fill:var(--serie-2)"/>
+      {% for x in mt.serie %}
+      <g class="hover">
+        <line class="mira" x1="{{ x.x }}" x2="{{ x.x }}" y1="{{ L.mt }}" y2="{{ L.H - L.mb }}"/>
+        <circle class="ponto" cx="{{ x.x }}" cy="{{ x.y_ab }}" r="4" style="fill:var(--serie-1)"/>
+        <circle class="ponto" cx="{{ x.x }}" cy="{{ x.y_res }}" r="4" style="fill:var(--serie-2)"/>
+        <rect x="{{ x.x - L.passo / 2 }}" y="0" width="{{ L.passo }}" height="{{ L.H }}" fill="transparent">
+          <title>Semana de {{ x.rotulo }}: {{ x.abertos }} abertos · {{ x.resolvidos }} resolvidos</title></rect>
+      </g>{% endfor %}
+    </svg>
+    <small>Última semana (parcial): {{ ult.abertos }} abertos · {{ ult.resolvidos }} resolvidos.
+      Resolvidos acima de abertos = fila diminuindo.</small>
+  </article>
+
+  {# ---------- Tempo médio de resolução por semana ---------- #}
+  {% set C = mt.colunas %}
+  <article class="grafico">
+    <header><strong>Tempo médio de resolução por semana (horas)</strong></header>
+    <svg viewBox="0 0 {{ C.W }} {{ C.H }}" role="img" aria-label="Colunas com o tempo médio de resolução por semana">
+      {% for v, y in C.ticks %}<line class="grade" x1="{{ C.ml }}" x2="{{ C.W - 16 }}" y1="{{ y }}" y2="{{ y }}"/>
+        <text class="eixo" x="{{ C.ml - 6 }}" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>{% endfor %}
+      {% for x in mt.serie %}
+      <g class="hover">
+        {% if x.horas %}{% set h = C.base - x.cy %}
+        <path class="coluna-barra" d="M{{ x.cx }},{{ C.base }} V{{ x.cy + [4, h]|min }} q0,-4 4,-4 h{{ C.larg - 8 }} q4,0 4,4 V{{ C.base }} Z"/>{% endif %}
+        {% if loop.first or loop.last or loop.index0 % 2 == 0 %}<text class="eixo" x="{{ x.cx + C.larg / 2 }}" y="{{ C.H - 8 }}" text-anchor="middle">{{ x.rotulo }}</text>{% endif %}
+        <rect x="{{ C.ml + loop.index0 * C.banda }}" y="0" width="{{ C.banda }}" height="{{ C.H }}" fill="transparent">
+          <title>Semana de {{ x.rotulo }}: {{ x.horas|duracao }} em média ({{ x.resolvidos }} resolvidos)</title></rect>
+      </g>{% endfor %}
+    </svg>
+    <small>Da abertura à confirmação da demandante. Média do período: <b>{{ mt.horas_media|duracao }}</b>.</small>
+  </article>
+</div>
+
+<div class="grade-graf">
+  {# ---------- Volume por secretaria ---------- #}
+  <article>
+    <header><strong>🏛️ Chamados por secretaria</strong><br><small>Quem mais demanda atendimento no período</small></header>
+    <div class="barras-h">
+    {% for d in mt.secretarias %}
+      <div class="barra-h" title="{{ d.nome }}: {{ d.n }} chamados · tempo médio {{ d.horas_media|duracao }} · satisfação {{ d.csat|dec }}">
+        <span class="rot">{{ d.nome }}</span>
+        <span class="trilho"><span class="valor" style="width:{{ (100 * d.n / mt.max_sec)|round(1) }}%"></span></span>
+        <span class="num">{{ d.n }}</span>
+      </div>
+    {% else %}<p><small>Sem chamados no período.</small></p>{% endfor %}
+    </div>
+  </article>
+
+  {# ---------- Produtividade por executor ---------- #}
+  <article>
+    <header><strong>👷 Produtividade do time</strong><br><small>Missões resolvidas no período e qualidade da entrega</small></header>
+    <div class="tabela-rolavel">
+    <table class="tab-num">
+      <thead><tr><th>Executor</th><th>Resolvidas</th><th>Tempo médio</th><th>Satisfação</th><th>Reaberturas</th><th>Ativas agora</th></tr></thead>
+      <tbody>{% for d in mt.executores %}
+        <tr><td>{{ d.avatar }} {{ d.nome }}</td>
+          <td><span class="mini-barra" style="width:{{ (48 * d.n / mt.max_exec)|round }}px"></span> {{ d.n }}</td>
+          <td>{{ d.horas_media|duracao }}</td><td>{{ d.csat|dec }}{{ '★' if d.csat }}</td>
+          <td>{{ d.reab }}</td><td>{{ d.ativos }}</td></tr>
+      {% else %}<tr><td colspan="6"><small>Nenhuma missão resolvida no período.</small></td></tr>{% endfor %}</tbody>
+    </table>
+    </div>
+  </article>
+</div>
+
+{# ---------- Recorrência secretaria × tipo ---------- #}
+<article>
+  <header><strong>🔥 Recorrência: secretaria × tipo de chamado</strong><br>
+    <small>Quanto mais escura a célula, mais chamados. Concentrações indicam onde uma ação de capacitação ou prevenção rende mais.</small></header>
+  <div class="tabela-rolavel">
+  <table class="calor">
+    <thead><tr><th>Secretaria</th>{% for tp in mt.tipos %}<th>{{ tp }}</th>{% endfor %}<th>Total</th></tr></thead>
+    <tbody>{% for d in mt.secretarias %}<tr><th scope="row">{{ d.nome }}</th>
+      {% for tp in mt.tipos %}{% set n = d.tipos.get(tp, 0) %}{% set pct = (100 * n / mt.max_cel)|round|int %}
+        <td style="background:color-mix(in srgb, var(--sjp-escuro) {{ 8 + pct * 0.85 if n else 0 }}%, #fff);color:{{ '#fff' if pct > 50 else 'inherit' }}"
+            title="{{ d.nome }} · {{ tp }}: {{ n }} chamado(s)">{{ n or '' }}</td>{% endfor %}
+      <td><b>{{ d.n }}</b></td></tr>{% endfor %}</tbody>
+  </table>
+  </div>
+</article>
+
+{# ---------- Análise por IA ---------- #}
+<article class="ia">
+  <header><strong>🎓 Oportunidades de capacitação por secretaria</strong> <span class="selo">🤖 análise por IA</span><br>
+    <small>A IA cruza a recorrência e os tipos de chamado de cada secretaria e sugere ações em massa (treinamentos, tutoriais,
+      comunicados, prevenção) para reduzir a demanda futura. As sugestões apoiam a decisão; não são aplicadas automaticamente.</small></header>
+  <form hx-post="/gestor/metricas/analise" hx-target="#analise" hx-swap="innerHTML" style="margin-bottom:.75rem">
+    <input type="hidden" name="dias" value="{{ mt.dias }}">
+    <button class="secondary" style="width:auto">{{ '🔄 Gerar nova análise' if analise and analise.acoes else '✨ Gerar análise' }} ({{ periodos[mt.dias]|lower }})</button>
+  </form>
+  <div id="analise">{% include "_analise.html" %}</div>
+</article>
+
+<details>
+  <summary><small>Ver dados semanais em tabela</small></summary>
+  <table class="tab-num">
+    <thead><tr><th>Semana</th><th>Abertos</th><th>Resolvidos</th><th>Tempo médio de resolução</th></tr></thead>
+    <tbody>{% for x in mt.serie %}<tr><td>{{ x.rotulo }}</td><td>{{ x.abertos }}</td><td>{{ x.resolvidos }}</td><td>{{ x.horas|duracao }}</td></tr>{% endfor %}</tbody>
+  </table>
+</details>
+{% endblock %}

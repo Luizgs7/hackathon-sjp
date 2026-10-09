@@ -110,3 +110,52 @@ h2, h3, h4 { color: var(--sjp-escuro); }
 table.rank td, table.rank th { padding: .45rem .5rem; }
 table.rank tr:first-child td { font-weight: 700; }
 .medalhas span { margin-right: .2rem; cursor: help; }
+
+/* Abas do gestor */
+.abas { display: flex; gap: .25rem; border-bottom: 2px solid var(--sjp-claro); margin: .5rem 0 1rem; overflow-x: auto; }
+.abas a { padding: .55rem 1rem; text-decoration: none; color: var(--sjp-grafite); border-bottom: 3px solid transparent;
+          margin-bottom: -2px; white-space: nowrap; font-weight: 600; }
+.abas a:hover { color: var(--sjp-escuro); }
+.abas a[aria-current=page] { color: var(--sjp-escuro); border-bottom-color: var(--sjp-escuro); }
+
+/* Métricas: séries validadas para daltonismo (ΔE ≥ 12) e fora do vermelho reservado a alertas */
+:root { --serie-1: #7a5195; --serie-2: #2094d2; --grade: #e3edf3; }
+.filtros { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.filtros form { display: flex; gap: .5rem; margin: 0; flex-wrap: wrap; } .filtros select { margin: 0; width: auto; }
+.grade-graf { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .grade-graf { grid-template-columns: 1fr; } }
+.grade-graf > article { margin-bottom: 1rem; min-width: 0; }
+.grafico svg { width: 100%; height: auto; display: block; overflow: visible; }
+.grafico .grade { stroke: var(--grade); stroke-width: 1; }
+.grafico .eixo { font-size: 11px; fill: var(--sjp-grafite); font-variant-numeric: tabular-nums; }
+.grafico .linha { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.grafico .ponto { stroke: #fff; stroke-width: 2; }
+.grafico .coluna-barra { fill: var(--serie-2); }
+.grafico .hover .mira, .grafico .hover .ponto { opacity: 0; }
+.grafico .hover:hover .mira { opacity: 1; stroke: var(--sjp-grafite); stroke-width: 1; }
+.grafico .hover:hover .ponto { opacity: 1; }
+.grafico .hover:hover .coluna-barra { fill: var(--sjp-escuro); }
+.legenda { display: flex; gap: 1rem; font-size: .85rem; color: var(--sjp-grafite); margin-top: .25rem; }
+.legenda i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: .35rem; }
+.barras-h { display: grid; gap: .45rem; }
+.barra-h { display: grid; grid-template-columns: minmax(90px, 9rem) 1fr 2.5rem; align-items: center; gap: .5rem; font-size: .9rem; cursor: help; }
+.barra-h .rot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barra-h .trilho { height: 14px; }
+.barra-h .valor { display: block; height: 100%; background: var(--serie-2); border-radius: 0 4px 4px 0; min-width: 2px; }
+.barra-h:hover .valor { background: var(--sjp-escuro); }
+.barra-h .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.tabela-rolavel { overflow-x: auto; }
+.tab-num td, .tab-num th { font-variant-numeric: tabular-nums; padding: .4rem .5rem; font-size: .9rem; }
+.mini-barra { display: inline-block; height: 10px; background: var(--serie-2); border-radius: 0 3px 3px 0; vertical-align: middle; }
+table.calor { font-size: .85rem; }
+table.calor th, table.calor td { padding: .35rem .45rem; text-align: center; border: 2px solid #fff; }
+table.calor th[scope=row], table.calor thead th:first-child { text-align: left; white-space: nowrap; }
+table.calor td { font-variant-numeric: tabular-nums; font-weight: 600; cursor: help; min-width: 3rem; }
+.acoes-cap { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .75rem; }
+.acao-cap { background: #fff; border: 1px solid var(--sjp-claro); border-left: 5px solid var(--sjp-claro); border-radius: .5rem; padding: .75rem; }
+.acao-cap.impacto-alto { border-left-color: var(--sjp-escuro); } .acao-cap.impacto-medio { border-left-color: var(--sjp-azul); }
+.acao-cap h5 { margin: .4rem 0; color: var(--sjp-escuro); font-size: 1rem; }
+.acao-cap p { margin: .25rem 0; }
+.acao-topo { display: flex; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+.selo-impacto { background: #fff; }
+.evitaveis { font-weight: 700; color: var(--sjp-escuro); }

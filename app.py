@@ -12,12 +12,14 @@ import hmac
 import json
 import logging
 import os
+import random
 import re
 import secrets
 import sqlite3
 import threading
+import unicodedata
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -44,6 +46,7 @@ LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "45"))
 LLM_SEM_RACIOCINIO = os.getenv("LLM_SEM_RACIOCINIO", "true").lower() == "true"
 VAPID_PEM = BASE / "vapid_private.pem"
 VAPID_SUB = os.getenv("VAPID_SUB", "mailto:simot@exemplo.sjp.pr.gov.br")
+SEED_HISTORICO = os.getenv("SEED_HISTORICO", "true").lower() == "true"
 
 log = logging.getLogger("missoes")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -82,6 +85,13 @@ MOTIVOS_IMPEDIMENTO = [
 ]
 # Motivos fora do controle do executor: pausam o relógio do SLA e não penalizam.
 MOTIVOS_EXTERNOS = set(MOTIVOS_IMPEDIMENTO) - {"Outro"}
+
+# Secretarias municipais de quem abre o chamado (base da análise de capacitação por secretaria).
+SECRETARIAS = [
+    "Administração", "Agricultura", "Assistência Social", "Comunicação", "Cultura", "Educação",
+    "Esporte e Lazer", "Finanças", "Governo", "Meio Ambiente", "Obras", "Procuradoria-Geral", "Saúde",
+    "Segurança Pública", "Transporte e Trânsito", "Urbanismo",
+]
 
 # Origem → setor padrão (cada sistema integrado é configurado aqui; novo sistema = nova entrada).
 SISTEMAS_ORIGEM = {"legado": {"nome": "SisChamados Legado", "setor_id": 1, "api_key": API_KEY_LEGADO}}
@@ -144,8 +154,8 @@ CREATE TABLE IF NOT EXISTS usuarios(id INTEGER PRIMARY KEY, nome TEXT NOT NULL, 
 CREATE TABLE IF NOT EXISTS tarefas(
   id INTEGER PRIMARY KEY, origem TEXT NOT NULL DEFAULT 'web', external_id TEXT,
   titulo TEXT NOT NULL, descricao TEXT NOT NULL, local TEXT NOT NULL DEFAULT '', solicitante TEXT NOT NULL DEFAULT '',
-  contato TEXT NOT NULL DEFAULT '', setor_id INTEGER REFERENCES setores(id), tipo_id INTEGER REFERENCES tipos(id),
-  prioridade TEXT, status TEXT NOT NULL DEFAULT 'recebida', executor_id INTEGER REFERENCES usuarios(id),
+  contato TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', secretaria TEXT NOT NULL DEFAULT '', setor_id INTEGER REFERENCES setores(id), tipo_id INTEGER REFERENCES tipos(id),
+  prioridade TEXT, prioridade_ajustada_por TEXT, status TEXT NOT NULL DEFAULT 'recebida', executor_id INTEGER REFERENCES usuarios(id),
   criado_por INTEGER REFERENCES usuarios(id), token TEXT NOT NULL UNIQUE,
   ia_status TEXT NOT NULL DEFAULT 'analisando', ia_fonte TEXT, ia_json TEXT,
   relato TEXT, resumo_ia TEXT, evidencia TEXT, nota INTEGER, comentario_demandante TEXT,
@@ -174,7 +184,8 @@ CREATE TABLE IF NOT EXISTS autoatendimento(token TEXT PRIMARY KEY, resolvido INT
 CREATE TABLE IF NOT EXISTS auto_msgs(id INTEGER PRIMARY KEY, token TEXT NOT NULL REFERENCES autoatendimento(token),
   autor TEXT NOT NULL, texto TEXT NOT NULL, fonte TEXT, criado_em TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS solicitacoes(id INTEGER PRIMARY KEY, protocolo TEXT UNIQUE, token TEXT NOT NULL UNIQUE,
-  nome TEXT NOT NULL, local TEXT NOT NULL, contato TEXT NOT NULL DEFAULT '', titulo TEXT NOT NULL, descricao TEXT NOT NULL,
+  nome TEXT NOT NULL, local TEXT NOT NULL, contato TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
+  secretaria TEXT NOT NULL DEFAULT '', titulo TEXT NOT NULL, descricao TEXT NOT NULL,
   tentativas TEXT NOT NULL DEFAULT '', setor_id INTEGER REFERENCES setores(id), via_ia INTEGER NOT NULL DEFAULT 0,
   conversa TEXT, status TEXT NOT NULL DEFAULT 'aguardando', motivo_descarte TEXT, tarefa_id INTEGER REFERENCES tarefas(id),
   registrada_por TEXT, criado_em TEXT NOT NULL, registrada_em TEXT);
@@ -220,12 +231,27 @@ def temporada_atual(c):
     return c.execute("SELECT max(numero) n FROM temporadas").fetchone()["n"]
 
 
+# Colunas incluídas depois da primeira versão: bancos já existentes recebem um ALTER TABLE na inicialização.
+MIGRACOES = [
+    ("tarefas", "email", "TEXT NOT NULL DEFAULT ''"),
+    ("tarefas", "secretaria", "TEXT NOT NULL DEFAULT ''"),
+    ("tarefas", "prioridade_ajustada_por", "TEXT"),
+    ("solicitacoes", "email", "TEXT NOT NULL DEFAULT ''"),
+    ("solicitacoes", "secretaria", "TEXT NOT NULL DEFAULT ''"),
+]
+
+
 def init_db():
     with db() as c:
         c.execute("PRAGMA journal_mode=WAL")
         c.executescript(SCHEMA)
+        for tabela, coluna, tipo in MIGRACOES:
+            if coluna not in {r["name"] for r in c.execute(f"PRAGMA table_info({tabela})")}:
+                c.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
         if c.execute("SELECT count(*) n FROM usuarios").fetchone()["n"] == 0:
             seed(c)
+        if SEED_HISTORICO and not cfg(c, "historico_metricas"):
+            seed_historico(c)
 
 
 def seed(c):
@@ -262,22 +288,117 @@ def seed(c):
     # algumas tarefas em andamento para o painel não começar vazio
     exemplos = [
         ("Wi-fi instável na biblioteca", "Wi-fi cai a cada 10 minutos na biblioteca da Escola Municipal Afonso Pena.",
-         "Escola Municipal Afonso Pena – Biblioteca", "Marcos Pereira", 1, 2, "P3", "em_execucao", 4),
+         "Escola Municipal Afonso Pena – Biblioteca", "Marcos Pereira", "Educação", 1, 2, "P3", "em_execucao", 4),
         ("Computador não liga – recepção", "Computador da recepção não liga desde ontem.",
-         "CRAS Centro – Recepção", "Lúcia Andrade", 1, 3, "P3", "atribuida", 4),
+         "CRAS Centro – Recepção", "Lúcia Andrade", "Assistência Social", 1, 3, "P3", "atribuida", 4),
         ("Lâmpadas queimadas no corredor", "Três lâmpadas queimadas no corredor do 2º andar.",
-         "Paço Municipal – 2º andar", "Roberto Dias", 2, 5, "P4", "a_caminho", 6),
+         "Paço Municipal – 2º andar", "Roberto Dias", "Administração", 2, 5, "P4", "a_caminho", 6),
     ]
-    for tit, desc, loc, sol, setor, tipo, prio, st, ex in exemplos:
+    for tit, desc, loc, sol, sec, setor, tipo, prio, st, ex in exemplos:
         ts = agora()
         cur = c.execute(
-            "INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,setor_id,tipo_id,prioridade,status,executor_id,"
-            "criado_por,token,ia_status,ia_fonte,criado_em,atualizado_em) VALUES('web',?,?,?,?,?,?,?,?,?,2,?,'aceita','regras',?,?)",
-            (tit, desc, loc, sol, setor, tipo, prio, st, ex, secrets.token_urlsafe(16), ts, ts))
+            "INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,email,secretaria,setor_id,tipo_id,prioridade,status,"
+            "executor_id,criado_por,token,ia_status,ia_fonte,criado_em,atualizado_em) "
+            "VALUES('web',?,?,?,?,?,?,?,?,?,?,?,2,?,'aceita','regras',?,?)",
+            (tit, desc, loc, sol, email_ficticio(sol), sec, setor, tipo, prio, st, ex, secrets.token_urlsafe(16), ts, ts))
         registrar_evento(c, cur.lastrowid, "Paula Mendes", "gestor", "Tarefa cadastrada e atribuída (dados de exemplo)",
                          None, "atribuida")
         if st != "atribuida":
             registrar_evento(c, cur.lastrowid, "Sistema", "seed", "Andamento de exemplo", "atribuida", st)
+
+
+def email_ficticio(nome):
+    base = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode().lower().split()
+    return f"{base[0]}.{base[-1]}@sjp.pr.gov.br" if base else ""
+
+
+# Histórico fictício de chamados resolvidos (12 semanas) para o painel de métricas não começar vazio. Cada secretaria
+# tem um perfil de demanda, para que a análise de capacitação encontre padrões de recorrência.
+PERFIS_SECRETARIA = {
+    "Educação": (30, {2: 5, 4: 4, 3: 3, 1: 1, 5: 1}),
+    "Saúde": (26, {3: 5, 1: 3, 4: 2, 2: 1, 6: 1}),
+    "Administração": (18, {4: 5, 3: 4, 5: 1, 1: 1}),
+    "Assistência Social": (12, {3: 4, 4: 2, 2: 2, 6: 1}),
+    "Finanças": (8, {3: 5, 4: 2}),
+    "Obras": (7, {5: 3, 6: 2, 7: 2, 3: 1}),
+    "Urbanismo": (5, {3: 2, 4: 2, 7: 1}),
+    "Cultura": (4, {2: 2, 5: 1, 6: 1}),
+}
+EXEMPLOS_TIPO = {
+    1: ["Sem internet no computador da sala", "Ponto de rede não funciona", "Rede caiu no setor"],
+    2: ["Wi-fi não conecta nos notebooks", "Wi-fi caindo toda hora", "Celular não encontra a rede Wi-fi"],
+    3: ["Senha bloqueada no sistema", "Computador muito lento", "Não consigo acessar o sistema de prontuário",
+        "Monitor não liga", "Esqueci a senha do e-mail"],
+    4: ["Impressora com papel atolado", "Impressora não imprime", "Aviso de toner baixo", "Impressora sumiu da lista"],
+    5: ["Lâmpada queimada na sala", "Tomada sem energia", "Disjuntor desarmando"],
+    6: ["Goteira no teto", "Torneira vazando no banheiro", "Infiltração na parede"],
+    7: ["Rachadura na parede da sala", "Vistoria do telhado"],
+}
+UNIDADES = {
+    "Educação": ["Escola Municipal Afonso Pena", "CMEI Jardim Ipê", "Escola Municipal Rui Barbosa"],
+    "Saúde": ["UBS Vila Nova", "UBS Central", "UPA Afonso Pena"],
+    "Administração": ["Paço Municipal – RH", "Paço Municipal – Protocolo"],
+    "Assistência Social": ["CRAS Centro", "CREAS Borda do Campo"],
+    "Finanças": ["Paço Municipal – Tributação"],
+    "Obras": ["Pátio de Obras"],
+    "Urbanismo": ["Paço Municipal – Urbanismo"],
+    "Cultura": ["Teatro Municipal", "Biblioteca Pública"],
+}
+NOMES_FICTICIOS = ["Ana Souza", "Bruna Teixeira", "César Moura", "Denise Prado", "Eduardo Ramos", "Fernanda Luz",
+                   "Gustavo Nunes", "Helena Castro", "Igor Batista", "Joana Martins", "Kátia Freitas", "Leonardo Reis"]
+
+
+def seed_historico(c):
+    rnd = random.Random(42)
+    hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    tipos = {t["id"]: t for t in c.execute("SELECT * FROM tipos")}
+    execs = {}
+    for e in carga_executores(c):
+        execs.setdefault(e["setor_id"], []).append(e)
+    fmt = lambda d: d.strftime("%Y-%m-%d %H:%M:%S")  # noqa: E731
+    for semana in range(12, 0, -1):
+        crescimento = 1 + (12 - semana) * 0.03  # demanda crescendo levemente: dá tendência ao gráfico
+        for sec, (por_semana_x10, pesos) in PERFIS_SECRETARIA.items():
+            qtd = int(por_semana_x10 / 10 * crescimento + rnd.random())
+            for _ in range(qtd):
+                tipo_id = rnd.choices(list(pesos), weights=list(pesos.values()))[0]
+                tp = tipos[tipo_id]
+                criado = hoje - timedelta(days=semana * 7 - rnd.randint(0, 4), hours=-rnd.randint(8, 17),
+                                          minutes=-rnd.randint(0, 59))
+                if criado > datetime.now() - timedelta(days=2):
+                    continue
+                prio = rnd.choices(["P1", "P2", "P3", "P4"], weights=[1, 4, 8, 2])[0]
+                prio_ia = prio if rnd.random() > 0.15 else rnd.choice([p for p in PRIORIDADES if p != prio])
+                ex = rnd.choice(execs[tp["setor_id"]])
+                sol = rnd.choice(NOMES_FICTICIOS)
+                t_atr = criado + timedelta(minutes=rnd.randint(5, 90))
+                t_cam = t_atr + timedelta(minutes=rnd.randint(5, 60))
+                t_exe = t_cam + timedelta(minutes=rnd.randint(10, 60))
+                t_con = t_exe + timedelta(minutes=rnd.randint(15, 60 * tp["complexidade"] * 2))
+                t_res = t_con + timedelta(hours=rnd.randint(1, 30))
+                reaberta = rnd.random() < 0.07
+                nota = rnd.choices([5, 4, 3, 2], weights=[6, 4, 2, 1 if reaberta else 0.2])[0]
+                ia = {"tipo_id": tipo_id, "prioridade": prio_ia, "categoria": tp["nome"], "complexidade": tp["complexidade"],
+                      "justificativa": "Histórico fictício", "resumo": "", "informacoes_faltantes": [],
+                      "executor_id": ex["id"], "motivo_executor": ""}
+                cur = c.execute(
+                    "INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,email,secretaria,setor_id,tipo_id,"
+                    "prioridade,prioridade_ajustada_por,status,executor_id,criado_por,token,ia_status,ia_fonte,ia_json,"
+                    "relato,nota,reaberturas,criado_em,atualizado_em) "
+                    "VALUES('web',?,?,?,?,?,?,?,?,?,?,'resolvida',?,1,?,?,'regras',?,?,?,?,?,?)",
+                    (rnd.choice(EXEMPLOS_TIPO[tipo_id]), "Chamado do histórico fictício para demonstração de métricas.",
+                     rnd.choice(UNIDADES[sec]), sol, email_ficticio(sol), sec, tp["setor_id"], tipo_id, prio,
+                     "Carlos Lima" if prio != prio_ia else None, ex["id"], secrets.token_urlsafe(16),
+                     "aceita" if prio == prio_ia else "editada", json.dumps(ia, ensure_ascii=False),
+                     "Atendimento realizado (histórico fictício).", nota, int(reaberta), fmt(criado), fmt(t_res)))
+                tid = cur.lastrowid
+                passos = [(criado, "Atendimento", "atendente", None, "recebida"), (t_atr, "Paula Mendes", "gestor", "recebida", "atribuida"),
+                          (t_cam, ex["nome"], "executor", "atribuida", "a_caminho"), (t_exe, ex["nome"], "executor", "a_caminho", "em_execucao"),
+                          (t_con, ex["nome"], "executor", "em_execucao", "concluida"), (t_res, sol, "demandante", "concluida", "resolvida")]
+                for quando, quem, papel, de, para in passos:
+                    c.execute("INSERT INTO eventos(tarefa_id,usuario,papel,de,para,texto,criado_em) VALUES(?,?,?,?,?,?,?)",
+                              (tid, quem, papel, de, para, "Histórico fictício", fmt(quando)))
+    set_cfg(c, "historico_metricas", True)
 
 
 # ---------------------------------------------------------------- trilha, status e outbox
@@ -437,7 +558,8 @@ def triar(tarefa_id):
             f"TIPOS: {json.dumps([dict(x) for x in tipos], ensure_ascii=False)}\n"
             f"EXECUTORES: {json.dumps([{k: e[k] for k in ('id', 'nome', 'equipe', 'setor_id', 'competencias', 'carga', 'resolvidas')} for e in execs], ensure_ascii=False)}\n"
             f"CHAMADO: título={t['titulo']!r}; descrição={t['descricao']!r}; local={t['local']!r}; "
-            f"solicitante={t['solicitante']!r}; contato={t['contato'] or 'não informado'!r}; "
+            f"solicitante={t['solicitante']!r}; secretaria={t['secretaria'] or 'não informada'!r}; "
+            f"contato={t['contato'] or 'não informado'!r}; "
             f"chamados anteriores no mesmo local={historico}"
         )
         r = extrair_json(llm([{"role": "system", "content": "Você é um assistente de triagem. Responda apenas JSON válido."},
@@ -671,6 +793,223 @@ def indicadores(c):
     }
 
 
+# ---------------------------------------------------------------- métricas no tempo (painel do gestor)
+
+def _data(s):
+    return datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
+
+
+def _escala(maximo):
+    """Topo "redondo" do eixo e 4 marcas (0, ¼, ½, ¾, topo)."""
+    passo = 1
+    for p in (1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000):
+        passo = p
+        if maximo <= p * 4:
+            break
+    return [passo * i for i in range(5)]
+
+
+def tarefas_do_periodo(c, inicio, setor_id=None):
+    filtro = " AND t.setor_id=?" if setor_id else ""
+    return c.execute(
+        "SELECT t.*, tp.nome tipo, tp.base_conhecimento kb, u.nome executor, u.avatar, "
+        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='resolvida') resolvida_em "
+        "FROM tarefas t LEFT JOIN tipos tp ON tp.id=t.tipo_id LEFT JOIN usuarios u ON u.id=t.executor_id "
+        f"WHERE t.criado_em>=?{filtro}", [inicio] + ([setor_id] if setor_id else [])).fetchall()
+
+
+def metricas(c, dias, setor_id=None):
+    hoje = datetime.now()
+    seg = (hoje - timedelta(days=hoje.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    n_sem = max(2, -(-dias // 7))
+    semanas = [seg - timedelta(weeks=i) for i in range(n_sem - 1, -1, -1)]
+    inicio = semanas[0].strftime("%Y-%m-%d %H:%M:%S")
+    tarefas = tarefas_do_periodo(c, inicio, setor_id)
+    rg = regras(c)
+
+    def semana_de(s):
+        d = _data(s)
+        return (d - timedelta(days=d.weekday())).replace(hour=0, minute=0, second=0)
+
+    por_sem = {s: {"abertos": 0, "resolvidos": 0, "horas": []} for s in semanas}
+    resolvidas, no_sla, com_sla, concordam, com_ia = [], 0, 0, 0, 0
+    for t in tarefas:
+        if (s := semana_de(t["criado_em"])) in por_sem:
+            por_sem[s]["abertos"] += 1
+        if t["resolvida_em"]:
+            h = (_data(t["resolvida_em"]) - _data(t["criado_em"])).total_seconds() / 3600
+            resolvidas.append((t, h))
+            if (s := semana_de(t["resolvida_em"])) in por_sem:
+                por_sem[s]["resolvidos"] += 1
+                por_sem[s]["horas"].append(h)
+            liq = tempo_liquido(c, t)
+            if liq is not None:
+                com_sla += 1
+                no_sla += liq <= rg["sla_minutos"].get(t["prioridade"] or "P3", 1440)
+        ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
+        if ia.get("prioridade") and t["prioridade"]:
+            com_ia += 1
+            concordam += ia["prioridade"] == t["prioridade"]
+
+    media = lambda xs: sum(xs) / len(xs) if xs else None  # noqa: E731
+    serie = [{"rotulo": s.strftime("%d/%m"), "abertos": v["abertos"], "resolvidos": v["resolvidos"],
+              "horas": media(v["horas"])} for s, v in por_sem.items()]
+
+    # gráfico de linhas abertos × resolvidos (mesma unidade → um só eixo)
+    W, H, ml, mr, mt, mb = 640, 220, 36, 16, 12, 28
+    ticks = _escala(max([x["abertos"] for x in serie] + [x["resolvidos"] for x in serie] + [1]))
+    passo_x = (W - ml - mr) / max(1, len(serie) - 1)
+    y = lambda v: mt + (1 - v / ticks[-1]) * (H - mt - mb)  # noqa: E731
+    for i, x in enumerate(serie):
+        x["x"], x["y_ab"], x["y_res"] = ml + i * passo_x, y(x["abertos"]), y(x["resolvidos"])
+    linhas = {"W": W, "H": H, "ml": ml, "mr": mr, "mt": mt, "mb": mb, "passo": passo_x,
+              "ticks": [(v, y(v)) for v in ticks],
+              "abertos": " ".join(f"{x['x']:.1f},{x['y_ab']:.1f}" for x in serie),
+              "resolvidos": " ".join(f"{x['x']:.1f},{x['y_res']:.1f}" for x in serie)}
+
+    # colunas: tempo médio de resolução por semana (horas)
+    ticks_h = _escala(max([x["horas"] or 0 for x in serie] + [1]))
+    yh = lambda v: mt + (1 - v / ticks_h[-1]) * (H - mt - mb)  # noqa: E731
+    banda = (W - ml - mr) / len(serie)
+    larg = min(24, banda * 0.6)
+    for i, x in enumerate(serie):
+        x["cx"] = ml + i * banda + (banda - larg) / 2
+        x["cy"] = yh(x["horas"] or 0)
+    colunas = {"W": W, "H": H, "ml": ml, "mt": mt, "mb": mb, "banda": banda, "larg": larg,
+               "base": H - mb, "ticks": [(v, yh(v)) for v in ticks_h]}
+
+    # por secretaria e matriz secretaria × tipo
+    sec = {}
+    for t in tarefas:
+        nome = t["secretaria"] or "Não informada"
+        d = sec.setdefault(nome, {"nome": nome, "n": 0, "notas": [], "horas": [], "tipos": {}})
+        d["n"] += 1
+        d["tipos"][t["tipo"] or "Sem tipo"] = d["tipos"].get(t["tipo"] or "Sem tipo", 0) + 1
+        if t["nota"]:
+            d["notas"].append(t["nota"])
+    for t, h in resolvidas:
+        sec[t["secretaria"] or "Não informada"]["horas"].append(h)
+    secretarias = sorted(sec.values(), key=lambda d: -d["n"])
+    for d in secretarias:
+        d["csat"], d["horas_media"] = media(d["notas"]), media(d["horas"])
+    tipos = sorted({tp for d in secretarias for tp in d["tipos"]},
+                   key=lambda tp: -sum(d["tipos"].get(tp, 0) for d in secretarias))
+    max_cel = max([n for d in secretarias for n in d["tipos"].values()] + [1])
+
+    # produtividade por executor (resolvidas no período)
+    exe = {}
+    for t, h in resolvidas:
+        if not t["executor_id"]:
+            continue
+        d = exe.setdefault(t["executor_id"], {"nome": t["executor"], "avatar": t["avatar"], "n": 0, "horas": [],
+                                              "notas": [], "reab": 0})
+        d["n"] += 1
+        d["horas"].append(h)
+        d["reab"] += t["reaberturas"]
+        if t["nota"]:
+            d["notas"].append(t["nota"])
+    ativos = {r["id"]: r["carga"] for r in carga_executores(c, setor_id)}
+    executores = sorted(({**d, "id": k, "horas_media": media(d["horas"]), "csat": media(d["notas"]),
+                          "ativos": ativos.get(k, 0)} for k, d in exe.items()), key=lambda d: -d["n"])
+    max_exec = max([d["n"] for d in executores] + [1])
+
+    notas = [t["nota"] for t, _ in resolvidas if t["nota"]]
+    return {
+        "dias": dias, "inicio": semanas[0].strftime("%d/%m/%Y"), "serie": serie, "linhas": linhas, "colunas": colunas,
+        "abertos": len(tarefas), "resolvidos": len(resolvidas),
+        "horas_media": media([h for _, h in resolvidas]),
+        "sla": (100 * no_sla / com_sla) if com_sla else None,
+        "csat": media(notas), "n_notas": len(notas),
+        "reabertura": (100 * sum(1 for t, _ in resolvidas if t["reaberturas"]) / len(resolvidas)) if resolvidas else None,
+        "concordancia_ia": (100 * concordam / com_ia) if com_ia else None, "ajustes_ia": com_ia - concordam,
+        "auto_resolvidos": c.execute("SELECT count(*) n FROM autoatendimento WHERE resolvido=1 AND criado_em>=?",
+                                     (inicio,)).fetchone()["n"],
+        "secretarias": secretarias, "max_sec": max([d["n"] for d in secretarias] + [1]),
+        "tipos": tipos, "max_cel": max_cel, "executores": executores, "max_exec": max_exec,
+    }
+
+
+def dados_para_capacitacao(c, dias):
+    """Recorrência por secretaria × tipo com exemplos reais de títulos: matéria-prima da análise de capacitação."""
+    inicio = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d %H:%M:%S")
+    grupos = {}
+    for t in tarefas_do_periodo(c, inicio):
+        chave = (t["secretaria"] or "Não informada", t["tipo"] or "Sem tipo")
+        g = grupos.setdefault(chave, {"secretaria": chave[0], "tipo": chave[1], "kb": t["kb"] or "", "chamados": 0,
+                                      "reaberturas": 0, "exemplos": []})
+        g["chamados"] += 1
+        g["reaberturas"] += t["reaberturas"]
+        if t["titulo"] not in g["exemplos"] and len(g["exemplos"]) < 5:
+            g["exemplos"].append(t["titulo"])
+    return sorted(grupos.values(), key=lambda g: -g["chamados"])
+
+
+# Temas que o próprio servidor resolve com orientação (treinamento/tutorial) × temas que pedem ação de infraestrutura.
+ACOES_POR_TEMA = {
+    "Impressora": ("Oficina rápida", "Uso da impressora: papel atolado, toner e reinício seguro"),
+    "Computador": ("Tutorial + comunicado", "Senhas, desbloqueio e primeiros passos quando o computador ou sistema trava"),
+    "Wi-fi": ("Tutorial em vídeo", "Conectar e reconectar à rede Wi-fi institucional"),
+    "Rede": ("Guia ilustrado", "Checagem do cabo e da tomada de rede antes de abrir chamado"),
+    "Elétrica": ("Manutenção preventiva", "Vistoria preventiva de iluminação e tomadas nas unidades"),
+    "Hidráulica": ("Manutenção preventiva", "Inspeção de telhados, calhas e banheiros antes do período de chuvas"),
+}
+
+
+def capacitacao_por_regras(grupos, dias):
+    acoes = []
+    for g in grupos:
+        if g["chamados"] < 3 or len(acoes) >= 6:
+            continue
+        formato, tema = ACOES_POR_TEMA.get(g["kb"], ("Orientação dirigida", f"Boas práticas sobre {g['tipo'].lower()}"))
+        infra = formato == "Manutenção preventiva"
+        acoes.append({
+            "secretaria": g["secretaria"], "tema": tema, "formato": formato,
+            "publico": f"Unidades da secretaria de {g['secretaria']}" if infra else f"Servidores da secretaria de {g['secretaria']}",
+            "evidencia": f"{g['chamados']} chamados de {g['tipo']} em {dias} dias",
+            "justificativa": ("Demanda recorrente de infraestrutura: prevenção reduz chamados corretivos."
+                              if infra else "Problema recorrente que o próprio servidor pode resolver com orientação simples."),
+            "impacto": "alto" if g["chamados"] >= 10 else "médio" if g["chamados"] >= 5 else "baixo",
+            "chamados_evitaveis_mes": round(g["chamados"] * 30 / dias * (0.3 if infra else 0.5), 1),
+        })
+    total = sum(g["chamados"] for g in grupos)
+    resumo = (f"{total} chamados em {dias} dias. As maiores recorrências estão em "
+              + ", ".join(f"{g['tipo']} na {g['secretaria']} ({g['chamados']})" for g in grupos[:3]) + ".") if grupos else \
+        "Sem chamados no período."
+    return {"resumo": resumo, "acoes": acoes}
+
+
+def gerar_analise_capacitacao(dias):
+    with db() as c:
+        grupos = dados_para_capacitacao(c, dias)
+        auto = c.execute("SELECT count(*) n FROM autoatendimento WHERE resolvido=1").fetchone()["n"]
+    fonte = "llm"
+    try:
+        r = extrair_json(llm([
+            {"role": "system", "content": "Você é analista de gestão de serviços de uma prefeitura. Responda apenas JSON válido."},
+            {"role": "user", "content":
+             "Com base na recorrência de chamados por secretaria e tipo, proponha ações MASSIVAS de capacitação ou "
+             "prevenção que reduzam o volume futuro de chamados (treinamentos, oficinas, tutoriais em vídeo, guias "
+             "ilustrados, comunicados, manutenção preventiva, novos conteúdos para o assistente virtual de "
+             "autoatendimento). Priorize o que o próprio servidor consegue resolver com orientação; para problemas de "
+             "infraestrutura, proponha prevenção em vez de treinamento. Baseie-se só nos dados; não invente números.\n"
+             'Responda SOMENTE um JSON com: "resumo" (2-3 frases com o diagnóstico geral) e "acoes" (lista de 3 a 6, '
+             'ordenada por impacto, cada uma com "secretaria", "tema" (título curto da ação), "formato", "publico", '
+             '"evidencia" (os números que justificam), "justificativa" (1 frase), "impacto" ("alto"|"médio"|"baixo"), '
+             '"chamados_evitaveis_mes" (número estimado, conservador)).\n'
+             f"PERÍODO: últimos {dias} dias. Conversas resolvidas pelo assistente virtual (total): {auto}.\n"
+             f"RECORRÊNCIA (secretaria × tipo, com títulos de exemplo): "
+             f"{json.dumps([{k: g[k] for k in ('secretaria', 'tipo', 'chamados', 'reaberturas', 'exemplos')} for g in grupos[:25]], ensure_ascii=False)}"}],
+            max_tokens=2500, temperature=0.3))
+        if not isinstance(r.get("acoes"), list) or not r["acoes"]:
+            raise ValueError("JSON fora do esperado")
+        r["acoes"] = [a for a in r["acoes"] if isinstance(a, dict)][:6]
+    except Exception as e:  # noqa: BLE001 — fallback garante a análise sem IA externa
+        log.warning("análise de capacitação LLM falhou (%s); usando regras", e)
+        r, fonte = capacitacao_por_regras(grupos, dias), "regras"
+    with db() as c:
+        set_cfg(c, "analise_capacitacao", r | {"fonte": fonte, "dias": dias, "gerada_em": agora(), "status": "pronta"})
+
+
 # ---------------------------------------------------------------- push (Web Push / VAPID auto-hospedado)
 
 def chave_publica_vapid():
@@ -726,10 +1065,13 @@ app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOADS), name="uploads")
 templates = Jinja2Templates(directory=BASE / "templates")
 templates.env.globals.update(STATUS=STATUS, PRIORIDADES=PRIORIDADES, MOTIVOS=MOTIVOS_IMPEDIMENTO,
-                             SISTEMAS=SISTEMAS_ORIGEM, LLM_MODEL=LLM_MODEL)
+                             SISTEMAS=SISTEMAS_ORIGEM, LLM_MODEL=LLM_MODEL,
+                             SECRETARIAS=SECRETARIAS)
 templates.env.filters["fromjson"] = lambda s: json.loads(s) if s else {}
 templates.env.filters["hora"] = lambda s: s[11:16] if s else ""
 templates.env.filters["datahora"] = lambda s: f"{s[8:10]}/{s[5:7]} {s[11:16]}" if s else ""
+templates.env.filters["dec"] = lambda v, casas=1: "–" if v is None else f"{v:.{casas}f}".replace(".", ",")
+templates.env.filters["duracao"] = lambda h: "–" if h is None else (f"{h:.1f} h" if h < 48 else f"{h / 24:.1f} dias").replace(".", ",")
 
 
 def render(request, nome, **ctx):
@@ -854,11 +1196,11 @@ def receber_tarefa(origem: str, dados: dict, x_api_key: str = Header(...)):
                                  "mensagem": "Demanda já recebida; nenhum registro novo criado."}, status_code=200)
         ts = agora()
         cur = c.execute(
-            "INSERT INTO tarefas(origem,external_id,titulo,descricao,local,solicitante,contato,setor_id,token,"
-            "criado_em,atualizado_em) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO tarefas(origem,external_id,titulo,descricao,local,solicitante,contato,email,secretaria,setor_id,"
+            "token,criado_em,atualizado_em) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (origem, str(dados["external_id"]), (dados.get("titulo") or dados["descricao"])[:80], dados["descricao"],
-             dados.get("local", ""), dados.get("solicitante", ""), dados.get("contato", ""), sistema["setor_id"],
-             secrets.token_urlsafe(16), ts, ts))
+             dados.get("local", ""), dados.get("solicitante", ""), dados.get("contato", ""), dados.get("email", ""),
+             dados.get("secretaria", ""), sistema["setor_id"], secrets.token_urlsafe(16), ts, ts))
         tid = cur.lastrowid
         registrar_evento(c, tid, sistema["nome"], "integracao",
                          f"Demanda {dados['external_id']} recebida via API (registrada por {dados.get('atendente', 'atendente')})",
@@ -884,21 +1226,35 @@ def atendente(request: Request):
     u = exige_painel(request, "atendente", "gestor")
     with db() as c:
         setores = c.execute("SELECT * FROM setores").fetchall()
-        minhas = c.execute("SELECT * FROM tarefas ORDER BY id DESC LIMIT 15").fetchall()
+        minhas = c.execute("SELECT * FROM tarefas ORDER BY criado_em DESC, id DESC LIMIT 15").fetchall()
         solicitacoes = c.execute("SELECT * FROM solicitacoes WHERE status='aguardando' ORDER BY id").fetchall()
-    return render(request, "atendente.html", u=u, setores=setores, tarefas=minhas, solicitacoes=solicitacoes)
+    return render(request, "atendente.html", u=u, setores=setores, tarefas=minhas, solicitacoes=solicitacoes,
+                  secretarias=SECRETARIAS)
+
+
+def validar_solicitante(nome, email, secretaria):
+    if not nome.strip():
+        raise HTTPException(422, "Informe o nome de quem está abrindo o chamado")
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email.strip()):
+        raise HTTPException(422, "Informe um e-mail válido")
+    if secretaria not in SECRETARIAS:
+        raise HTTPException(422, "Secretaria inválida")
+    return nome.strip(), email.strip().lower(), secretaria
 
 
 @app.post("/tarefas")
 def criar_tarefa(request: Request, titulo: str = Form(...), descricao: str = Form(...), local: str = Form(""),
-                 solicitante: str = Form(...), contato: str = Form(""), setor_id: int = Form(...)):
+                 solicitante: str = Form(...), email: str = Form(...), secretaria: str = Form(...),
+                 contato: str = Form(""), setor_id: int = Form(...)):
     """Cadastro direto na web, para setores sem sistema legado (Req. 1)."""
     u = exige_painel(request, "atendente", "gestor")
+    solicitante, email, secretaria = validar_solicitante(solicitante, email, secretaria)
     with db() as c:
         ts = agora()
-        cur = c.execute("INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,contato,setor_id,criado_por,token,"
-                        "criado_em,atualizado_em) VALUES('web',?,?,?,?,?,?,?,?,?,?)",
-                        (titulo, descricao, local, solicitante, contato, setor_id, u["id"], secrets.token_urlsafe(16), ts, ts))
+        cur = c.execute("INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,contato,email,secretaria,setor_id,"
+                        "criado_por,token,criado_em,atualizado_em) VALUES('web',?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (titulo, descricao, local, solicitante, contato, email, secretaria, setor_id, u["id"],
+                         secrets.token_urlsafe(16), ts, ts))
         registrar_evento(c, cur.lastrowid, u["nome"], "atendente", "Tarefa cadastrada diretamente na plataforma",
                          None, "recebida")
     em_segundo_plano(triar, cur.lastrowid)
@@ -921,7 +1277,45 @@ def gestor_quadro(request: Request, setor_id: int | None = None):
                             (setor_id,) if setor_id else ()).fetchall()
         ind = indicadores(c)
     colunas = {s: [t for t in tarefas if t["status"] == s] for s in STATUS}
-    return render(request, "_quadro.html", colunas=colunas, ind=ind)
+    totais = {s: len(ts) for s, ts in colunas.items()}
+    # o histórico de resolvidas cresce sem parar: o quadro mostra só as mais recentes (o resto está nas métricas)
+    colunas["resolvida"] = sorted(colunas["resolvida"], key=lambda t: t["atualizado_em"], reverse=True)[:10]
+    return render(request, "_quadro.html", colunas=colunas, totais=totais, ind=ind)
+
+
+PERIODOS = {30: "Últimos 30 dias", 60: "Últimos 60 dias", 90: "Últimos 90 dias"}
+
+
+@app.get("/gestor/metricas", response_class=HTMLResponse)
+def gestor_metricas(request: Request, dias: int = 90, setor_id: int | None = None):
+    u = exige_painel(request, "gestor")
+    dias = dias if dias in PERIODOS else 90
+    with db() as c:
+        mt = metricas(c, dias, setor_id)
+        setores = c.execute("SELECT * FROM setores").fetchall()
+        analise = cfg(c, "analise_capacitacao")
+    return render(request, "metricas.html", u=u, mt=mt, setores=setores, setor_id=setor_id, periodos=PERIODOS,
+                  analise=analise)
+
+
+@app.get("/gestor/metricas/analise", response_class=HTMLResponse)
+def ver_analise(request: Request):
+    exige_painel(request, "gestor")
+    with db() as c:
+        analise = cfg(c, "analise_capacitacao")
+    return render(request, "_analise.html", analise=analise)
+
+
+@app.post("/gestor/metricas/analise", response_class=HTMLResponse)
+def pedir_analise(request: Request, dias: int = Form(90)):
+    exige_painel(request, "gestor")
+    dias = dias if dias in PERIODOS else 90
+    with db() as c:
+        anterior = cfg(c, "analise_capacitacao") or {}
+        set_cfg(c, "analise_capacitacao", anterior | {"status": "gerando", "dias": dias})
+        analise = cfg(c, "analise_capacitacao")
+    em_segundo_plano(gerar_analise_capacitacao, dias)
+    return render(request, "_analise.html", analise=analise)
 
 
 @app.get("/tarefa/{tid}", response_class=HTMLResponse)
@@ -969,8 +1363,12 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
             ia_status = "aceita" if iguais else "editada"
         tipo = c.execute("SELECT * FROM tipos WHERE id=?", (tipo_id,)).fetchone()
         ex = c.execute("SELECT * FROM usuarios WHERE id=?", (executor_id,)).fetchone()
-        c.execute("UPDATE tarefas SET executor_id=?, tipo_id=?, setor_id=?, prioridade=?, ia_status=? WHERE id=?",
-                  (executor_id, tipo_id, tipo["setor_id"], prioridade, ia_status, tid))
+        ajustada_por = t["prioridade_ajustada_por"]
+        if prioridade != t["prioridade"] and ia.get("prioridade") and prioridade != ia["prioridade"]:
+            ajustada_por = u["nome"]
+        c.execute("UPDATE tarefas SET executor_id=?, tipo_id=?, setor_id=?, prioridade=?, prioridade_ajustada_por=?, "
+                  "ia_status=? WHERE id=?",
+                  (executor_id, tipo_id, tipo["setor_id"], prioridade, ajustada_por, ia_status, tid))
         texto = f"Missão atribuída a {ex['nome']} · {tipo['nome']} · {prioridade} ({PRIORIDADES[prioridade]})"
         if ia_status in ("aceita", "editada") and t["ia_status"] == "sugerida":
             texto += f" · sugestão da IA {'aceita' if ia_status == 'aceita' else 'conferida e editada'} pelo gestor"
@@ -981,6 +1379,35 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
                      f"{t['titulo']} · {t['local']}", f"/campo/{tid}")
     em_segundo_plano(processar_outbox)
     return redirect(f"/tarefa/{tid}?msg=Missão atribuída a {ex['nome']} – notificação push enviada")
+
+
+@app.post("/tarefa/{tid}/prioridade")
+def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), motivo: str = Form(...)):
+    """Atendente ou gestor corrige a criticidade manualmente quando discorda da IA (fica registrado na trilha)."""
+    u = exige_painel(request, "atendente", "gestor")
+    if prioridade not in PRIORIDADES:
+        raise HTTPException(422, "Criticidade inválida")
+    if not motivo.strip():
+        return redirect(f"/tarefa/{tid}?msg=Informe o motivo do ajuste de criticidade")
+    with db() as c:
+        t = tarefa_ou_404(c, tid)
+        if t["status"] == "resolvida":
+            raise HTTPException(409, "Tarefa já resolvida: a criticidade não pode mais ser alterada")
+        if prioridade == t["prioridade"]:
+            return redirect(f"/tarefa/{tid}?msg=A criticidade já é {prioridade}")
+        ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
+        papel = "gestor" if "gestor" in u["papeis"] else "atendente"
+        c.execute("UPDATE tarefas SET prioridade=?, prioridade_ajustada_por=?, atualizado_em=? WHERE id=?",
+                  (prioridade, u["nome"], agora(), tid))
+        texto = (f"Criticidade ajustada manualmente: {t['prioridade'] or 'sem prioridade'} → {prioridade} "
+                 f"({PRIORIDADES[prioridade]})")
+        if ia.get("prioridade"):
+            texto += f" · IA havia sugerido {ia['prioridade']}"
+        registrar_evento(c, tid, u["nome"], papel, f"{texto} · Motivo: {motivo.strip()}")
+    if t["executor_id"] and t["status"] in ATIVOS:
+        em_segundo_plano(enviar_push, t["executor_id"], f"⚖️ Criticidade alterada – #{tid}",
+                         f"{t['titulo']}: agora {prioridade} ({PRIORIDADES[prioridade]})", f"/campo/{tid}")
+    return redirect(f"/tarefa/{tid}?msg=Criticidade alterada para {prioridade} – {PRIORIDADES[prioridade]}")
 
 
 @app.post("/tarefa/{tid}/rejeitar-ia")
@@ -1340,13 +1767,16 @@ def servidor_solicitar_form(request: Request, via: str = ""):
         setores = c.execute("SELECT * FROM setores").fetchall()
         token = _sessao_auto(request, c) if via == "ia" else None
         rascunho, fonte = rascunho_da_conversa(c, token) if token else ({}, None)
-    return render(request, "servidor_solicitar.html", setores=setores, r=rascunho, fonte=fonte, via_ia=bool(token))
+    return render(request, "servidor_solicitar.html", setores=setores, r=rascunho, fonte=fonte, via_ia=bool(token),
+                  secretarias=SECRETARIAS)
 
 
 @app.post("/servidor/solicitar")
-def servidor_solicitar(request: Request, nome: str = Form(...), local: str = Form(...), contato: str = Form(""),
-                       titulo: str = Form(...), descricao: str = Form(...), tentativas: str = Form(""),
-                       setor_id: int = Form(...), via_ia: int = Form(0)):
+def servidor_solicitar(request: Request, nome: str = Form(...), email: str = Form(...), secretaria: str = Form(...),
+                       local: str = Form(...), contato: str = Form(""), titulo: str = Form(...),
+                       descricao: str = Form(...), tentativas: str = Form(""), setor_id: int = Form(...),
+                       via_ia: int = Form(0)):
+    nome, email, secretaria = validar_solicitante(nome, email, secretaria)
     with db() as c:
         token_auto = _sessao_auto(request, c) if via_ia else None
         conversa = None
@@ -1354,10 +1784,10 @@ def servidor_solicitar(request: Request, nome: str = Form(...), local: str = For
             conversa = "\n".join(f"{m['autor']}: {m['texto']}" for m in c.execute(
                 "SELECT autor, texto FROM auto_msgs WHERE token=? ORDER BY id", (token_auto,)))
         token = secrets.token_urlsafe(16)
-        cur = c.execute("INSERT INTO solicitacoes(token,nome,local,contato,titulo,descricao,tentativas,setor_id,via_ia,"
-                        "conversa,criado_em) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                        (token, nome, local, contato, titulo, descricao, tentativas, setor_id, int(bool(token_auto)),
-                         conversa, agora()))
+        cur = c.execute("INSERT INTO solicitacoes(token,nome,email,secretaria,local,contato,titulo,descricao,tentativas,"
+                        "setor_id,via_ia,conversa,criado_em) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (token, nome, email, secretaria, local, contato, titulo, descricao, tentativas, setor_id,
+                         int(bool(token_auto)), conversa, agora()))
         c.execute("UPDATE solicitacoes SET protocolo=? WHERE id=?", (f"SOL-{cur.lastrowid:04d}", cur.lastrowid))
         if token_auto:
             c.execute("UPDATE autoatendimento SET solicitacao_id=? WHERE token=?", (cur.lastrowid, token_auto))
@@ -1378,18 +1808,21 @@ def servidor_acompanhar(request: Request, token: str):
 
 @app.post("/solicitacoes/{sid}/registrar")
 def registrar_solicitacao(request: Request, sid: int, titulo: str = Form(...), descricao: str = Form(...),
-                          local: str = Form(...), setor_id: int = Form(...)):
+                          local: str = Form(...), setor_id: int = Form(...), nome: str = Form(...),
+                          email: str = Form(...), secretaria: str = Form(...)):
     """O atendente confere a solicitação do servidor e a registra como tarefa (Req. 1)."""
     u = exige_painel(request, "atendente", "gestor")
+    nome, email, secretaria = validar_solicitante(nome, email, secretaria)
     with db() as c:
         s = c.execute("SELECT * FROM solicitacoes WHERE id=? AND status='aguardando'", (sid,)).fetchone()
         if not s:
             raise HTTPException(409, "Solicitação já tratada")
         ts = agora()
         desc = descricao + (f"\nJá tentado pelo servidor: {s['tentativas']}" if s["tentativas"] else "")
-        cur = c.execute("INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,contato,setor_id,criado_por,token,"
-                        "criado_em,atualizado_em) VALUES('web',?,?,?,?,?,?,?,?,?,?)",
-                        (titulo, desc, local, s["nome"], s["contato"], setor_id, u["id"], secrets.token_urlsafe(16), ts, ts))
+        cur = c.execute("INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,contato,email,secretaria,setor_id,"
+                        "criado_por,token,criado_em,atualizado_em) VALUES('web',?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (titulo, desc, local, nome, s["contato"], email, secretaria, setor_id, u["id"],
+                         secrets.token_urlsafe(16), ts, ts))
         tid = cur.lastrowid
         c.execute("UPDATE solicitacoes SET status='registrada', tarefa_id=?, registrada_por=?, registrada_em=? WHERE id=?",
                   (tid, u["nome"], ts, sid))

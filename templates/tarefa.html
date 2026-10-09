@@ -15,7 +15,8 @@
 <div>
   <article>
     <p><b>Descrição:</b> {{ t.descricao }}</p>
-    <p>📍 {{ t.local or '—' }} · 🙋 {{ t.solicitante }} {% if t.contato %}· ☎️ {{ t.contato }}{% endif %}</p>
+    <p>📍 {{ t.local or '—' }}</p>
+    <p>{{ m.solicitante(t) }}</p>
     {% if executor %}<p>Executor: {{ executor.avatar }} <b>{{ executor.nome }}</b></p>{% endif %}
     {% if t.relato %}<p><b>Relato do executor:</b> {{ t.relato }}</p>{% endif %}
     {% if t.resumo_ia %}<p><b>Resumo para a demandante</b> <span class="selo">🤖 IA</span>: {{ t.resumo_ia }}</p>{% endif %}
@@ -36,8 +37,32 @@
       {% if ia.informacoes_faltantes %}<p><b>⚠️ Informações faltantes</b> (confirmar com o solicitante):</p>
         <ul>{% for f in ia.informacoes_faltantes %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
       {% if ia.executor_id %}<p><b>Executor sugerido:</b> {% for e in executores if e.id == ia.executor_id %}{{ e.avatar }} {{ e.nome }}{% endfor %} — {{ ia.motivo_executor }}</p>{% endif %}
+      {% if t.prioridade_ajustada_por and t.prioridade and t.prioridade != ia.prioridade %}
+      <p><span class="selo selo-regras">✋ ajuste manual</span> Criticidade definida como {{ m.prio(t.prioridade) }} por {{ t.prioridade_ajustada_por }} (a IA sugeriu {{ ia.prioridade }}).</p>{% endif %}
       <small>Status da sugestão: <b>{{ t.ia_status }}</b>. Nada é aplicado sem a conferência do gestor.</small>
     {% endif %}
+  </article>
+  {% endif %}
+
+  {# ---------- Criticidade: ajuste manual pelo atendente ou gestor ---------- #}
+  {% if t.status != 'resolvida' %}
+  <article>
+    <header><strong>⚖️ Criticidade</strong> {{ m.prio(t.prioridade) }}
+      {% if ia and ia.prioridade %}<small> · sugestão da IA: {{ ia.prioridade }} – {{ PRIORIDADES[ia.prioridade] }}</small>{% endif %}
+      {% if t.prioridade_ajustada_por %}<br><small>✋ Ajustada manualmente por {{ t.prioridade_ajustada_por }}</small>{% endif %}</header>
+    <details {{ 'open' if t.status in ('recebida', 'reaberta') and not eh_gestor and t.ia_status == 'sugerida' }}>
+      <summary>Discorda da criticidade? Ajustar manualmente</summary>
+      <form method="post" action="/tarefa/{{ t.id }}/prioridade">
+        <div class="grid">
+          <label>Nova criticidade
+            <select name="prioridade" required>{% for p, n in PRIORIDADES.items() %}
+              <option value="{{ p }}" {{ 'selected' if p == (t.prioridade or (ia.prioridade if ia) or 'P3') }}>{{ p }} – {{ n }}</option>{% endfor %}</select></label>
+          <label>Motivo do ajuste <input name="motivo" required placeholder="Ex.: unidade de saúde com atendimento parado"></label>
+        </div>
+        <button class="secondary">Salvar criticidade</button>
+        <small>O ajuste fica registrado na linha do tempo{{ ' e o executor é notificado' if t.executor_id }}.</small>
+      </form>
+    </details>
   </article>
   {% endif %}
 
@@ -54,7 +79,7 @@
             <option value="{{ tp.id }}" {{ 'selected' if tp.id == (sug.tipo_id or t.tipo_id) }}>{{ tp.setor }} › {{ tp.nome }}</option>{% endfor %}</select></label>
         <label>Criticidade
           <select name="prioridade" required>{% for p, n in PRIORIDADES.items() %}
-            <option value="{{ p }}" {{ 'selected' if p == (sug.prioridade or t.prioridade or 'P3') }}>{{ p }} – {{ n }}</option>{% endfor %}</select></label>
+            <option value="{{ p }}" {{ 'selected' if p == ((t.prioridade if t.prioridade_ajustada_por else sug.prioridade) or t.prioridade or 'P3') }}>{{ p }} – {{ n }}</option>{% endfor %}</select></label>
       </div>
       <label>Executor
         <select name="executor_id" required>{% for e in executores %}
@@ -94,7 +119,7 @@
   <article>
     <header><strong>🧾 Validação pela demandante</strong></header>
     {% if t.status == 'concluida' %}
-      <p>Link enviado a <b>{{ t.solicitante }}</b> (SMS/e-mail simulado):</p>
+      <p>Link enviado a <b>{{ t.solicitante }}</b>{{ ' (' ~ t.email ~ ')' if t.email }} (SMS/e-mail simulado):</p>
       <p><a href="/validar/{{ t.token }}" target="_blank" role="button">Abrir link da demandante ↗</a></p>
     {% elif t.status == 'resolvida' %}<p>✔ Resolução confirmada pela demandante.</p>
     {% elif t.status == 'reaberta' %}<p>✖ A demandante indicou pendência: <b>{{ t.comentario_demandante }}</b>. Reatribua para continuar o atendimento.</p>

@@ -7,7 +7,7 @@
     <small>Enviadas pelo <a href="/servidor" target="_blank">autoatendimento</a>. Confira, ajuste se necessário e registre o chamado.</small></header>
   {% for s in solicitacoes %}
   <details {{ 'open' if loop.first }}>
-    <summary><b>{{ s.protocolo }}</b> · {{ s.titulo }} · {{ s.nome }} · {{ s.criado_em|datahora }}
+    <summary><b>{{ s.protocolo }}</b> · {{ s.titulo }} · {{ s.nome }}{{ ' (' ~ s.secretaria ~ ')' if s.secretaria }} · {{ s.criado_em|datahora }}
       {% if s.via_ia %}<span class="selo">🤖 via assistente</span>{% else %}<span class="selo selo-regras">formulário sem IA</span>{% endif %}</summary>
     <form method="post" action="/solicitacoes/{{ s.id }}/registrar">
       <div class="grid">
@@ -16,7 +16,8 @@
       </div>
       <label>Descrição <textarea name="descricao" rows="2" required>{{ s.descricao }}</textarea></label>
       <label>Local <input name="local" required value="{{ s.local }}"></label>
-      <p><small>🙋 {{ s.nome }}{% if s.contato %} · ☎️ {{ s.contato }}{% endif %}{% if s.tentativas %} · Já tentou: {{ s.tentativas }}{% endif %}</small></p>
+      {{ m.campos_solicitante(s.nome, s.email, s.secretaria, nome_campo='nome') }}
+      <p><small>{% if s.contato %}☎️ {{ s.contato }}{% endif %}{% if s.tentativas %} · Já tentou: {{ s.tentativas }}{% endif %}</small></p>
       {% if s.conversa %}<details><summary><small>Ver conversa com o assistente</small></summary><pre style="white-space:pre-wrap;font-size:.8rem">{{ s.conversa }}</pre></details>{% endif %}
       <button>✔ Registrar chamado</button>
     </form>
@@ -39,10 +40,7 @@
       <label>Título <input name="titulo" required placeholder="Ex.: Infiltração no teto da sala 3"></label>
       <label>Descrição do problema <textarea name="descricao" required rows="3"></textarea></label>
       <label>Local (unidade, sala, andar) <input name="local" placeholder="Ex.: CMEI Jardim Ipê – sala 3"></label>
-      <div class="grid">
-        <label>Solicitante <input name="solicitante" required></label>
-        <label>Telefone/ramal <input name="contato"></label>
-      </div>
+      {{ m.campos_solicitante(contato='') }}
       <button>Registrar tarefa</button>
       <small>A IA fará a triagem (tipo, criticidade, informações faltantes) para conferência do gestor.</small>
     </form>

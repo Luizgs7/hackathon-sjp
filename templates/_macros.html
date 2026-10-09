@@ -17,3 +17,29 @@
 <li><a href="/ranking">Ranking</a></li>
 <li><small>{{ u.avatar }} {{ u.nome }}</small> · <a href="/sair?area=painel">sair</a></li>
 {%- endmacro %}
+
+{% macro abas_gestor(ativa) -%}
+<div class="abas" role="navigation" aria-label="Seções do painel do gestor">
+  <a href="/gestor" {{ 'aria-current=page' if ativa == 'quadro' }}>📋 Quadro de missões</a>
+  <a href="/gestor/metricas" {{ 'aria-current=page' if ativa == 'metricas' }}>📈 Métricas e capacitação</a>
+</div>
+{%- endmacro %}
+
+{% macro solicitante(t) -%}
+🙋 {{ t.solicitante or t.nome }}{% if t.secretaria %} · 🏛️ {{ t.secretaria }}{% endif %}{% if t.email %} · ✉️ <a href="mailto:{{ t.email }}">{{ t.email }}</a>{% endif %}{% if t.contato %} · ☎️ {{ t.contato }}{% endif %}
+{%- endmacro %}
+
+{% macro campos_solicitante(nome='', email='', secretaria='', contato=None, nome_campo='solicitante') -%}
+<div class="grid">
+  <label>Nome de quem está abrindo o chamado <input name="{{ nome_campo }}" required autocomplete="name" value="{{ nome }}"></label>
+  <label>E-mail <input name="email" type="email" required autocomplete="email" value="{{ email }}" placeholder="nome.sobrenome@sjp.pr.gov.br"></label>
+</div>
+<div class="grid">
+  <label>Secretaria
+    <select name="secretaria" required>
+      <option value="" {{ 'selected' if not secretaria }} disabled>Selecione…</option>
+      {% for s in SECRETARIAS %}<option {{ 'selected' if s == secretaria }}>{{ s }}</option>{% endfor %}
+    </select></label>
+  {% if contato is not none %}<label>Telefone/ramal <input name="contato" autocomplete="tel" value="{{ contato }}"></label>{% endif %}
+</div>
+{%- endmacro %}

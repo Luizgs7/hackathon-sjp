@@ -13,10 +13,7 @@
 <article>
   <form method="post" action="/servidor/solicitar">
     <input type="hidden" name="via_ia" value="{{ 1 if via_ia else 0 }}">
-    <div class="grid">
-      <label>Seu nome <input name="nome" required autocomplete="name"></label>
-      <label>Telefone/ramal <input name="contato" autocomplete="tel"></label>
-    </div>
+    {{ m.campos_solicitante(contato='', nome_campo='nome') }}
     <label>Local (unidade, sala, andar) <input name="local" required value="{{ r.local or '' }}" placeholder="Ex.: UBS Vila Nova – Sala de vacinação"></label>
     <label>Assunto <input name="titulo" required maxlength="80" value="{{ r.titulo or '' }}"></label>
     <label>O que está acontecendo? <textarea name="descricao" required rows="4">{{ r.descricao or '' }}</textarea></label>
