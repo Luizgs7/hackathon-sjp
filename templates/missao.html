@@ -1,67 +1,83 @@
 {% extends "base.html" %}
 {% block title %}Missão #{{ t.id }} · Missões SJP{% endblock %}
 {% block body_class %}campo{% endblock %}
-{% block nav %}<li><a href="/campo">← Missões</a></li><li><small>{{ u.avatar }} {{ u.nome.split()[0] }}</small></li>{% endblock %}
+{% block nav %}<li><a href="/campo">{{ m.i('arrow-left') }}Missões</a></li><li class="usuario">{{ m.avatar(u.nome) }}<span>{{ u.nome.split()[0] }}</span></li>{% endblock %}
 {% block main %}
 <div hx-get="/campo/{{ t.id }}/estado?v={{ t.atualizado_em|urlencode }}" hx-trigger="every 3s" hx-swap="none"></div>
 <p>{{ m.prio(t.prioridade) }} {{ m.status(t.status) }}</p>
 <h2 style="margin-bottom:.3rem">{{ t.titulo }}</h2>
-<p>📍 <b>{{ t.local }}</b><br>🙋 {{ t.solicitante }}{% if t.contato %} · <a href="tel:{{ t.contato }}">☎️ {{ t.contato }}</a>{% endif %}</p>
+<p>{{ m.i('map-pin') }}<b>{{ t.local }}</b><br>{{ m.i('user') }}{{ t.solicitante }}{% if t.secretaria %} · {{ m.i('landmark') }}{{ t.secretaria }}{% endif %}{% if t.contato %} · <a href="tel:{{ t.contato }}">{{ m.i('phone') }}{{ t.contato }}</a>{% endif %}</p>
 <p>{{ t.descricao }}</p>
-{% if ia and ia.resumo %}<p><span class="selo">🤖 resumo IA</span> {{ ia.resumo }}</p>{% endif %}
-{% if ia and ia.informacoes_faltantes %}<p><small>⚠️ Confirmar no local: {{ ia.informacoes_faltantes|join('; ') }}</small></p>{% endif %}
+{% if ia and ia.resumo %}<p><span class="selo">{{ m.i('sparkles') }}resumo IA</span> {{ ia.resumo }}</p>{% endif %}
+{% if ia and ia.informacoes_faltantes %}<p><small>{{ m.i('triangle-alert') }}Confirmar no local: {{ ia.informacoes_faltantes|join('; ') }}</small></p>{% endif %}
 
 {# Um único botão primário por estado: poucos toques, adequado ao campo #}
-{% if t.status == 'atribuida' %}
+{% if t.status == 'encaminhado' %}
   <form method="post" action="/campo/{{ t.id }}/avancar"><input type="hidden" name="para" value="a_caminho">
-    <button class="btn-grande">🚗 Aceitar e ir ao local</button></form>
+    <button class="btn-grande">{{ m.i('car') }}Aceitar e ir ao local</button></form>
 {% elif t.status == 'a_caminho' %}
   <form method="post" action="/campo/{{ t.id }}/avancar"><input type="hidden" name="para" value="em_execucao">
-    <button class="btn-grande">📍 Cheguei — iniciar atendimento</button></form>
+    <button class="btn-grande">{{ m.i('map-pin') }}Cheguei — iniciar atendimento</button></form>
 {% elif t.status == 'em_execucao' %}
   <details>
-    <summary role="button" class="btn-grande">✅ Concluir missão</summary>
+    <summary role="button" class="btn-grande">{{ m.i('circle-check') }}Marcar como executado</summary>
     <form method="post" action="/campo/{{ t.id }}/concluir" enctype="multipart/form-data">
       <label>O que foi feito? <textarea name="relato" required rows="3" placeholder="Ex.: Keystone do ponto 12 danificado, substituído. Testado com testador e notebook."></textarea></label>
-      <label>📷 Foto da evidência <input type="file" name="foto" accept="image/*" capture="environment"></label>
-      <button class="btn-grande">Enviar conclusão</button>
+      <label>{{ m.i('camera') }}Foto da evidência <input type="file" name="foto" accept="image/*" capture="environment"></label>
+      <button class="btn-grande">Enviar execução</button>
     </form>
   </details>
   <details>
-    <summary role="button" class="btn-grande btn-imp outline">⛔ Reportar impedimento</summary>
+    <summary role="button" class="btn-grande btn-imp outline">{{ m.i('octagon-alert') }}Reportar impedimento</summary>
     <form method="post" action="/campo/{{ t.id }}/impedimento" enctype="multipart/form-data">
       <fieldset>{% for mo in MOTIVOS %}
         <label><input type="radio" name="motivo" value="{{ mo }}" required {{ 'checked' if loop.first }}> {{ mo }}</label>{% endfor %}</fieldset>
       <label>Detalhe <input name="detalhe" placeholder="Ex.: keystone Cat6 danificado, sem peça reserva"></label>
-      <label>📷 Foto (opcional) <input type="file" name="foto" accept="image/*" capture="environment"></label>
+      <label>{{ m.i('camera') }}Foto (opcional) <input type="file" name="foto" accept="image/*" capture="environment"></label>
       <button class="btn-grande">Enviar impedimento ao gestor</button>
     </form>
   </details>
-{% elif t.status == 'impedida' %}
+{% elif t.status == 'devolvido' %}
+  <article><b>{{ m.i('undo-2') }}Devolvido à triagem.</b> O atendimento vai reavaliar e reencaminhar, se necessário.</article>
+{% elif t.status == 'cancelado' %}
+  <article><b>{{ m.i('circle-x') }}Chamado cancelado.</b> Nenhuma ação necessária.</article>
+{% elif t.status == 'impedido' %}
   <article style="border:2px solid var(--alerta)">
-    <b>⛔ Aguardando providência do gestor</b><br>{{ impedimento.motivo }}{% if impedimento.detalhe %} — {{ impedimento.detalhe }}{% endif %}
-    {% if impedimento.externo %}<br><small>⏸️ Motivo externo: o relógio do SLA está pausado e você não perde pontos.</small>{% endif %}
+    <b>{{ m.i('octagon-alert') }}Aguardando providência do gestor</b><br>{{ impedimento.motivo }}{% if impedimento.detalhe %} — {{ impedimento.detalhe }}{% endif %}
+    {% if impedimento.externo %}<br><small>{{ m.i('pause') }}Motivo externo: o relógio do SLA está pausado e você não perde pontos.</small>{% endif %}
   </article>
-{% elif t.status == 'concluida' %}
-  <article><b>✅ Conclusão enviada.</b> Aguardando a confirmação de {{ t.solicitante }}.
-    {% for p in pontos if p.tipo == 'provisorio' %}<br>🏅 <b>+{{ p.pontos }} pts provisórios</b>{% endfor %}</article>
-{% elif t.status == 'resolvida' %}
-  <article><b>🏆 Missão cumprida!</b> {{ t.solicitante }} confirmou: {{ '★' * (t.nota or 0) }}
+{% elif t.status == 'executado' %}
+  <article><b>{{ m.i('circle-check') }}Executado.</b> Aguardando a confirmação de {{ t.solicitante }}.
+    {% for p in pontos if p.tipo == 'provisorio' %}<br>{{ m.i('award') }}<b>+{{ p.pontos }} pts provisórios</b>{% endfor %}</article>
+{% elif t.status == 'concluido' %}
+  <article><b>{{ m.i('trophy') }}Missão cumprida!</b> {{ t.solicitante }} confirmou: {{ '★' * (t.nota or 0) }}
     {% for p in pontos if p.tipo in ('definitivo', 'bonus') %}<br><small>+{{ p.pontos }} – {{ p.descricao }}</small>{% endfor %}</article>
-{% elif t.status == 'reaberta' %}
-  <article style="border:2px solid var(--alerta)"><b>🔁 Reaberta pela demandante:</b> {{ t.comentario_demandante }}<br><small>Aguardando nova atribuição do gestor.</small></article>
+{% elif t.status == 'reaberto' %}
+  <article style="border:2px solid var(--alerta)"><b>{{ m.i('rotate-ccw') }}Reaberta pela demandante:</b> {{ t.comentario_demandante }}<br><small>De volta à fila do atendimento para reavaliação.</small></article>
 {% endif %}
 
-{% if t.status in ('atribuida', 'a_caminho', 'em_execucao', 'impedida') %}
+{% if t.status in ('encaminhado', 'a_caminho', 'em_execucao') %}
+<details>
+  <summary role="button" class="btn-grande secondary outline">{{ m.i('undo-2') }}Devolver à triagem</summary>
+  <form method="post" action="/campo/{{ t.id }}/devolver">
+    <fieldset>{% for mo in MOTIVOS_DEVOLUCAO %}
+      <label><input type="radio" name="motivo" value="{{ mo }}" required {{ 'checked' if loop.first }}> {{ mo }}</label>{% endfor %}</fieldset>
+    <label>Detalhe <input name="detalhe" placeholder="Ex.: não informaram o número do ramal"></label>
+    <button class="btn-grande">Devolver chamado</button>
+  </form>
+</details>
+{% endif %}
+
+{% if t.status in ('encaminhado', 'a_caminho', 'em_execucao', 'impedido') %}
 <article>
-  <header><strong>🤖 Copiloto de campo</strong> <small>— pergunte como resolver</small></header>
+  <header><strong>{{ m.i('sparkles') }}Copiloto de campo</strong> <small>— pergunte como resolver</small></header>
   <div id="chat" class="chat">{% include "_chat.html" %}</div>
   <form hx-post="/campo/{{ t.id }}/chat" hx-target="#chat" hx-indicator="#pensando" hx-on::after-request="this.reset()">
     <fieldset role="group">
       <input name="pergunta" required placeholder="Ex.: o ponto está sem link e o LED do switch apagado">
       <button>Enviar</button>
     </fieldset>
-    <small id="pensando" class="htmx-indicator">🤖 pensando… (pode levar alguns segundos)</small>
+    <small id="pensando" class="htmx-indicator">{{ m.i('sparkles') }}pensando… (pode levar alguns segundos)</small>
   </form>
 </article>
 {% endif %}

@@ -2,24 +2,31 @@
 {% block title %}Atendimento · Missões SJP{% endblock %}
 {% block nav %}{{ m.nav_painel(u) }}{% endblock %}
 {% block main %}
+<div class="filtros">
+  <div><h2 style="margin:0">Fila de atendimento <small class="htmx-indicator" id="ind-fila">atualizando…</small></h2>
+    <small>Chamados novos, devolvidos pelo time técnico e reabertos. Avalie cada um: resolva no atendimento ou encaminhe para a área técnica.</small></div>
+</div>
+<section id="fila" hx-get="/atendente/fila" hx-trigger="load, every 5s" hx-indicator="#ind-fila" aria-live="polite"
+         style="margin:1rem 0 2rem"></section>
+
 <article class="fila-sol">
-  <header><strong>📨 Solicitações dos servidores aguardando registro ({{ solicitacoes|length }})</strong><br>
+  <header><strong>{{ m.i('inbox') }}Solicitações dos servidores aguardando registro ({{ solicitacoes|length }})</strong><br>
     <small>Enviadas pelo <a href="/servidor" target="_blank">autoatendimento</a>. Confira, ajuste se necessário e registre o chamado.</small></header>
   {% for s in solicitacoes %}
   <details {{ 'open' if loop.first }}>
     <summary><b>{{ s.protocolo }}</b> · {{ s.titulo }} · {{ s.nome }}{{ ' (' ~ s.secretaria ~ ')' if s.secretaria }} · {{ s.criado_em|datahora }}
-      {% if s.via_ia %}<span class="selo">🤖 via assistente</span>{% else %}<span class="selo selo-regras">formulário sem IA</span>{% endif %}</summary>
+      {% if s.via_ia %}<span class="selo">{{ m.i('sparkles') }}via assistente</span>{% else %}<span class="selo selo-regras">formulário sem IA</span>{% endif %}</summary>
     <form method="post" action="/solicitacoes/{{ s.id }}/registrar">
       <div class="grid">
         <label>Assunto <input name="titulo" required value="{{ s.titulo }}"></label>
-        <label>Setor <select name="setor_id">{% for st in setores %}<option value="{{ st.id }}" {{ 'selected' if st.id == s.setor_id }}>{{ st.nome }}</option>{% endfor %}</select></label>
+        <label>Área <select name="setor_id">{% for st in setores %}<option value="{{ st.id }}" {{ 'selected' if st.id == s.setor_id }}>{{ st.nome }}</option>{% endfor %}</select></label>
       </div>
       <label>Descrição <textarea name="descricao" rows="2" required>{{ s.descricao }}</textarea></label>
       <label>Local <input name="local" required value="{{ s.local }}"></label>
       {{ m.campos_solicitante(s.nome, s.email, s.secretaria, nome_campo='nome') }}
-      <p><small>{% if s.contato %}☎️ {{ s.contato }}{% endif %}{% if s.tentativas %} · Já tentou: {{ s.tentativas }}{% endif %}</small></p>
+      <p><small>{% if s.contato %}{{ m.i('phone') }}{{ s.contato }}{% endif %}{% if s.tentativas %} · Já tentou: {{ s.tentativas }}{% endif %}</small></p>
       {% if s.conversa %}<details><summary><small>Ver conversa com o assistente</small></summary><pre style="white-space:pre-wrap;font-size:.8rem">{{ s.conversa }}</pre></details>{% endif %}
-      <button>✔ Registrar chamado</button>
+      <button>{{ m.i('check') }}Registrar chamado</button>
     </form>
     <form method="post" action="/solicitacoes/{{ s.id }}/descartar">
       <fieldset role="group"><input name="motivo" required placeholder="Motivo para não abrir (ex.: resolvido por telefone)"><button class="secondary outline">Encerrar sem chamado</button></fieldset>
@@ -31,11 +38,11 @@
 </article>
 <div class="grade2">
   <article>
-    <header><strong>📝 Nova tarefa — cadastro direto</strong><br>
-      <small>Para setores sem sistema próprio. No Help Desk de TI o chamado é registrado no
+    <header><strong>{{ m.i('file-pen-line') }}Nova tarefa — cadastro direto</strong><br>
+      <small>Para áreas sem sistema próprio. No Help Desk o chamado também pode ser registrado no
         <a href="http://localhost:8001" target="_blank">SisChamados Legado</a> e chega pela integração.</small></header>
     <form method="post" action="/tarefas">
-      <label>Setor responsável
+      <label>Área responsável
         <select name="setor_id" required>{% for s in setores %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}</select></label>
       <label>Título <input name="titulo" required placeholder="Ex.: Infiltração no teto da sala 3"></label>
       <label>Descrição do problema <textarea name="descricao" required rows="3"></textarea></label>

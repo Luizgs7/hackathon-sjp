@@ -6,10 +6,10 @@
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
   <h3 style="margin:0">Painel de missões <small class="htmx-indicator" id="ind">⟳</small></h3>
   <form style="margin:0;display:flex;gap:.5rem" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change">
-    <select name="setor_id" style="margin:0" aria-label="Filtrar por setor">
-      <option value="">Todos os setores</option><option value="1">TI – Help Desk</option><option value="2">Manutenção Predial</option>
+    <select name="setor_id" style="margin:0" aria-label="Filtrar por área">
+      <option value="">Todas as áreas</option>{% for s in setores %}<option value="{{ s.id }}">{{ s.nome }}</option>{% endfor %}
     </select>
-    <a href="/atendente" role="button" class="outline">+ Nova tarefa</a>
+    <a href="/atendente" role="button">{{ m.i('plus') }}Novo chamado</a>
   </form>
 </div>
 <p><small>Atualiza automaticamente a cada 3 s. Passe o mouse sobre os indicadores para ver como são calculados.</small></p>

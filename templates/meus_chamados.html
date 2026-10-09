@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Meus chamados · Help Desk SJP{% endblock %}
+{% block nav %}{{ m.nav_servidor() }}{% endblock %}
+{% block main %}
+<div hx-get="/meus-chamados/{{ token }}" hx-trigger="every 10s" hx-select="#meus" hx-target="#meus" hx-swap="outerHTML"></div>
+<div id="meus">
+<div class="perfil">
+  <div class="pessoa">{{ m.avatar(perfil.solicitante or perfil.nome if perfil else email) }}
+    <div><h2 style="margin:0">Meus chamados</h2>
+      <small>{% if perfil %}{{ perfil.solicitante or perfil.nome }}{{ ' · ' ~ perfil.secretaria if perfil.secretaria }} · {% endif %}{{ email }}</small></div>
+  </div>
+  <div class="perfil-acoes">
+    <a href="/servidor" role="button">{{ m.i('plus') }}Novo chamado</a>
+    <a href="/meus-chamados-sair" role="button" class="secondary outline">{{ m.i('log-out') }}Sair</a>
+  </div>
+</div>
+
+<section class="kpis" aria-label="Resumo">
+  <div class="kpi"><b>{{ abertos|length }}</b><small>{{ m.i('send') }}em aberto</small></div>
+  <div class="kpi {{ 'destaque' if aguardando }}"><b>{{ aguardando|length }}</b><small>{{ m.i('circle-check') }}aguardando sua confirmação</small></div>
+  <div class="kpi"><b>{{ historico|selectattr('status', 'equalto', 'concluido')|list|length }}</b><small>{{ m.i('badge-check') }}concluídos</small></div>
+  <div class="kpi"><b>{{ abertos|length + historico|length }}</b><small>{{ m.i('inbox') }}total de chamados</small></div>
+</section>
+
+{% if aguardando %}
+<div class="aviso">{{ m.i('circle-check') }}<b>{{ aguardando|length }} chamado(s) aguardando sua confirmação.</b>
+  O técnico informou que o serviço foi feito: confirme se resolveu e avalie o atendimento.</div>
+{% endif %}
+
+{% if solicitacoes %}
+<h3>{{ m.i('hourglass') }}Solicitações enviadas</h3>
+<div class="lista-chamados">
+{% for s in solicitacoes %}
+  <a class="chamado" href="/servidor/acompanhar/{{ s.token }}">
+    <div class="chamado-topo"><span class="protocolo">{{ s.protocolo }}</span>
+      {% if s.status == 'aguardando' %}<span class="st st-novo">{{ m.i('hourglass') }}Aguardando registro pelo atendente</span>
+      {% else %}<span class="st st-cancelado">{{ m.i('circle-x') }}Encerrada sem chamado</span>{% endif %}</div>
+    <h4>{{ s.titulo }}</h4>
+    <small>{{ m.i('map-pin') }}{{ s.local }} · enviada em {{ s.criado_em|datahora }}</small>
+  </a>
+{% endfor %}
+</div>
+{% endif %}
+
+<h3>{{ m.i('send') }}Em aberto <span class="contador">{{ abertos|length }}</span></h3>
+{% if abertos %}
+<div class="lista-chamados">
+{% for t in abertos %}{% set passo = passo_do_status[STATUS_OFICIAL[t.status]] %}
+  <article class="chamado {{ 'pendente' if t.status == 'executado' }}">
+    <div class="chamado-topo"><span class="protocolo">{{ t.external_id or ('#' ~ t.id) }}</span>{{ m.status(t.status) }}</div>
+    <h4>{{ t.titulo }}</h4>
+    <small>{{ m.i('map-pin') }}{{ t.local or '—' }}{% if t.area %} · {{ m.i('layers') }}{{ t.area }}{% endif %}
+      · aberto em {{ t.criado_em|datahora }}</small>
+    <ol class="passos" aria-label="Andamento">
+      {% for nome in passos %}<li class="{{ 'feito' if loop.index0 < passo }}{{ 'atual' if loop.index0 == passo }}">{{ nome }}</li>{% endfor %}
+    </ol>
+    <p class="chamado-nota">
+      {% if t.status == 'devolvido' %}A equipe está revisando o seu chamado e pode entrar em contato para confirmar informações.
+      {% elif t.status == 'reaberto' %}Recebemos a sua pendência e o atendimento será retomado.
+      {% elif t.status == 'novo' %}Chamado registrado. A equipe vai encaminhá-lo para a área responsável.
+      {% elif t.status == 'impedido' %}O atendimento aguarda uma providência (material, acesso ou apoio de outra equipe).
+      {% elif t.status == 'executado' %}{{ 'O atendimento' if t.resolvido_atendimento_por else (t.executor.split()[0] if t.executor else 'A equipe') }} informou que o serviço foi feito{{ ': ' ~ (t.resumo_ia or t.relato) if (t.resumo_ia or t.relato) }}
+      {% else %}{% if t.executor %}Técnico responsável: {{ t.executor }}.{% endif %} Última atualização em {{ (t.ultima_mudanca or t.atualizado_em)|datahora }}.{% endif %}
+    </p>
+    <a href="/validar/{{ t.token }}" role="button" class="{{ '' if t.status == 'executado' else 'secondary outline' }}">
+      {{ m.i('circle-check' if t.status == 'executado' else 'chevron-right') }}{{ 'Confirmar e avaliar' if t.status == 'executado' else 'Ver detalhes' }}</a>
+  </article>
+{% endfor %}
+</div>
+{% else %}
+<p class="vazio">{{ m.i('thumbs-up') }}Nenhum chamado em aberto.</p>
+{% endif %}
+
+<h3>{{ m.i('history') }}Histórico <span class="contador">{{ historico|length }}</span></h3>
+{% if historico %}
+<article class="tabela-rolavel" style="padding:0">
+<table class="historico">
+  <thead><tr><th>Protocolo</th><th>Chamado</th><th>Área</th><th>Aberto em</th><th>Encerrado em</th><th>Situação</th><th>Sua avaliação</th></tr></thead>
+  <tbody>{% for t in historico %}
+    <tr><td><a href="/validar/{{ t.token }}">{{ t.external_id or ('#' ~ t.id) }}</a></td>
+      <td>{{ t.titulo }}</td><td>{{ t.area or '—' }}</td>
+      <td>{{ t.criado_em[8:10] }}/{{ t.criado_em[5:7] }}/{{ t.criado_em[:4] }}</td>
+      <td>{{ (t.ultima_mudanca or t.atualizado_em)[8:10] }}/{{ (t.ultima_mudanca or t.atualizado_em)[5:7] }}/{{ (t.ultima_mudanca or t.atualizado_em)[:4] }}</td>
+      <td>{{ m.status(t.status) }}</td>
+      <td>{% if t.nota %}<span class="nota" title="{{ t.nota }} de 5">{{ '★' * t.nota }}<span class="nota-vazia">{{ '★' * (5 - t.nota) }}</span></span>{% else %}—{% endif %}</td></tr>
+  {% endfor %}</tbody>
+</table>
+</article>
+{% else %}
+<p class="vazio">Nenhum chamado encerrado ainda.</p>
+{% endif %}
+</div>
+{% endblock %}

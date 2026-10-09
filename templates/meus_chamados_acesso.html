@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Meus chamados · Help Desk SJP{% endblock %}
+{% block nav %}{{ m.nav_servidor() }}{% endblock %}
+{% block main %}
+<div class="acesso">
+  <article>
+    <header><strong>{{ m.i('inbox') }}Meus chamados</strong><br>
+      <small>Acompanhe o andamento dos chamados em aberto e consulte o seu histórico de atendimentos.</small></header>
+    {% if link %}
+      <p>Enviamos um link de acesso para <b>{{ email }}</b>. Ele vale por 7 dias.</p>
+      <div class="aviso">{{ m.i('mail') }}<b>E-mail simulado (protótipo):</b> no sistema real, o link chega na sua caixa de entrada.
+        <p style="margin:.75rem 0 0"><a href="{{ link }}" role="button">{{ m.i('external-link') }}Abrir meus chamados</a></p></div>
+      <small>Se este e-mail não tiver chamados, a página aparecerá vazia.</small>
+    {% else %}
+      <form method="post" action="/meus-chamados">
+        <label>E-mail usado ao abrir os chamados
+          <input type="email" name="email" required autocomplete="email" placeholder="nome.sobrenome@sjp.pr.gov.br" autofocus></label>
+        <button style="width:100%">{{ m.i('send') }}Receber link de acesso</button>
+      </form>
+      <small>{{ m.i('lock') }}Por segurança, mostramos os chamados só por meio de um link enviado ao seu e-mail.</small>
+    {% endif %}
+  </article>
+</div>
+{% endblock %}

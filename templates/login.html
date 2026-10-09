@@ -8,33 +8,34 @@
 </hgroup>
 {% if painel or campo %}
 <p>Sessões ativas:
-  {% if painel %}<a href="/">🖥️ {{ painel.nome }} (painel)</a>{% endif %}
-  {% if campo %} · <a href="/campo">📱 {{ campo.nome }} (campo)</a>{% endif %}</p>
+  {% if painel %}<a href="/">{{ m.i('monitor') }}{{ painel.nome }} (painel)</a>{% endif %}
+  {% if campo %} · <a href="/campo">{{ m.i('smartphone') }}{{ campo.nome }} (campo)</a>{% endif %}</p>
 {% endif %}
 <div class="grid">
   <article>
-    <header><strong>🖥️ Interface web</strong></header>
+    <header><strong>{{ m.i('monitor') }}Interface web</strong></header>
     {% for u in usuarios if 'executor' not in u.papeis %}
     <form method="post" action="/login"><input type="hidden" name="uid" value="{{ u.id }}">
-      <button class="outline" style="width:100%">{{ u.avatar }} {{ u.nome }} — {{ u.papeis.replace(',', ' + ') }}</button></form>
+      <button class="outline" style="width:100%">{{ m.avatar(u.nome, 'p') }}<span>{{ u.nome }} <small>{{ u.papeis.replace(',', ' + ') }}</small></span></button></form>
     {% endfor %}
   </article>
   <article>
-    <header><strong>📱 Interface mobile (executor)</strong></header>
+    <header><strong>{{ m.i('smartphone') }}Interface mobile (executor)</strong></header>
     {% for u in usuarios if 'executor' in u.papeis %}
     <form method="post" action="/login"><input type="hidden" name="uid" value="{{ u.id }}">
-      <button class="outline" style="width:100%">{{ u.avatar }} {{ u.nome }} — {{ u.equipe }}</button></form>
+      <button class="outline" style="width:100%">{{ m.avatar(u.nome, 'p') }}<span>{{ u.nome }} <small>{{ u.equipe }}</small></span></button></form>
     {% endfor %}
     <small>Dica: abra o executor no DevTools em modo celular (Ctrl+Shift+M) ou no celular na mesma rede.</small>
   </article>
 </div>
 <article style="border:3px solid var(--sjp-azul)">
-  <strong>💬 Servidor com um problema?</strong> Fale com o <a href="/servidor"><b>Assistente Virtual do Help Desk</b></a>
+  <strong>{{ m.i('message-circle') }}Servidor com um problema?</strong> Fale com o <a href="/servidor"><b>Assistente Virtual do Help Desk</b></a>
   antes de ligar. Ele ajuda a resolver na hora ou prepara a solicitação para o atendente.
+  Já abriu chamados? Veja o andamento e o histórico em <a href="/meus-chamados"><b>Meus chamados</b></a>.
 </article>
 <article>
-  <strong>🧾 Demandante</strong>: não faz login. Recebe um link único (simulado como SMS/e-mail) para confirmar a resolução,
-  exibido na tela da tarefa para o gestor/atendente. · <strong>🏛️ Sistema legado simulado</strong>:
+  <strong>{{ m.i('receipt-text') }}Demandante</strong>: não faz login. Recebe um link único (simulado como SMS/e-mail) para confirmar a resolução,
+  exibido na tela da tarefa para o gestor/atendente. · <strong>{{ m.i('landmark') }}Sistema legado simulado</strong>:
   <a href="http://localhost:8001" target="_blank">localhost:8001</a>
 </article>
 {% endblock %}

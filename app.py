@@ -53,27 +53,45 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 
 # ---------------------------------------------------------------- domínio
 
-STATUS = {
-    "recebida": ("📥", "Recebida"),
-    "atribuida": ("👤", "Atribuída"),
-    "a_caminho": ("🚗", "A caminho"),
-    "em_execucao": ("🔧", "Em execução"),
-    "impedida": ("⛔", "Impedida"),
-    "concluida": ("✅", "Concluída – aguardando validação"),
-    "resolvida": ("🏆", "Resolvida – confirmada"),
-    "reaberta": ("🔁", "Reaberta – pendência"),
+# Status oficiais do chamado: Novo, Encaminhado, Devolvido, Executado, Concluído, Cancelado e Reaberto.
+# Enquanto está Encaminhado, o técnico registra etapas internas de campo (a caminho, em execução, impedido),
+# que preservam o app do executor, a pausa do SLA nos impedimentos externos e a pontuação.
+STATUS = {  # chave: (ícone Lucide em static/icones.svg, rótulo)
+    "novo": ("inbox", "Novo"),
+    "encaminhado": ("send", "Encaminhado"),
+    "a_caminho": ("car", "Encaminhado · a caminho"),
+    "em_execucao": ("wrench", "Encaminhado · em execução"),
+    "impedido": ("octagon-alert", "Encaminhado · impedido"),
+    "devolvido": ("undo-2", "Devolvido"),
+    "executado": ("circle-check", "Executado – aguardando confirmação"),
+    "concluido": ("badge-check", "Concluído"),
+    "reaberto": ("rotate-ccw", "Reaberto"),
+    "cancelado": ("circle-x", "Cancelado"),
 }
+# Etapa interna → status oficial (quadro, filtros, métricas e sincronização com o sistema de origem).
+STATUS_OFICIAL = {k: k for k in STATUS} | {"a_caminho": "encaminhado", "em_execucao": "encaminhado", "impedido": "encaminhado"}
+STATUS_OFICIAIS = ["novo", "encaminhado", "devolvido", "reaberto", "executado", "concluido", "cancelado"]
 TRANSICOES = {
-    "recebida": {"atribuida"},
-    "reaberta": {"atribuida"},
-    "atribuida": {"atribuida", "a_caminho"},
-    "a_caminho": {"em_execucao"},
-    "em_execucao": {"impedida", "concluida"},
-    "impedida": {"em_execucao"},
-    "concluida": {"resolvida", "reaberta"},
-    "resolvida": set(),
+    "novo": {"encaminhado", "executado", "cancelado"},
+    "devolvido": {"encaminhado", "executado", "cancelado"},
+    "reaberto": {"encaminhado", "executado", "cancelado"},
+    "encaminhado": {"encaminhado", "a_caminho", "devolvido", "cancelado"},
+    "a_caminho": {"em_execucao", "devolvido", "cancelado"},
+    "em_execucao": {"impedido", "executado", "devolvido", "cancelado"},
+    "impedido": {"em_execucao", "cancelado"},
+    "executado": {"concluido", "reaberto"},
+    "concluido": set(),
+    "cancelado": set(),
 }
-ATIVOS = ("atribuida", "a_caminho", "em_execucao", "impedida")
+ATIVOS = ("encaminhado", "a_caminho", "em_execucao", "impedido")
+FINAIS = ("concluido", "cancelado")
+A_ENCAMINHAR = ("novo", "devolvido", "reaberto")
+MOTIVOS_DEVOLUCAO = [
+    "Faltam informações do solicitante",
+    "Chamado pertence a outra área",
+    "Não é um problema técnico",
+    "Outro",
+]
 PRIORIDADES = {"P1": "Crítica", "P2": "Alta", "P3": "Média", "P4": "Baixa"}
 MOTIVOS_IMPEDIMENTO = [
     "Falta de material",
@@ -85,6 +103,10 @@ MOTIVOS_IMPEDIMENTO = [
 ]
 # Motivos fora do controle do executor: pausam o relógio do SLA e não penalizam.
 MOTIVOS_EXTERNOS = set(MOTIVOS_IMPEDIMENTO) - {"Outro"}
+
+# Áreas de TI que recebem os chamados (tabela setores). A ordem define os ids dos dados de demonstração.
+AREAS = ["Help Desk", "Suporte Técnico", "Telecom", "Datacenter", "Telefonia", "Fábrica de Software"]
+AREA_NIVEL1 = 1  # Help Desk: tipos que o atendimento costuma resolver no 1º nível, sem acionar o time técnico
 
 # Secretarias municipais de quem abre o chamado (base da análise de capacitação por secretaria).
 SECRETARIAS = [
@@ -119,12 +141,24 @@ BASE_CONHECIMENTO = {
     "Computador": "PR-TI-01 Computador/sistema: 1) Verificar energia e cabos. 2) Reiniciar e checar mensagens de erro. "
     "3) Senha bloqueada → desbloqueio pelo AD com identificação do servidor. 4) Hardware com defeito → troca por "
     "equipamento reserva do Almoxarifado TI.",
-    "Elétrica": "PR-MP-02 Elétrica (NR-10): 1) Desligar o disjuntor do circuito antes de qualquer intervenção. "
-    "2) Conferir lâmpada/reator/tomada com multímetro. 3) Substituir componente. 4) Disjuntor desarmando → não "
-    "rearmar repetidamente; acionar eletricista responsável.",
-    "Hidráulica": "PR-MP-05 Infiltração/vazamento: 1) Isolar a área e proteger equipamentos. 2) Fechar registro se "
-    "houver vazamento ativo. 3) Identificar origem (telhado, calha, tubulação). 4) Registrar fotos para orçamento.",
+    "Senha": "PR-TI-02 Senha e acesso: 1) Confirmar a identidade do servidor (matrícula e chefia). 2) Verificar no AD se a "
+    "conta está bloqueada ou expirada. 3) Desbloquear/redefinir com senha temporária e troca obrigatória no próximo login. "
+    "4) Acesso a pasta ou sistema → conferir grupo de permissão com a chefia antes de liberar.",
+    "Sistema": "PR-TI-11 Erro ou dúvida em sistema municipal: 1) Registrar a tela, a mensagem de erro e o horário. "
+    "2) Reproduzir com outro usuário/computador. 3) Dúvida de uso → orientar pelo manual do sistema. 4) Erro "
+    "reproduzível → abrir ocorrência para a Fábrica de Software com os passos e prints.",
+    "Datacenter": "PR-DC-01 Sistema ou servidor indisponível: 1) Confirmar se afeta todos os usuários (monitoramento). "
+    "2) Verificar status da VM/serviço no hypervisor e espaço em disco. 3) Reiniciar o serviço conforme runbook. "
+    "4) Persistindo, acionar plantão do Datacenter e comunicar as secretarias afetadas.",
+    "Backup": "PR-DC-04 Restauração de arquivos: 1) Identificar caminho, nome do arquivo e data da última versão boa. "
+    "2) Conferir permissão do solicitante na pasta. 3) Restaurar do snapshot/backup mais recente em pasta separada. "
+    "4) Validar com o solicitante antes de sobrescrever.",
+    "Telefonia": "PR-TF-03 Ramal ou linha: 1) Conferir cabo e alimentação do aparelho (PoE). 2) Testar o aparelho em outro "
+    "ponto. 3) Verificar o ramal no PABX/IP (registro e categoria de ligação). 4) Celular corporativo → checar status "
+    "do chip junto à operadora.",
 }
+
+# Autoatendimento}
 
 # Autoatendimento: orientações seguras para servidores leigos (antes de abrir uma solicitação).
 BASE_AUTOATENDIMENTO = {
@@ -136,11 +170,19 @@ BASE_AUTOATENDIMENTO = {
     "cuidado); desligue por 30 segundos e ligue; veja se o painel mostra aviso de toner.",
     "Computador": "Computador/sistema: reinicie o computador; confira cabos de energia e do monitor; na senha, "
     "verifique o Caps Lock. Senha bloqueada precisa de atendimento com identificação.",
-    "Elétrica": "Elétrica: NÃO abra tomadas, quadros ou luminárias. Se houver cheiro de queimado, faísca ou choque, "
-    "afaste as pessoas e peça atendimento imediatamente. Lâmpada queimada: informe local exato e quantidade.",
-    "Hidráulica": "Vazamento/infiltração: afaste equipamentos eletrônicos e papéis da água, isole a área e informe o "
-    "local exato. Se houver registro acessível e o vazamento for forte, feche-o.",
+    "Senha": "Senha: confira o Caps Lock e o teclado numérico; aguarde 15 minutos se a conta acabou de bloquear por "
+    "tentativas. Nunca informe sua senha a ninguém, nem ao suporte. Desbloqueio precisa de atendimento com identificação.",
+    "Sistema": "Sistema: anote a mensagem de erro (ou tire uma foto da tela), feche e abra o sistema de novo e teste em "
+    "outro navegador. Para dúvidas de uso, consulte o manual do sistema na intranet.",
+    "Datacenter": "Sistema fora do ar: pergunte a colegas se também estão sem acesso. Se for geral, informe o nome do "
+    "sistema e o horário; a equipe do Datacenter já pode estar atuando.",
+    "Backup": "Arquivo apagado em pasta de rede: não salve novos arquivos com o mesmo nome; anote o caminho da pasta, o "
+    "nome do arquivo e quando ele foi visto pela última vez.",
+    "Telefonia": "Telefone/ramal: confira se o cabo do aparelho está bem encaixado e se a tela acende; tire da tomada e "
+    "ligue de novo. Informe o número do ramal.",
 }
+
+# ------}
 
 # ---------------------------------------------------------------- banco
 
@@ -150,12 +192,12 @@ CREATE TABLE IF NOT EXISTS equipes(id INTEGER PRIMARY KEY, nome TEXT NOT NULL, s
 CREATE TABLE IF NOT EXISTS tipos(id INTEGER PRIMARY KEY, nome TEXT NOT NULL, setor_id INTEGER REFERENCES setores(id),
   complexidade INTEGER NOT NULL DEFAULT 2, palavras TEXT NOT NULL DEFAULT '', base_conhecimento TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS usuarios(id INTEGER PRIMARY KEY, nome TEXT NOT NULL, papeis TEXT NOT NULL,
-  equipe_id INTEGER REFERENCES equipes(id), competencias TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '🙂');
+  equipe_id INTEGER REFERENCES equipes(id), competencias TEXT NOT NULL DEFAULT '', avatar TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS tarefas(
   id INTEGER PRIMARY KEY, origem TEXT NOT NULL DEFAULT 'web', external_id TEXT,
   titulo TEXT NOT NULL, descricao TEXT NOT NULL, local TEXT NOT NULL DEFAULT '', solicitante TEXT NOT NULL DEFAULT '',
   contato TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '', secretaria TEXT NOT NULL DEFAULT '', setor_id INTEGER REFERENCES setores(id), tipo_id INTEGER REFERENCES tipos(id),
-  prioridade TEXT, prioridade_ajustada_por TEXT, status TEXT NOT NULL DEFAULT 'recebida', executor_id INTEGER REFERENCES usuarios(id),
+  prioridade TEXT, prioridade_ajustada_por TEXT, resolvido_atendimento_por TEXT, status TEXT NOT NULL DEFAULT 'novo', executor_id INTEGER REFERENCES usuarios(id),
   criado_por INTEGER REFERENCES usuarios(id), token TEXT NOT NULL UNIQUE,
   ia_status TEXT NOT NULL DEFAULT 'analisando', ia_fonte TEXT, ia_json TEXT,
   relato TEXT, resumo_ia TEXT, evidencia TEXT, nota INTEGER, comentario_demandante TEXT,
@@ -189,6 +231,7 @@ CREATE TABLE IF NOT EXISTS solicitacoes(id INTEGER PRIMARY KEY, protocolo TEXT U
   tentativas TEXT NOT NULL DEFAULT '', setor_id INTEGER REFERENCES setores(id), via_ia INTEGER NOT NULL DEFAULT 0,
   conversa TEXT, status TEXT NOT NULL DEFAULT 'aguardando', motivo_descarte TEXT, tarefa_id INTEGER REFERENCES tarefas(id),
   registrada_por TEXT, criado_em TEXT NOT NULL, registrada_em TEXT);
+CREATE TABLE IF NOT EXISTS acessos_solicitante(token TEXT PRIMARY KEY, email TEXT NOT NULL, criado_em TEXT NOT NULL);
 """
 
 
@@ -236,6 +279,7 @@ MIGRACOES = [
     ("tarefas", "email", "TEXT NOT NULL DEFAULT ''"),
     ("tarefas", "secretaria", "TEXT NOT NULL DEFAULT ''"),
     ("tarefas", "prioridade_ajustada_por", "TEXT"),
+    ("tarefas", "resolvido_atendimento_por", "TEXT"),
     ("solicitacoes", "email", "TEXT NOT NULL DEFAULT ''"),
     ("solicitacoes", "secretaria", "TEXT NOT NULL DEFAULT ''"),
 ]
@@ -255,32 +299,42 @@ def init_db():
 
 
 def seed(c):
-    c.executemany("INSERT INTO setores(id,nome) VALUES(?,?)", [(1, "TI – Help Desk"), (2, "Manutenção Predial")])
+    c.executemany("INSERT INTO setores(id,nome) VALUES(?,?)", [(i, n) for i, n in enumerate(AREAS, 1)])
     c.executemany("INSERT INTO equipes(id,nome,setor_id) VALUES(?,?,?)", [
-        (1, "Infra de Redes", 1), (2, "Suporte e Almoxarifado TI", 1), (3, "Manutenção Predial", 2)])
+        (1, "Help Desk N1", 1), (2, "Suporte Técnico de Campo", 2), (3, "Telecom e Redes", 3),
+        (4, "Datacenter e Servidores", 4), (5, "Telefonia", 5), (6, "Fábrica de Software", 6)])
     c.executemany("INSERT INTO tipos(id,nome,setor_id,complexidade,palavras,base_conhecimento) VALUES(?,?,?,?,?,?)", [
-        (1, "Rede / conectividade", 1, 3, "rede,ponto de rede,internet,cabo,switch,sem conexão,link", "Rede"),
-        (2, "Wi-fi", 1, 2, "wi-fi,wifi,sem fio,access point", "Wi-fi"),
-        (3, "Computador / sistemas", 1, 2, "computador,pc,monitor,sistema,senha,teclado,lento", "Computador"),
-        (4, "Impressora", 1, 1, "impressora,toner,impressão,scanner", "Impressora"),
-        (5, "Elétrica", 2, 3, "luz,lâmpada,lampada,tomada,energia,disjuntor,fiação", "Elétrica"),
-        (6, "Hidráulica / infiltração", 2, 3, "vazamento,infiltração,infiltracao,goteira,telhado,cano,torneira", "Hidráulica"),
-        (7, "Vistoria predial", 2, 2, "vistoria,rachadura,laudo,inspeção", ""),
+        (1, "Rede / conectividade", 3, 3, "rede,ponto de rede,internet,cabo,switch,sem conexão,link", "Rede"),
+        (2, "Wi-fi", 3, 2, "wi-fi,wifi,sem fio,access point", "Wi-fi"),
+        (3, "Computador / periféricos", 2, 2, "computador,pc,monitor,teclado,mouse,lento,não liga", "Computador"),
+        (4, "Impressora", 2, 1, "impressora,toner,impressão,scanner", "Impressora"),
+        (5, "Senha e acesso", 1, 1, "senha,bloqueada,bloqueado,acesso,login,e-mail,email,usuário", "Senha"),
+        (6, "Dúvida de uso de sistema", 1, 1, "dúvida,duvida,como faço,como usar,orientação,não sei", "Sistema"),
+        (7, "Servidor / sistema fora do ar", 4, 4, "fora do ar,servidor,indisponível,todos sem,caiu o sistema", "Datacenter"),
+        (8, "Backup e pastas de rede", 4, 3, "backup,pasta de rede,arquivo apagado,restaurar,unidade de rede", "Backup"),
+        (9, "Ramal / telefone fixo", 5, 2, "ramal,telefone,sem linha,ligação,ligacao,pabx", "Telefonia"),
+        (10, "Celular corporativo", 5, 2, "celular,chip,linha móvel,smartphone", "Telefonia"),
+        (11, "Erro em sistema municipal", 6, 3, "erro,bug,mensagem de erro,não salva,travou ao salvar", "Sistema"),
+        (12, "Melhoria / nova funcionalidade", 6, 4, "melhoria,relatório,relatorio,nova funcionalidade,sugestão", ""),
     ])
     c.executemany("INSERT INTO usuarios(id,nome,papeis,equipe_id,competencias,avatar) VALUES(?,?,?,?,?,?)", [
-        (1, "Carlos Lima", "atendente", None, "", "🎧"),
-        (2, "Paula Mendes", "gestor,atendente", None, "", "🧭"),
-        (3, "Rafael Costa", "executor", 1, "redes, cabeamento, keystone, switch", "🦊"),
-        (4, "Diego Santos", "executor", 1, "redes, wi-fi, telefonia, servidores", "🐺"),
-        (5, "Bruno Alves", "executor", 2, "computadores, impressoras, almoxarifado, materiais", "🦉"),
-        (6, "Juliana Rocha", "executor", 3, "elétrica, hidráulica, vistoria", "🦅"),
+        (1, "Carlos Lima", "atendente", None, "", ""),
+        (2, "Paula Mendes", "gestor,atendente", None, "", ""),
+        (3, "Rafael Costa", "executor", 3, "redes, cabeamento, keystone, switch, wi-fi", ""),
+        (4, "Diego Santos", "executor", 2, "computadores, impressoras, periféricos", ""),
+        (5, "Bruno Alves", "executor", 1, "senhas, acessos, e-mail, orientação de sistemas", ""),
+        (6, "Juliana Rocha", "executor", 4, "servidores, backup, virtualização, storage", ""),
+        (7, "Marcos Vieira", "executor", 5, "ramais, pabx, telefonia, celulares", ""),
+        (8, "Larissa Moura", "executor", 6, "sistemas municipais, banco de dados, correções, relatórios", ""),
+        (9, "Tiago Ferreira", "executor", 2, "computadores, impressoras, wi-fi", ""),
     ])
     set_cfg(c, "regras", REGRAS_PADRAO)
     c.execute("INSERT INTO temporadas(numero,nome,inicio,fim) VALUES(1,'Temporada de Setembro','2026-09-01 00:00:00','2026-09-30 23:59:59')")
     c.execute("INSERT INTO temporadas(numero,nome,inicio) VALUES(2,'Temporada de Outubro','2026-10-01 00:00:00')")
     # histórico fictício de pontuação (temporada encerrada e atual) para o ranking não começar vazio
-    hist = [(4, 1, 1, 210), (5, 2, 1, 160), (6, 3, 1, 190), (3, 1, 1, 120),
-            (4, 1, 2, 140), (5, 2, 2, 90), (6, 3, 2, 110), (3, 1, 2, 60), (2, None, 2, 20)]
+    hist = [(4, 2, 1, 210), (5, 1, 1, 160), (6, 4, 1, 190), (3, 3, 1, 120), (7, 5, 1, 90), (8, 6, 1, 140), (9, 2, 1, 100),
+            (4, 2, 2, 140), (5, 1, 2, 90), (6, 4, 2, 110), (3, 3, 2, 60), (7, 5, 2, 50), (8, 6, 2, 80), (9, 2, 2, 70),
+            (2, None, 2, 20)]
     for uid, eq, temp, pts in hist:
         c.execute("INSERT INTO pontos(usuario_id,equipe_id,tarefa_id,temporada,pontos,tipo,descricao,criado_em) "
                   "VALUES(?,?,NULL,?,?,'definitivo','Histórico de missões (dados fictícios)',?)",
@@ -288,11 +342,11 @@ def seed(c):
     # algumas tarefas em andamento para o painel não começar vazio
     exemplos = [
         ("Wi-fi instável na biblioteca", "Wi-fi cai a cada 10 minutos na biblioteca da Escola Municipal Afonso Pena.",
-         "Escola Municipal Afonso Pena – Biblioteca", "Marcos Pereira", "Educação", 1, 2, "P3", "em_execucao", 4),
+         "Escola Municipal Afonso Pena – Biblioteca", "Marcos Pereira", "Educação", 3, 2, "P3", "em_execucao", 3),
         ("Computador não liga – recepção", "Computador da recepção não liga desde ontem.",
-         "CRAS Centro – Recepção", "Lúcia Andrade", "Assistência Social", 1, 3, "P3", "atribuida", 4),
-        ("Lâmpadas queimadas no corredor", "Três lâmpadas queimadas no corredor do 2º andar.",
-         "Paço Municipal – 2º andar", "Roberto Dias", "Administração", 2, 5, "P4", "a_caminho", 6),
+         "CRAS Centro – Recepção", "Lúcia Andrade", "Assistência Social", 2, 3, "P3", "encaminhado", 4),
+        ("Ramal sem linha no protocolo", "O ramal 2231 do protocolo está sem linha desde a manhã.",
+         "Paço Municipal – Protocolo", "Roberto Dias", "Administração", 5, 9, "P2", "a_caminho", 7),
     ]
     for tit, desc, loc, sol, sec, setor, tipo, prio, st, ex in exemplos:
         ts = agora()
@@ -302,9 +356,9 @@ def seed(c):
             "VALUES('web',?,?,?,?,?,?,?,?,?,?,?,2,?,'aceita','regras',?,?)",
             (tit, desc, loc, sol, email_ficticio(sol), sec, setor, tipo, prio, st, ex, secrets.token_urlsafe(16), ts, ts))
         registrar_evento(c, cur.lastrowid, "Paula Mendes", "gestor", "Tarefa cadastrada e atribuída (dados de exemplo)",
-                         None, "atribuida")
-        if st != "atribuida":
-            registrar_evento(c, cur.lastrowid, "Sistema", "seed", "Andamento de exemplo", "atribuida", st)
+                         None, "encaminhado")
+        if st != "encaminhado":
+            registrar_evento(c, cur.lastrowid, "Sistema", "seed", "Andamento de exemplo", "encaminhado", st)
 
 
 def email_ficticio(nome):
@@ -315,24 +369,28 @@ def email_ficticio(nome):
 # Histórico fictício de chamados resolvidos (12 semanas) para o painel de métricas não começar vazio. Cada secretaria
 # tem um perfil de demanda, para que a análise de capacitação encontre padrões de recorrência.
 PERFIS_SECRETARIA = {
-    "Educação": (30, {2: 5, 4: 4, 3: 3, 1: 1, 5: 1}),
-    "Saúde": (26, {3: 5, 1: 3, 4: 2, 2: 1, 6: 1}),
-    "Administração": (18, {4: 5, 3: 4, 5: 1, 1: 1}),
-    "Assistência Social": (12, {3: 4, 4: 2, 2: 2, 6: 1}),
-    "Finanças": (8, {3: 5, 4: 2}),
-    "Obras": (7, {5: 3, 6: 2, 7: 2, 3: 1}),
-    "Urbanismo": (5, {3: 2, 4: 2, 7: 1}),
-    "Cultura": (4, {2: 2, 5: 1, 6: 1}),
+    "Educação": (30, {2: 5, 4: 4, 5: 3, 3: 2, 6: 2, 1: 1}),
+    "Saúde": (26, {5: 5, 11: 3, 3: 3, 7: 2, 9: 1, 1: 1}),
+    "Administração": (18, {4: 5, 5: 3, 9: 2, 6: 2, 3: 1}),
+    "Assistência Social": (12, {3: 3, 5: 3, 6: 2, 4: 2, 10: 1}),
+    "Finanças": (8, {11: 4, 6: 3, 12: 2, 8: 1}),
+    "Obras": (7, {10: 3, 9: 2, 3: 1, 8: 1}),
+    "Urbanismo": (5, {12: 2, 11: 2, 8: 1, 4: 1}),
+    "Cultura": (4, {2: 2, 9: 1, 3: 1}),
 }
 EXEMPLOS_TIPO = {
     1: ["Sem internet no computador da sala", "Ponto de rede não funciona", "Rede caiu no setor"],
     2: ["Wi-fi não conecta nos notebooks", "Wi-fi caindo toda hora", "Celular não encontra a rede Wi-fi"],
-    3: ["Senha bloqueada no sistema", "Computador muito lento", "Não consigo acessar o sistema de prontuário",
-        "Monitor não liga", "Esqueci a senha do e-mail"],
+    3: ["Computador muito lento", "Monitor não liga", "Teclado parou de funcionar", "Computador não liga"],
     4: ["Impressora com papel atolado", "Impressora não imprime", "Aviso de toner baixo", "Impressora sumiu da lista"],
-    5: ["Lâmpada queimada na sala", "Tomada sem energia", "Disjuntor desarmando"],
-    6: ["Goteira no teto", "Torneira vazando no banheiro", "Infiltração na parede"],
-    7: ["Rachadura na parede da sala", "Vistoria do telhado"],
+    5: ["Senha bloqueada no sistema", "Esqueci a senha do e-mail", "Sem acesso à pasta do setor", "Usuário expirado"],
+    6: ["Como emitir relatório no sistema", "Dúvida para anexar documento no protocolo", "Como assinar documento digitalmente"],
+    7: ["Sistema de prontuário fora do ar", "Servidor de arquivos indisponível", "Sistema de protocolo não abre para ninguém"],
+    8: ["Arquivo apagado da pasta de rede", "Restaurar backup de planilha", "Unidade de rede não aparece"],
+    9: ["Ramal sem linha", "Telefone não faz ligação externa", "Ramal com chiado"],
+    10: ["Chip do celular corporativo bloqueado", "Celular corporativo sem sinal", "Solicitar linha móvel"],
+    11: ["Erro ao salvar cadastro no sistema", "Mensagem de erro ao emitir guia", "Sistema trava ao gerar nota"],
+    12: ["Novo relatório de atendimentos", "Melhoria na tela de cadastro", "Incluir campo no formulário"],
 }
 UNIDADES = {
     "Educação": ["Escola Municipal Afonso Pena", "CMEI Jardim Ipê", "Escola Municipal Rui Barbosa"],
@@ -385,16 +443,16 @@ def seed_historico(c):
                     "INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,email,secretaria,setor_id,tipo_id,"
                     "prioridade,prioridade_ajustada_por,status,executor_id,criado_por,token,ia_status,ia_fonte,ia_json,"
                     "relato,nota,reaberturas,criado_em,atualizado_em) "
-                    "VALUES('web',?,?,?,?,?,?,?,?,?,?,'resolvida',?,1,?,?,'regras',?,?,?,?,?,?)",
+                    "VALUES('web',?,?,?,?,?,?,?,?,?,?,'concluido',?,1,?,?,'regras',?,?,?,?,?,?)",
                     (rnd.choice(EXEMPLOS_TIPO[tipo_id]), "Chamado do histórico fictício para demonstração de métricas.",
                      rnd.choice(UNIDADES[sec]), sol, email_ficticio(sol), sec, tp["setor_id"], tipo_id, prio,
                      "Carlos Lima" if prio != prio_ia else None, ex["id"], secrets.token_urlsafe(16),
                      "aceita" if prio == prio_ia else "editada", json.dumps(ia, ensure_ascii=False),
                      "Atendimento realizado (histórico fictício).", nota, int(reaberta), fmt(criado), fmt(t_res)))
                 tid = cur.lastrowid
-                passos = [(criado, "Atendimento", "atendente", None, "recebida"), (t_atr, "Paula Mendes", "gestor", "recebida", "atribuida"),
-                          (t_cam, ex["nome"], "executor", "atribuida", "a_caminho"), (t_exe, ex["nome"], "executor", "a_caminho", "em_execucao"),
-                          (t_con, ex["nome"], "executor", "em_execucao", "concluida"), (t_res, sol, "demandante", "concluida", "resolvida")]
+                passos = [(criado, "Atendimento", "atendente", None, "novo"), (t_atr, "Paula Mendes", "gestor", "novo", "encaminhado"),
+                          (t_cam, ex["nome"], "executor", "encaminhado", "a_caminho"), (t_exe, ex["nome"], "executor", "a_caminho", "em_execucao"),
+                          (t_con, ex["nome"], "executor", "em_execucao", "executado"), (t_res, sol, "demandante", "executado", "concluido")]
                 for quando, quem, papel, de, para in passos:
                     c.execute("INSERT INTO eventos(tarefa_id,usuario,papel,de,para,texto,criado_em) VALUES(?,?,?,?,?,?,?)",
                               (tid, quem, papel, de, para, "Histórico fictício", fmt(quando)))
@@ -412,8 +470,10 @@ def enfileirar_outbox(c, t, status, texto, responsavel):
     """Transactional outbox: a atualização ao sistema de origem é gravada na mesma transação da mudança."""
     if t["origem"] == "web" or not t["external_id"]:
         return
-    payload = {"external_id": t["external_id"], "tarefa_id": t["id"], "status": status,
-               "status_label": STATUS[status][1], "texto": texto, "responsavel": responsavel, "data": agora()}
+    oficial = STATUS_OFICIAL[status]
+    payload = {"external_id": t["external_id"], "tarefa_id": t["id"], "status": oficial,
+               "status_label": STATUS[oficial][1], "etapa": STATUS[status][1] if status != oficial else None,
+               "texto": texto, "responsavel": responsavel, "data": agora()}
     c.execute("INSERT INTO outbox(tarefa_id,origem,payload,criado_em) VALUES(?,?,?,?)",
               (t["id"], t["origem"], json.dumps(payload, ensure_ascii=False), agora()))
 
@@ -489,7 +549,7 @@ def extrair_json(texto):
 def carga_executores(c, setor_id=None):
     sql = ("SELECT u.*, e.nome equipe, e.setor_id, (SELECT count(*) FROM tarefas t WHERE t.executor_id=u.id AND "
            f"t.status IN ({','.join('?' * len(ATIVOS))})) carga, "
-           "(SELECT count(*) FROM tarefas t WHERE t.executor_id=u.id AND t.status='resolvida') resolvidas "
+           "(SELECT count(*) FROM tarefas t WHERE t.executor_id=u.id AND t.status='concluido') resolvidas "
            "FROM usuarios u JOIN equipes e ON e.id=u.equipe_id WHERE u.papeis LIKE '%executor%'")
     params = list(ATIVOS)
     if setor_id:
@@ -500,8 +560,8 @@ def carga_executores(c, setor_id=None):
 
 def triagem_por_regras(c, t):
     texto = f"{t['titulo']} {t['descricao']} {t['local']}".lower()
-    tipos = c.execute("SELECT * FROM tipos" + (" WHERE setor_id=?" if t["setor_id"] else ""),
-                      (t["setor_id"],) if t["setor_id"] else ()).fetchall()
+    # todas as áreas entram na disputa (o chamado pode ter sido aberto na área errada); empate favorece a área escolhida
+    tipos = c.execute("SELECT * FROM tipos ORDER BY setor_id<>?, id", (t["setor_id"] or 0,)).fetchall()
     melhor, acertos = None, 0
     for tp in tipos:
         n = sum(1 for p in tp["palavras"].split(",") if p.strip() and p.strip() in texto)
@@ -528,7 +588,10 @@ def triagem_por_regras(c, t):
     compat = [e for e in execs if any(w in e["competencias"].lower() for w in palavra_tipo.split("/"))
               or palavra_tipo[:4] in e["competencias"].lower()]
     escolhido = (compat or execs)[0] if execs else None
+    nivel1 = melhor["setor_id"] == AREA_NIVEL1 and prio not in ("P1",)
     return {
+        "resolvivel_no_atendimento": nivel1,
+        "orientacao_atendimento": BASE_AUTOATENDIMENTO.get(melhor["base_conhecimento"], "") if nivel1 else "",
         "tipo_id": melhor["id"], "prioridade": prio, "justificativa": just, "categoria": melhor["nome"],
         "complexidade": melhor["complexidade"], "resumo": t["titulo"], "informacoes_faltantes": faltantes,
         "executor_id": escolhido["id"] if escolhido else None,
@@ -552,7 +615,10 @@ def triar(tarefa_id):
             '"tipo_id" (int), "prioridade" ("P1" crítica|"P2" alta|"P3" média|"P4" baixa), "justificativa" (1 frase), '
             '"categoria" (texto curto), "complexidade" (1-5), "resumo" (1 frase objetiva), '
             '"informacoes_faltantes" (lista de perguntas que o atendente deveria ter feito; vazia se nada faltar), '
-            '"executor_id" (int, do mesmo setor do tipo), "motivo_executor" (1 frase citando competência e carga).\n'
+            '"executor_id" (int, da mesma área do tipo; cada tipo pertence a uma área de TI), "motivo_executor" (1 frase citando competência e carga), '
+            '"resolvivel_no_atendimento" (bool: true se o próprio atendente consegue resolver por telefone/orientação, sem '
+            'técnico — ex.: dúvida de uso, desbloqueio de senha), "orientacao_atendimento" (1-2 frases do que o atendente deve '
+            'orientar; "" se não for resolvível no atendimento).\n'
             "Critérios de criticidade: serviço essencial parado ou risco à segurança = P1; unidade de atendimento ao "
             "público (saúde, educação, assistência) afetada = P2; impacto localizado = P3; melhoria = P4.\n\n"
             f"TIPOS: {json.dumps([dict(x) for x in tipos], ensure_ascii=False)}\n"
@@ -572,6 +638,8 @@ def triar(tarefa_id):
             r["executor_id"] = None
         r["informacoes_faltantes"] = [str(x) for x in (r.get("informacoes_faltantes") or [])][:5]
         r["complexidade"] = max(1, min(5, int(r.get("complexidade") or 2)))
+        r["resolvivel_no_atendimento"] = bool(r.get("resolvivel_no_atendimento"))
+        r["orientacao_atendimento"] = str(r.get("orientacao_atendimento") or "") if r["resolvivel_no_atendimento"] else ""
     except Exception as e:  # noqa: BLE001 — fallback garante a demo sem IA externa
         log.warning("triagem LLM falhou (%s); usando regras", e)
         with db() as c:
@@ -582,7 +650,7 @@ def triar(tarefa_id):
                   (fonte, json.dumps(r, ensure_ascii=False), agora(), tarefa_id))
         registrar_evento(c, tarefa_id, "Assistente IA", "ia",
                          f"Sugestão de triagem: {r.get('categoria')} · {r['prioridade']} – {r.get('justificativa')} "
-                         f"(fonte: {'LLM' if fonte == 'llm' else 'regras'}; aguardando conferência do gestor)")
+                         f"(fonte: {'LLM' if fonte == 'llm' else 'regras'}; aguardando avaliação do atendimento)")
 
 
 def sugerir_apoio(impedimento_id):
@@ -607,7 +675,7 @@ def sugerir_apoio(impedimento_id):
                 "Acesso ao local indisponível": "Contatar a chefia da unidade para liberar o acesso."}
         sug = "[regras] " + mapa.get(i["motivo"], "Avaliar o impedimento com o executor.")
     if recorrentes:
-        sug += f" ⚠️ Motivo recorrente: {recorrentes} ocorrência(s) anteriores de '{i['motivo']}'."
+        sug += f" Atenção, motivo recorrente: {recorrentes} ocorrência(s) anteriores de '{i['motivo']}'."
     with db() as c:
         c.execute("UPDATE impedimentos SET sugestao_ia=? WHERE id=?", (sug, impedimento_id))
 
@@ -630,7 +698,7 @@ def resumir_conclusao(tarefa_id):
 def responder_chat(c, t, pergunta):
     tipo = c.execute("SELECT * FROM tipos WHERE id=?", (t["tipo_id"],)).fetchone() if t["tipo_id"] else None
     historico = c.execute("SELECT autor, texto FROM chat WHERE tarefa_id=? ORDER BY id DESC LIMIT 6", (t["id"],)).fetchall()
-    similares = c.execute("SELECT titulo, relato FROM tarefas WHERE status='resolvida' AND tipo_id=? AND relato IS NOT NULL "
+    similares = c.execute("SELECT titulo, relato FROM tarefas WHERE status='concluido' AND tipo_id=? AND relato IS NOT NULL "
                           "AND id<>? ORDER BY id DESC LIMIT 3", (t["tipo_id"], t["id"])).fetchall()
     msgs = [{"role": "system", "content":
              "Você é o Copiloto de Campo da Prefeitura de São José dos Pinhais. Ajude o técnico a diagnosticar e "
@@ -681,8 +749,8 @@ def minutos(a, b):
 
 def tempo_liquido(c, t):
     """Minutos entre a atribuição e a conclusão, descontando impedimentos externos (fora do controle do executor)."""
-    ini = c.execute("SELECT max(criado_em) m FROM eventos WHERE tarefa_id=? AND para='atribuida'", (t["id"],)).fetchone()["m"]
-    fim = c.execute("SELECT max(criado_em) m FROM eventos WHERE tarefa_id=? AND para='concluida'", (t["id"],)).fetchone()["m"]
+    ini = c.execute("SELECT max(criado_em) m FROM eventos WHERE tarefa_id=? AND para='encaminhado'", (t["id"],)).fetchone()["m"]
+    fim = c.execute("SELECT max(criado_em) m FROM eventos WHERE tarefa_id=? AND para='executado'", (t["id"],)).fetchone()["m"]
     if not ini or not fim:
         return None
     pausas = sum(minutos(i["criado_em"], i["resolvido_em"]) for i in c.execute(
@@ -740,15 +808,15 @@ def ranking(c, temporada, setor_id=None):
 def medalhas(c, uid):
     m = []
     if c.execute("SELECT 1 FROM pontos WHERE usuario_id=? AND tipo='definitivo' AND tarefa_id IS NOT NULL", (uid,)).fetchone():
-        m.append(("🎯", "Primeira missão confirmada"))
-    if c.execute("SELECT 1 FROM tarefas WHERE executor_id=? AND status='resolvida' AND nota=5", (uid,)).fetchone():
-        m.append(("⭐", "Cinco estrelas"))
-    if c.execute("SELECT 1 FROM tarefas WHERE executor_id=? AND status='resolvida' AND tipo_id=1", (uid,)).fetchone():
-        m.append(("🌐", "Mestre das Redes"))
+        m.append(("target", "Primeira missão confirmada"))
+    if c.execute("SELECT 1 FROM tarefas WHERE executor_id=? AND status='concluido' AND nota=5", (uid,)).fetchone():
+        m.append(("star", "Cinco estrelas"))
+    if c.execute("SELECT 1 FROM tarefas WHERE executor_id=? AND status='concluido' AND tipo_id=1", (uid,)).fetchone():
+        m.append(("network", "Mestre das Redes"))
     if c.execute("SELECT 1 FROM pontos WHERE usuario_id=? AND descricao LIKE 'Apoio%'", (uid,)).fetchone():
-        m.append(("🤝", "Parceiro de equipe"))
+        m.append(("handshake", "Parceiro de equipe"))
     if c.execute("SELECT 1 FROM pontos WHERE usuario_id=? AND descricao LIKE 'Desbloqueio%'", (uid,)).fetchone():
-        m.append(("🔓", "Destravador"))
+        m.append(("lock-open", "Destravador"))
     return m
 
 
@@ -765,10 +833,10 @@ def indicadores(c):
     por_status = {r["status"]: r["n"] for r in c.execute("SELECT status, count(*) n FROM tarefas GROUP BY status")}
     tempos_inicio, tempos_conf = [], []
     for r in c.execute(
-        "SELECT (SELECT min(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='atribuida') a, "
+        "SELECT (SELECT min(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='encaminhado') a, "
         "(SELECT min(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='em_execucao') e, "
-        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='concluida') c, "
-        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='resolvida') r FROM tarefas t"):
+        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='executado') c, "
+        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='concluido') r FROM tarefas t"):
         if r["a"] and r["e"]:
             tempos_inicio.append(minutos(r["a"], r["e"]))
         if r["c"] and r["r"]:
@@ -778,10 +846,13 @@ def indicadores(c):
     motivos = c.execute("SELECT motivo, count(*) n FROM impedimentos GROUP BY motivo ORDER BY n DESC LIMIT 3").fetchall()
     return {
         "recebidas": sum(por_status.values()),
-        "em_execucao": sum(por_status.get(s, 0) for s in ("atribuida", "a_caminho", "em_execucao")),
-        "impedidas": por_status.get("impedida", 0),
-        "aguardando": por_status.get("concluida", 0),
-        "resolvidas": por_status.get("resolvida", 0),
+        "novos": sum(por_status.get(s, 0) for s in A_ENCAMINHAR),
+        "em_execucao": sum(por_status.get(s, 0) for s in ("encaminhado", "a_caminho", "em_execucao")),
+        "devolvidos": por_status.get("devolvido", 0),
+        "cancelados": por_status.get("cancelado", 0),
+        "impedidas": por_status.get("impedido", 0),
+        "aguardando": por_status.get("executado", 0),
+        "resolvidas": por_status.get("concluido", 0),
         "reaberturas": c.execute("SELECT coalesce(sum(reaberturas),0) n FROM tarefas").fetchone()["n"],
         "tempo_inicio": media(tempos_inicio),
         "tempo_confirmacao": media(tempos_conf),
@@ -813,7 +884,7 @@ def tarefas_do_periodo(c, inicio, setor_id=None):
     filtro = " AND t.setor_id=?" if setor_id else ""
     return c.execute(
         "SELECT t.*, tp.nome tipo, tp.base_conhecimento kb, u.nome executor, u.avatar, "
-        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='resolvida') resolvida_em "
+        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='concluido') resolvida_em "
         "FROM tarefas t LEFT JOIN tipos tp ON tp.id=t.tipo_id LEFT JOIN usuarios u ON u.id=t.executor_id "
         f"WHERE t.criado_em>=?{filtro}", [inicio] + ([setor_id] if setor_id else [])).fetchall()
 
@@ -917,6 +988,10 @@ def metricas(c, dias, setor_id=None):
     return {
         "dias": dias, "inicio": semanas[0].strftime("%d/%m/%Y"), "serie": serie, "linhas": linhas, "colunas": colunas,
         "abertos": len(tarefas), "resolvidos": len(resolvidas),
+        "cancelados": sum(1 for t in tarefas if t["status"] == "cancelado"),
+        "nivel1": (100 * sum(1 for t, _ in resolvidas if t["resolvido_atendimento_por"]) / len(resolvidas)) if resolvidas else None,
+        "devolvidos": c.execute("SELECT count(DISTINCT tarefa_id) n FROM eventos WHERE para='devolvido' AND criado_em>=?",
+                                (inicio,)).fetchone()["n"],
         "horas_media": media([h for _, h in resolvidas]),
         "sla": (100 * no_sla / com_sla) if com_sla else None,
         "csat": media(notas), "n_notas": len(notas),
@@ -947,11 +1022,14 @@ def dados_para_capacitacao(c, dias):
 # Temas que o próprio servidor resolve com orientação (treinamento/tutorial) × temas que pedem ação de infraestrutura.
 ACOES_POR_TEMA = {
     "Impressora": ("Oficina rápida", "Uso da impressora: papel atolado, toner e reinício seguro"),
-    "Computador": ("Tutorial + comunicado", "Senhas, desbloqueio e primeiros passos quando o computador ou sistema trava"),
+    "Computador": ("Tutorial em vídeo", "Primeiros passos quando o computador fica lento ou não liga"),
+    "Senha": ("Tutorial + comunicado", "Senhas: como evitar bloqueios e usar a redefinição de senha"),
+    "Sistema": ("Treinamento no sistema", "Uso correto do sistema municipal e como registrar erros com print"),
     "Wi-fi": ("Tutorial em vídeo", "Conectar e reconectar à rede Wi-fi institucional"),
     "Rede": ("Guia ilustrado", "Checagem do cabo e da tomada de rede antes de abrir chamado"),
-    "Elétrica": ("Manutenção preventiva", "Vistoria preventiva de iluminação e tomadas nas unidades"),
-    "Hidráulica": ("Manutenção preventiva", "Inspeção de telhados, calhas e banheiros antes do período de chuvas"),
+    "Telefonia": ("Guia ilustrado", "Uso do ramal e do celular corporativo: testes simples antes de abrir chamado"),
+    "Backup": ("Comunicado + orientação", "Onde salvar arquivos para estarem protegidos pelo backup"),
+    "Datacenter": ("Manutenção preventiva", "Monitoramento e janela de manutenção dos sistemas mais críticos"),
 }
 
 
@@ -1064,13 +1142,17 @@ app = FastAPI(title="Missões SJP – API", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOADS), name="uploads")
 templates = Jinja2Templates(directory=BASE / "templates")
-templates.env.globals.update(STATUS=STATUS, PRIORIDADES=PRIORIDADES, MOTIVOS=MOTIVOS_IMPEDIMENTO,
+templates.env.globals.update(STATUS=STATUS, PRIORIDADES=PRIORIDADES, MOTIVOS=MOTIVOS_IMPEDIMENTO, MOTIVOS_DEVOLUCAO=MOTIVOS_DEVOLUCAO,
+                             STATUS_OFICIAL=STATUS_OFICIAL, STATUS_OFICIAIS=STATUS_OFICIAIS,
+                             CANCELAVEIS=[s for s, prox in TRANSICOES.items() if "cancelado" in prox],
                              SISTEMAS=SISTEMAS_ORIGEM, LLM_MODEL=LLM_MODEL,
                              SECRETARIAS=SECRETARIAS)
 templates.env.filters["fromjson"] = lambda s: json.loads(s) if s else {}
 templates.env.filters["hora"] = lambda s: s[11:16] if s else ""
 templates.env.filters["datahora"] = lambda s: f"{s[8:10]}/{s[5:7]} {s[11:16]}" if s else ""
 templates.env.filters["dec"] = lambda v, casas=1: "–" if v is None else f"{v:.{casas}f}".replace(".", ",")
+templates.env.filters["espera"] = lambda m: (f"{m:.0f} min" if m < 60 else f"{m / 60:.0f} h" if m < 48 * 60
+                                            else f"{m / 1440:.0f} dias")
 templates.env.filters["duracao"] = lambda h: "–" if h is None else (f"{h:.1f} h" if h < 48 else f"{h / 24:.1f} dias").replace(".", ",")
 
 
@@ -1108,6 +1190,10 @@ def exige_executor(request):
     return u
 
 
+def papel_painel(u):
+    return "gestor" if "gestor" in u["papeis"] else "atendente"
+
+
 def tarefa_ou_404(c, tid):
     t = c.execute("SELECT * FROM tarefas WHERE id=?", (tid,)).fetchone()
     if not t:
@@ -1134,7 +1220,7 @@ async def erro_http(request: Request, exc: HTTPException):
     if request.url.path.startswith("/api/"):
         return JSONResponse({"erro": exc.detail}, status_code=exc.status_code)
     return HTMLResponse(f"<!doctype html><meta charset=utf-8><link rel=stylesheet href=/static/pico.min.css>"
-                        f"<main class=container><h2>⚠️ {exc.status_code}</h2><p>{exc.detail}</p>"
+                        f"<main class=container><h2>Erro {exc.status_code}</h2><p>{exc.detail}</p>"
                         f"<a href='javascript:history.back()'>← Voltar</a> · <a href=/login>Trocar usuário</a></main>",
                         status_code=exc.status_code)
 
@@ -1204,8 +1290,8 @@ def receber_tarefa(origem: str, dados: dict, x_api_key: str = Header(...)):
         tid = cur.lastrowid
         registrar_evento(c, tid, sistema["nome"], "integracao",
                          f"Demanda {dados['external_id']} recebida via API (registrada por {dados.get('atendente', 'atendente')})",
-                         None, "recebida")
-        enfileirar_outbox(c, tarefa_ou_404(c, tid), "recebida", f"Recebida na plataforma Missões SJP como tarefa #{tid}",
+                         None, "novo")
+        enfileirar_outbox(c, tarefa_ou_404(c, tid), "novo", f"Recebida na plataforma Missões SJP como tarefa #{tid}",
                           "Missões SJP")
     em_segundo_plano(triar, tid)
     em_segundo_plano(processar_outbox)
@@ -1232,6 +1318,31 @@ def atendente(request: Request):
                   secretarias=SECRETARIAS)
 
 
+def fila_atendimento(c):
+    """Chamados que aguardam avaliação do atendimento: novos, devolvidos pelo técnico e reabertos pela demandante."""
+    fila = c.execute(
+        "SELECT t.*, (SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para=t.status) entrou_em "
+        f"FROM tarefas t WHERE t.status IN ({','.join('?' * len(A_ENCAMINHAR))})", A_ENCAMINHAR).fetchall()
+    itens = []
+    for t in fila:
+        ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
+        prio = t["prioridade"] or ia.get("prioridade") or "P3"
+        desde = t["entrou_em"] or t["criado_em"]
+        itens.append({"t": t, "ia": ia, "prio": prio, "minutos": minutos(desde, agora())})
+    # mais crítico primeiro; empate: quem espera há mais tempo
+    return sorted(itens, key=lambda x: (x["prio"], -x["minutos"]))
+
+
+@app.get("/atendente/fila", response_class=HTMLResponse)
+def atendente_fila(request: Request):
+    exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        fila = fila_atendimento(c)
+        tipos = {r["id"]: r for r in c.execute("SELECT t.*, s.nome area FROM tipos t JOIN setores s ON s.id=t.setor_id")}
+        execs = {r["id"]: r["nome"] for r in c.execute("SELECT id, nome FROM usuarios")}
+    return render(request, "_fila.html", fila=fila, tipos=tipos, execs=execs)
+
+
 def validar_solicitante(nome, email, secretaria):
     if not nome.strip():
         raise HTTPException(422, "Informe o nome de quem está abrindo o chamado")
@@ -1256,7 +1367,7 @@ def criar_tarefa(request: Request, titulo: str = Form(...), descricao: str = For
                         (titulo, descricao, local, solicitante, contato, email, secretaria, setor_id, u["id"],
                          secrets.token_urlsafe(16), ts, ts))
         registrar_evento(c, cur.lastrowid, u["nome"], "atendente", "Tarefa cadastrada diretamente na plataforma",
-                         None, "recebida")
+                         None, "novo")
     em_segundo_plano(triar, cur.lastrowid)
     return redirect(f"/tarefa/{cur.lastrowid}?msg=Tarefa cadastrada. A IA está fazendo a triagem…")
 
@@ -1264,7 +1375,9 @@ def criar_tarefa(request: Request, titulo: str = Form(...), descricao: str = For
 @app.get("/gestor", response_class=HTMLResponse)
 def gestor(request: Request):
     u = exige_painel(request, "gestor")
-    return render(request, "gestor.html", u=u)
+    with db() as c:
+        setores = c.execute("SELECT * FROM setores ORDER BY id").fetchall()
+    return render(request, "gestor.html", u=u, setores=setores)
 
 
 @app.get("/gestor/quadro", response_class=HTMLResponse)
@@ -1276,11 +1389,13 @@ def gestor_quadro(request: Request, setor_id: int | None = None):
         tarefas = c.execute(sql + (" WHERE t.setor_id=?" if setor_id else "") + " ORDER BY coalesce(t.prioridade,'P9'), t.id",
                             (setor_id,) if setor_id else ()).fetchall()
         ind = indicadores(c)
-    colunas = {s: [t for t in tarefas if t["status"] == s] for s in STATUS}
+    colunas = {s: [t for t in tarefas if STATUS_OFICIAL[t["status"]] == s] for s in STATUS_OFICIAIS}
     totais = {s: len(ts) for s, ts in colunas.items()}
-    # o histórico de resolvidas cresce sem parar: o quadro mostra só as mais recentes (o resto está nas métricas)
-    colunas["resolvida"] = sorted(colunas["resolvida"], key=lambda t: t["atualizado_em"], reverse=True)[:10]
-    return render(request, "_quadro.html", colunas=colunas, totais=totais, ind=ind)
+    # o histórico de encerrados cresce sem parar: o quadro mostra só os mais recentes (o resto está nas métricas)
+    for s in FINAIS:
+        colunas[s] = sorted(colunas[s], key=lambda t: t["atualizado_em"], reverse=True)[:10]
+    impedidos = [t for t in tarefas if t["status"] == "impedido"]
+    return render(request, "_quadro.html", colunas=colunas, totais=totais, impedidos=impedidos, ind=ind)
 
 
 PERIODOS = {30: "Últimos 30 dias", 60: "Últimos 60 dias", 90: "Últimos 90 dias"}
@@ -1338,8 +1453,28 @@ def tarefa_detalhe(request: Request, tid: int):
             setor=c.execute("SELECT * FROM setores WHERE id=?", (t["setor_id"],)).fetchone(),
             pontos=c.execute("SELECT p.*, u.nome FROM pontos p JOIN usuarios u ON u.id=p.usuario_id WHERE tarefa_id=? "
                              "ORDER BY p.id", (tid,)).fetchall(),
+            ultimo=c.execute("SELECT * FROM eventos WHERE tarefa_id=? AND para=? ORDER BY id DESC LIMIT 1",
+                             (tid, t["status"])).fetchone(),
         )
     return render(request, "tarefa.html", **ctx)
+
+
+@app.post("/tarefa/{tid}/cancelar")
+def cancelar(request: Request, tid: int, motivo: str = Form(...)):
+    """Atendente ou gestor cancela o chamado (duplicado, aberto por engano, solicitante desistiu…)."""
+    u = exige_painel(request, "atendente", "gestor")
+    if not motivo.strip():
+        return redirect(f"/tarefa/{tid}?msg=Informe o motivo do cancelamento")
+    with db() as c:
+        t = tarefa_ou_404(c, tid)
+        c.execute("UPDATE impedimentos SET aberto=0, providencia='Chamado cancelado', resolvido_por=?, resolvido_em=? "
+                  "WHERE tarefa_id=? AND aberto=1", (u["nome"], agora(), tid))
+        mudar_status(c, t, "cancelado", u, "gestor" if "gestor" in u["papeis"] else "atendente",
+                     f"Chamado cancelado: {motivo.strip()}")
+    if t["executor_id"] and t["status"] in ATIVOS:
+        em_segundo_plano(enviar_push, t["executor_id"], f"Chamado cancelado – #{tid}", motivo.strip(), "/campo")
+    em_segundo_plano(processar_outbox)
+    return redirect(f"/tarefa/{tid}?msg=Chamado cancelado")
 
 
 @app.get("/tarefa/{tid}/estado")
@@ -1352,7 +1487,9 @@ def tarefa_estado(request: Request, tid: int, v: str = ""):
 @app.post("/tarefa/{tid}/atribuir")
 def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: int = Form(...),
              prioridade: str = Form(...), observacao: str = Form("")):
-    u = exige_painel(request, "gestor")
+    """O atendimento (ou o gestor) avalia o chamado da fila e o encaminha ao time técnico."""
+    u = exige_painel(request, "atendente", "gestor")
+    papel = papel_painel(u)
     with db() as c:
         t = tarefa_ou_404(c, tid)
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
@@ -1369,16 +1506,34 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
         c.execute("UPDATE tarefas SET executor_id=?, tipo_id=?, setor_id=?, prioridade=?, prioridade_ajustada_por=?, "
                   "ia_status=? WHERE id=?",
                   (executor_id, tipo_id, tipo["setor_id"], prioridade, ajustada_por, ia_status, tid))
-        texto = f"Missão atribuída a {ex['nome']} · {tipo['nome']} · {prioridade} ({PRIORIDADES[prioridade]})"
+        area = c.execute("SELECT nome FROM setores WHERE id=?", (tipo["setor_id"],)).fetchone()["nome"]
+        texto = f"Encaminhado a {ex['nome']} · área {area} · {tipo['nome']} · {prioridade} ({PRIORIDADES[prioridade]})"
         if ia_status in ("aceita", "editada") and t["ia_status"] == "sugerida":
-            texto += f" · sugestão da IA {'aceita' if ia_status == 'aceita' else 'conferida e editada'} pelo gestor"
+            texto += f" · sugestão da IA {'aceita' if ia_status == 'aceita' else 'conferida e editada'} pelo {papel}"
         if observacao:
             texto += f" · Obs.: {observacao}"
-        mudar_status(c, t, "atribuida", u, "gestor", texto)
-    em_segundo_plano(enviar_push, executor_id, f"🛡️ Nova missão {prioridade} – #{tid}",
+        mudar_status(c, t, "encaminhado", u, papel, texto)
+    em_segundo_plano(enviar_push, executor_id, f"Nova missão {prioridade} – #{tid}",
                      f"{t['titulo']} · {t['local']}", f"/campo/{tid}")
     em_segundo_plano(processar_outbox)
-    return redirect(f"/tarefa/{tid}?msg=Missão atribuída a {ex['nome']} – notificação push enviada")
+    return redirect(f"/tarefa/{tid}?msg=Chamado encaminhado a {ex['nome']} – notificação push enviada")
+
+
+@app.post("/tarefa/{tid}/resolver-atendimento")
+def resolver_no_atendimento(request: Request, tid: int, solucao: str = Form(...)):
+    """1º nível: o atendente resolve sem acionar o time técnico; a demandante confirma pelo link, como nos demais."""
+    u = exige_painel(request, "atendente", "gestor")
+    if not solucao.strip():
+        return redirect(f"/tarefa/{tid}?msg=Descreva a solução dada ao solicitante")
+    with db() as c:
+        t = tarefa_ou_404(c, tid)
+        if t["status"] not in A_ENCAMINHAR:
+            raise HTTPException(409, "Só chamados na fila do atendimento podem ser resolvidos no 1º nível")
+        c.execute("UPDATE tarefas SET relato=?, resolvido_atendimento_por=? WHERE id=?", (solucao.strip(), u["nome"], tid))
+        mudar_status(c, t, "executado", u, papel_painel(u), f"Resolvido no atendimento (1º nível): {solucao.strip()}")
+    em_segundo_plano(resumir_conclusao, tid)
+    em_segundo_plano(processar_outbox)
+    return redirect(f"/tarefa/{tid}?msg=Chamado resolvido no atendimento – aguardando confirmação do solicitante")
 
 
 @app.post("/tarefa/{tid}/prioridade")
@@ -1391,8 +1546,8 @@ def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), 
         return redirect(f"/tarefa/{tid}?msg=Informe o motivo do ajuste de criticidade")
     with db() as c:
         t = tarefa_ou_404(c, tid)
-        if t["status"] == "resolvida":
-            raise HTTPException(409, "Tarefa já resolvida: a criticidade não pode mais ser alterada")
+        if t["status"] in FINAIS:
+            raise HTTPException(409, f"Chamado {STATUS[t['status']][1].lower()}: a criticidade não pode mais ser alterada")
         if prioridade == t["prioridade"]:
             return redirect(f"/tarefa/{tid}?msg=A criticidade já é {prioridade}")
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
@@ -1405,17 +1560,17 @@ def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), 
             texto += f" · IA havia sugerido {ia['prioridade']}"
         registrar_evento(c, tid, u["nome"], papel, f"{texto} · Motivo: {motivo.strip()}")
     if t["executor_id"] and t["status"] in ATIVOS:
-        em_segundo_plano(enviar_push, t["executor_id"], f"⚖️ Criticidade alterada – #{tid}",
+        em_segundo_plano(enviar_push, t["executor_id"], f"Criticidade alterada – #{tid}",
                          f"{t['titulo']}: agora {prioridade} ({PRIORIDADES[prioridade]})", f"/campo/{tid}")
     return redirect(f"/tarefa/{tid}?msg=Criticidade alterada para {prioridade} – {PRIORIDADES[prioridade]}")
 
 
 @app.post("/tarefa/{tid}/rejeitar-ia")
 def rejeitar_ia(request: Request, tid: int):
-    u = exige_painel(request, "gestor")
+    u = exige_painel(request, "atendente", "gestor")
     with db() as c:
         c.execute("UPDATE tarefas SET ia_status='rejeitada', atualizado_em=? WHERE id=?", (agora(), tid))
-        registrar_evento(c, tid, u["nome"], "gestor", "Sugestão da IA rejeitada pelo gestor")
+        registrar_evento(c, tid, u["nome"], papel_painel(u), f"Sugestão da IA rejeitada pelo {papel_painel(u)}")
     return redirect(f"/tarefa/{tid}")
 
 
@@ -1446,7 +1601,7 @@ def resolver_impedimento(request: Request, iid: int, providencia: str = Form(...
             lancar(c, apoio["id"], t["id"], rg["bonus_apoio_colega"], "bonus", f"Apoio à missão #{t['id']} ({i['motivo']})")
         mudar_status(c, t, "em_execucao", u, "gestor",
                      f"Impedimento resolvido: {providencia}" + (f" (apoio: {apoio['nome']})" if apoio else ""))
-    em_segundo_plano(enviar_push, t["executor_id"], f"🔓 Impedimento resolvido – #{t['id']}", providencia, f"/campo/{t['id']}")
+    em_segundo_plano(enviar_push, t["executor_id"], f"Impedimento resolvido – #{t['id']}", providencia, f"/campo/{t['id']}")
     em_segundo_plano(processar_outbox)
     return redirect(f"/tarefa/{t['id']}?msg=Impedimento resolvido – executor notificado")
 
@@ -1463,10 +1618,11 @@ def campo(request: Request):
 def campo_lista(request: Request):
     u = exige_executor(request)
     with db() as c:
-        tarefas = c.execute("SELECT * FROM tarefas WHERE executor_id=? AND status<>'resolvida' "
-                            "ORDER BY CASE status WHEN 'atribuida' THEN 0 ELSE 1 END, coalesce(prioridade,'P9'), id DESC",
+        tarefas = c.execute("SELECT * FROM tarefas WHERE executor_id=? AND status IN "
+                            "('encaminhado','a_caminho','em_execucao','impedido','executado','reaberto') "
+                            "ORDER BY CASE status WHEN 'encaminhado' THEN 0 ELSE 1 END, coalesce(prioridade,'P9'), id DESC",
                             (u["id"],)).fetchall()
-        feitas = c.execute("SELECT * FROM tarefas WHERE executor_id=? AND status='resolvida' ORDER BY id DESC LIMIT 5",
+        feitas = c.execute("SELECT * FROM tarefas WHERE executor_id=? AND status='concluido' ORDER BY id DESC LIMIT 5",
                            (u["id"],)).fetchall()
         temp = temporada_atual(c)
         pts = c.execute("SELECT coalesce(sum(CASE WHEN tipo IN ('definitivo','bonus') THEN pontos END),0) d, "
@@ -1476,7 +1632,7 @@ def campo_lista(request: Request):
                           (u["id"],)).fetchone()["n"]
         meds = medalhas(c, u["id"])
     return render(request, "_campo_lista.html", u=u, tarefas=tarefas, feitas=feitas, pts=pts, nivel=nivel(total),
-                  medalhas=meds, ultima=max([t["id"] for t in tarefas if t["status"] == "atribuida"], default=0))
+                  medalhas=meds, ultima=max([t["id"] for t in tarefas if t["status"] == "encaminhado"], default=0))
 
 
 @app.get("/campo/{tid}", response_class=HTMLResponse)
@@ -1527,14 +1683,28 @@ async def salvar_foto(foto: UploadFile | None, prefixo):
 def campo_avancar(request: Request, tid: int, para: str = Form(...), observacao: str = Form("")):
     with db() as c:
         u, t = _missao_do_executor(c, request, tid)
-        if para not in ("a_caminho", "em_execucao") or t["status"] == "impedida":
+        if para not in ("a_caminho", "em_execucao") or t["status"] == "impedido":
             raise HTTPException(409, "Ação não permitida neste estado")
         textos = {"a_caminho": "Missão aceita – executor a caminho do local",
                   "em_execucao": "Executor chegou ao local e iniciou o atendimento"}
         mudar_status(c, t, para, u, "executor", textos[para] + (f" · {observacao}" if observacao else ""))
     em_segundo_plano(processar_outbox)
-    msg = "Missão encontrada! Atendimento iniciado 🎯" if para == "em_execucao" else "Boa viagem! Status: a caminho 🚗"
+    msg = "Atendimento iniciado no local" if para == "em_execucao" else "Status atualizado: a caminho"
     return redirect(f"/campo/{tid}?msg={msg}")
+
+
+@app.post("/campo/{tid}/devolver")
+def campo_devolver(request: Request, tid: int, motivo: str = Form(...), detalhe: str = Form("")):
+    """O técnico devolve o chamado à triagem: falta informação, é de outra área ou não é problema técnico."""
+    if motivo not in MOTIVOS_DEVOLUCAO:
+        raise HTTPException(422, "Motivo inválido")
+    if motivo == "Outro" and not detalhe.strip():
+        return redirect(f"/campo/{tid}?msg=Explique o motivo da devolução")
+    with db() as c:
+        u, t = _missao_do_executor(c, request, tid)
+        mudar_status(c, t, "devolvido", u, "executor", f"Devolvido à triagem: {motivo}" + (f" – {detalhe}" if detalhe else ""))
+    em_segundo_plano(processar_outbox)
+    return redirect("/campo?msg=Chamado devolvido à fila do atendimento, que vai reavaliar.")
 
 
 @app.post("/campo/{tid}/impedimento")
@@ -1548,7 +1718,7 @@ async def campo_impedimento(request: Request, tid: int, motivo: str = Form(...),
         externo = int(motivo in MOTIVOS_EXTERNOS)
         cur = c.execute("INSERT INTO impedimentos(tarefa_id,motivo,detalhe,externo,criado_em) VALUES(?,?,?,?,?)",
                         (tid, motivo, detalhe, externo, agora()))
-        mudar_status(c, t, "impedida", u, "executor", f"Impedimento: {motivo}" + (f" – {detalhe}" if detalhe else ""))
+        mudar_status(c, t, "impedido", u, "executor", f"Impedimento: {motivo}" + (f" – {detalhe}" if detalhe else ""))
         if arquivo:
             registrar_evento(c, tid, u["nome"], "executor", "Foto do impedimento", anexo=arquivo)
     em_segundo_plano(sugerir_apoio, cur.lastrowid)
@@ -1563,13 +1733,13 @@ async def campo_concluir(request: Request, tid: int, relato: str = Form(...), fo
     with db() as c:
         u, t = _missao_do_executor(c, request, tid)
         c.execute("UPDATE tarefas SET relato=?, evidencia=coalesce(?,evidencia) WHERE id=?", (relato, arquivo, tid))
-        mudar_status(c, t, "concluida", u, "executor", f"Conclusão informada pelo executor: {relato}")
+        mudar_status(c, t, "executado", u, "executor", f"Execução informada pelo técnico: {relato}")
         if arquivo:
             registrar_evento(c, tid, u["nome"], "executor", "Evidência anexada", anexo=arquivo)
         pts = pontuar_conclusao(c, tarefa_ou_404(c, tid))
     em_segundo_plano(resumir_conclusao, tid)
     em_segundo_plano(processar_outbox)
-    return redirect(f"/campo/{tid}?msg=Missão concluída! +{pts} pts provisórios – aguardando confirmação da demandante")
+    return redirect(f"/campo/{tid}?msg=Chamado executado! +{pts} pts provisórios – aguardando confirmação da demandante")
 
 
 @app.post("/campo/{tid}/chat", response_class=HTMLResponse)
@@ -1611,7 +1781,7 @@ def push_inscrever(request: Request, sub: dict):
 @app.post("/api/push/teste", tags=["push"])
 def push_teste(request: Request):
     u = exige_executor(request)
-    em_segundo_plano(enviar_push, u["id"], "🔔 Notificações ativas", "Você receberá suas novas missões aqui.", "/campo")
+    em_segundo_plano(enviar_push, u["id"], "Notificações ativas", "Você receberá suas novas missões aqui.", "/campo")
     return {"ok": True}
 
 
@@ -1637,18 +1807,19 @@ def validar(request: Request, token: str, resultado: str = Form(...), nota: int 
         return redirect(f"/validar/{token}?msg=Conte o que ainda não está funcionando para reabrirmos o atendimento.")
     with db() as c:
         t = c.execute("SELECT * FROM tarefas WHERE token=?", (token,)).fetchone()
-        if not t or t["status"] != "concluida":
+        if not t or t["status"] != "executado":
             raise HTTPException(409, "Esta tarefa não está aguardando sua confirmação")
         c.execute("UPDATE tarefas SET nota=?, comentario_demandante=? WHERE id=?", (nota, comentario, t["id"]))
         if resultado == "resolvido":
-            mudar_status(c, t, "resolvida", None, "demandante",
+            mudar_status(c, t, "concluido", None, "demandante",
                          f"Resolução confirmada pela demandante ({nota}★)" + (f": {comentario}" if comentario else ""))
-            pontuar_validacao(c, tarefa_ou_404(c, t["id"]), nota)
+            if t["executor_id"] and not t["resolvido_atendimento_por"]:
+                pontuar_validacao(c, tarefa_ou_404(c, t["id"]), nota)
             msg = "Obrigado! Sua confirmação foi registrada."
         else:
             c.execute("UPDATE tarefas SET reaberturas=reaberturas+1 WHERE id=?", (t["id"],))
             c.execute("UPDATE pontos SET tipo='suspenso' WHERE tarefa_id=? AND tipo='provisorio'", (t["id"],))
-            mudar_status(c, t, "reaberta", None, "demandante", f"Pendência indicada pela demandante ({nota}★): {comentario}")
+            mudar_status(c, t, "reaberto", None, "demandante", f"Pendência indicada pela demandante ({nota}★): {comentario}")
             msg = "Pendência registrada. O atendimento foi reaberto e a equipe vai retomar."
     em_segundo_plano(processar_outbox)
     return redirect(f"/validar/{token}?msg={msg}")
@@ -1749,7 +1920,7 @@ def servidor_resolvido(request: Request):
         token = _sessao_auto(request, c)
         if token:
             c.execute("UPDATE autoatendimento SET resolvido=1 WHERE token=?", (token,))
-    resp = redirect("/servidor?msg=Que bom que deu certo! 🎉 Nenhum chamado foi necessário. Obrigado por usar o assistente.")
+    resp = redirect("/servidor?msg=Que bom que deu certo! Nenhum chamado foi necessário. Obrigado por usar o assistente.")
     resp.delete_cookie("auto_token")
     return resp
 
@@ -1796,6 +1967,74 @@ def servidor_solicitar(request: Request, nome: str = Form(...), email: str = For
     return resp
 
 
+# ---------------------------------------------------------------- solicitante: "Meus chamados"
+# Sem login: a pessoa informa o e-mail usado nos chamados e recebe um link de acesso (envio simulado na tela,
+# como o link de validação). O link vale por ACESSO_DIAS dias e só mostra os chamados daquele e-mail.
+
+ACESSO_DIAS = 7
+# Linha do progresso exibida ao solicitante (status oficial → passo atual)
+PASSOS_SOLICITANTE = ["Recebido", "Em atendimento", "Aguardando sua confirmação", "Concluído"]
+PASSO_DO_STATUS = {"novo": 0, "devolvido": 0, "reaberto": 0, "encaminhado": 1, "executado": 2, "concluido": 3}
+
+
+def email_do_acesso(c, token):
+    r = c.execute("SELECT email, criado_em FROM acessos_solicitante WHERE token=?", (token,)).fetchone()
+    if not r or _data(r["criado_em"]) < datetime.now() - timedelta(days=ACESSO_DIAS):
+        raise HTTPException(404, "Link de acesso inválido ou expirado. Solicite um novo em /meus-chamados.")
+    return r["email"]
+
+
+@app.get("/meus-chamados", response_class=HTMLResponse)
+def meus_chamados_form(request: Request):
+    token = request.cookies.get("acesso_solicitante")
+    if token:
+        with db() as c:
+            if c.execute("SELECT 1 FROM acessos_solicitante WHERE token=? AND criado_em>=?", (token, (
+                    datetime.now() - timedelta(days=ACESSO_DIAS)).strftime("%Y-%m-%d %H:%M:%S"))).fetchone():
+                return redirect(f"/meus-chamados/{token}")
+    return render(request, "meus_chamados_acesso.html", link=None)
+
+
+@app.post("/meus-chamados", response_class=HTMLResponse)
+def meus_chamados_pedir(request: Request, email: str = Form(...)):
+    email = email.strip().lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        return render(request, "meus_chamados_acesso.html", link=None, msg="Informe um e-mail válido.")
+    token = secrets.token_urlsafe(16)
+    with db() as c:
+        c.execute("INSERT INTO acessos_solicitante(token,email,criado_em) VALUES(?,?,?)", (token, email, agora()))
+    # Resposta igual exista ou não chamado para o e-mail: não revela quem tem chamados.
+    return render(request, "meus_chamados_acesso.html", link=f"/meus-chamados/{token}", email=email)
+
+
+@app.get("/meus-chamados/{token}", response_class=HTMLResponse)
+def meus_chamados(request: Request, token: str):
+    with db() as c:
+        email = email_do_acesso(c, token)
+        tarefas = c.execute(
+            "SELECT t.*, s.nome area, tp.nome tipo, u.nome executor, "
+            "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para IS NOT NULL) ultima_mudanca "
+            "FROM tarefas t LEFT JOIN setores s ON s.id=t.setor_id LEFT JOIN tipos tp ON tp.id=t.tipo_id "
+            "LEFT JOIN usuarios u ON u.id=t.executor_id WHERE lower(t.email)=? ORDER BY t.criado_em DESC", (email,)).fetchall()
+        solicitacoes = c.execute("SELECT * FROM solicitacoes WHERE lower(email)=? AND status<>'registrada' "
+                                 "ORDER BY criado_em DESC", (email,)).fetchall()
+    abertos = [t for t in tarefas if t["status"] not in FINAIS]
+    historico = [t for t in tarefas if t["status"] in FINAIS]
+    perfil = tarefas[0] if tarefas else (solicitacoes[0] if solicitacoes else None)
+    resp = render(request, "meus_chamados.html", email=email, perfil=perfil, abertos=abertos, historico=historico,
+                  solicitacoes=solicitacoes, token=token, passos=PASSOS_SOLICITANTE, passo_do_status=PASSO_DO_STATUS,
+                  aguardando=[t for t in abertos if t["status"] == "executado"])
+    resp.set_cookie("acesso_solicitante", token, httponly=True, samesite="lax", max_age=ACESSO_DIAS * 86400)
+    return resp
+
+
+@app.get("/meus-chamados-sair")
+def meus_chamados_sair():
+    resp = redirect("/meus-chamados")
+    resp.delete_cookie("acesso_solicitante")
+    return resp
+
+
 @app.get("/servidor/acompanhar/{token}", response_class=HTMLResponse)
 def servidor_acompanhar(request: Request, token: str):
     with db() as c:
@@ -1828,7 +2067,7 @@ def registrar_solicitacao(request: Request, sid: int, titulo: str = Form(...), d
                   (tid, u["nome"], ts, sid))
         registrar_evento(c, tid, u["nome"], "atendente",
                          f"Registrada pelo atendente a partir da solicitação {s['protocolo']} "
-                         f"({'autoatendimento com IA' if s['via_ia'] else 'formulário sem IA'})", None, "recebida")
+                         f"({'autoatendimento com IA' if s['via_ia'] else 'formulário sem IA'})", None, "novo")
     em_segundo_plano(triar, tid)
     return redirect(f"/tarefa/{tid}?msg=Solicitação {s['protocolo']} registrada como tarefa #{tid}. A IA está fazendo a triagem…")
 
@@ -1906,7 +2145,7 @@ def novo_setor(request: Request, nome: str = Form(...)):
     exige_painel(request, "gestor")
     with db() as c:
         c.execute("INSERT INTO setores(nome) VALUES(?)", (nome,))
-    return redirect("/config?msg=Setor criado")
+    return redirect("/config?msg=Área criada")
 
 
 @app.post("/config/equipe")

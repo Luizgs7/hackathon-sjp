@@ -9,7 +9,7 @@
 <div class="acoes-cap">
 {% for a in analise.acoes %}
   <div class="acao-cap impacto-{{ a.impacto|default('médio')|replace('é', 'e') }}">
-    <div class="acao-topo"><span class="selo">🏛️ {{ a.secretaria }}</span>
+    <div class="acao-topo"><span class="selo">{{ m.i('landmark') }}{{ a.secretaria }}</span>
       <span class="selo selo-impacto">impacto {{ a.impacto|default('médio') }}</span></div>
     <h5>{{ a.tema }}</h5>
     <p><small><b>Formato:</b> {{ a.formato }} · <b>Público:</b> {{ a.publico }}</small></p>

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Precisa de ajuda? · Help Desk SJP{% endblock %}
-{% block nav %}<li><a href="/servidor">Assistente</a></li><li><a href="/servidor/solicitar">Abrir solicitação</a></li>{% endblock %}
+{% block nav %}{{ m.nav_servidor() }}{% endblock %}
 {% block main %}
 <div class="auto-grade">
   <section class="auto-chat" aria-label="Assistente virtual">
     <header class="auto-topo">
-      <div class="auto-avatar" aria-hidden="true">🤖</div>
+      <div class="auto-avatar" aria-hidden="true">{{ m.i('sparkles') }}</div>
       <div>
         <h2>Olá! Sou o Assistente Virtual do Help Desk.</h2>
         <p>Conte o que está acontecendo. Muitos problemas se resolvem em minutos, sem precisar ligar. Se não der,
@@ -18,7 +18,7 @@
     {% if not conversa %}
     <div class="chips" id="chips">
       {% for s in ['Estou sem internet no computador', 'A impressora não imprime', 'Esqueci minha senha do sistema',
-                   'O Wi-fi não conecta', 'Tem uma lâmpada queimada na sala', 'Está pingando água do teto'] %}
+                   'O Wi-fi não conecta', 'Meu ramal está sem linha', 'O sistema está fora do ar'] %}
       <button type="button" class="outline chip" hx-post="/servidor/chat" hx-vals='{"pergunta": "{{ s }}"}'
               hx-target="#conversa" hx-indicator="#digitando" onclick="mostrarPergunta(this.textContent)">{{ s }}</button>
       {% endfor %}
@@ -33,7 +33,7 @@
         <button>Enviar</button>
       </fieldset>
     </form>
-    <small class="auto-aviso">🔒 Nunca informe senhas. · Assistente com IA: as respostas podem conter erros; em caso de
+    <small class="auto-aviso">{{ m.i('lock') }}Nunca informe senhas. · Assistente com IA: as respostas podem conter erros; em caso de
       risco (fogo, choque, vazamento forte), afaste as pessoas e abra a solicitação imediatamente.</small>
   </section>
 
@@ -41,7 +41,7 @@
     <article class="auto-sem-ia">
       <header><strong>Prefere não usar o assistente?</strong></header>
       <p>Você pode enviar sua solicitação diretamente. Um atendente vai conferir e registrar o chamado.</p>
-      <a href="/servidor/solicitar" role="button" class="secondary outline" style="width:100%">📝 Abrir solicitação sem o assistente</a>
+      <a href="/servidor/solicitar" role="button" class="secondary outline" style="width:100%">{{ m.i('file-pen-line') }}Abrir solicitação sem o assistente</a>
     </article>
     <article>
       <header><strong>Como funciona</strong></header>

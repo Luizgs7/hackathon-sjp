@@ -5,16 +5,16 @@
   <div style="text-align:right"><small>Pontos na temporada</small><br><b>{{ pts.d }}</b>
     {% if pts.p %}<small> +{{ pts.p }} a confirmar</small>{% endif %}</div>
 </div>
-{% if medalhas %}<p class="medalhas">{% for i, n in medalhas %}<span title="{{ n }}">{{ i }}</span>{% endfor %}</p>{% endif %}
+{% if medalhas %}<p class="medalhas">{% for i, n in medalhas %}<span title="{{ n }}">{{ m.i(i) }}</span>{% endfor %}</p>{% endif %}
 <h3>Minhas missões ({{ tarefas|length }})</h3>
 {% for t in tarefas %}
-<a class="missao {{ 'nova' if t.status == 'atribuida' }}" href="/campo/{{ t.id }}">
+<a class="missao {{ 'nova' if t.status == 'encaminhado' }}" href="/campo/{{ t.id }}">
   {{ m.prio(t.prioridade) }} {{ m.status(t.status) }}
   <h4 style="margin:.4rem 0">{{ t.titulo }}</h4>
-  <small>📍 {{ t.local }}</small>
+  <small>{{ m.i('map-pin') }}{{ t.local }}</small>
 </a>
 {% else %}
-<p>Nenhuma missão ativa. Aguarde novas missões. 🛡️</p>
+<p>Nenhuma missão ativa. Aguarde novas missões. {{ m.i('shield') }}</p>
 {% endfor %}
 {% if feitas %}<details><summary>Missões cumpridas recentes</summary>
-  {% for t in feitas %}<p><small>🏆 #{{ t.id }} {{ t.titulo }} {{ '★' * (t.nota or 0) }}</small></p>{% endfor %}</details>{% endif %}
+  {% for t in feitas %}<p><small>{{ m.i('trophy') }}#{{ t.id }} {{ t.titulo }} {{ '★' * (t.nota or 0) }}</small></p>{% endfor %}</details>{% endif %}

@@ -3,54 +3,115 @@
 {% block nav %}{{ m.nav_painel(u) }}{% endblock %}
 {% block main %}
 <div hx-get="/tarefa/{{ t.id }}/estado?v={{ t.atualizado_em|urlencode }}" hx-trigger="every 3s" hx-swap="none"></div>
-<p><a href="{{ '/gestor' if eh_gestor else '/atendente' }}">← voltar</a></p>
+<p><a href="{{ '/gestor' if eh_gestor else '/atendente' }}" class="voltar">{{ m.i('arrow-left') }}Voltar</a></p>
 <hgroup>
   <h2>#{{ t.id }} {{ t.titulo }}</h2>
   <p>{{ m.status(t.status) }} {{ m.prio(t.prioridade) }}
-    {% if t.origem != 'web' %}<span class="selo">🔗 Origem: {{ SISTEMAS[t.origem].nome }} · <b>{{ t.external_id }}</b></span>{% else %}<span class="selo">Cadastro web</span>{% endif %}
-    {% if setor %}<span class="selo">{{ setor.nome }}</span>{% endif %}{% if tipo %} <span class="selo">{{ tipo.nome }}</span>{% endif %}</p>
+    {% if t.origem != 'web' %}<span class="selo">{{ m.i('link') }}Origem: {{ SISTEMAS[t.origem].nome }} · <b>{{ t.external_id }}</b></span>{% else %}<span class="selo">Cadastro web</span>{% endif %}
+    {% if setor %}<span class="selo">Área: {{ setor.nome }}</span>{% endif %}{% if tipo %} <span class="selo">{{ tipo.nome }}</span>{% endif %}</p>
 </hgroup>
 
 <div class="grade2">
 <div>
   <article>
     <p><b>Descrição:</b> {{ t.descricao }}</p>
-    <p>📍 {{ t.local or '—' }}</p>
+    <p>{{ m.i('map-pin') }}{{ t.local or '—' }}</p>
     <p>{{ m.solicitante(t) }}</p>
-    {% if executor %}<p>Executor: {{ executor.avatar }} <b>{{ executor.nome }}</b></p>{% endif %}
-    {% if t.relato %}<p><b>Relato do executor:</b> {{ t.relato }}</p>{% endif %}
-    {% if t.resumo_ia %}<p><b>Resumo para a demandante</b> <span class="selo">🤖 IA</span>: {{ t.resumo_ia }}</p>{% endif %}
+    {% if executor %}<p class="pessoa">{{ m.avatar(executor.nome, 'p') }}Executor: <b>{{ executor.nome }}</b></p>{% endif %}
+    {% if t.relato %}<p><b>{{ 'Solução do atendimento (' ~ t.resolvido_atendimento_por ~ ')' if t.resolvido_atendimento_por else 'Relato do executor' }}:</b> {{ t.relato }}</p>{% endif %}
+    {% if t.resumo_ia %}<p><b>Resumo para a demandante</b> <span class="selo">{{ m.i('sparkles') }}IA</span>: {{ t.resumo_ia }}</p>{% endif %}
     {% if t.evidencia %}<img class="evid" src="/uploads/{{ t.evidencia }}" alt="Evidência da conclusão">{% endif %}
     {% if t.nota %}<p><b>Avaliação da demandante:</b> {{ '★' * t.nota }}{{ '☆' * (5 - t.nota) }} {{ t.comentario_demandante or '' }}</p>{% endif %}
   </article>
 
   {# ---------- IA: triagem com conferência humana ---------- #}
-  {% if t.status in ('recebida', 'reaberta') or t.ia_status in ('analisando', 'sugerida') %}
+  {% if ultimo and t.status in ('devolvido', 'cancelado') %}
+  <article style="border:2px solid {{ 'var(--alerta)' if t.status == 'devolvido' else 'var(--sjp-grafite)' }}">
+    <p><b>{{ m.i(STATUS[t.status][0]) }}{{ STATUS[t.status][1] }}</b> por {{ ultimo.usuario }} em {{ ultimo.criado_em|datahora }}<br>{{ ultimo.texto }}</p>
+    {% if t.status == 'devolvido' %}<small>O chamado voltou para a fila do atendimento: revise as informações com o solicitante, se necessário, e resolva ou reencaminhe.</small>{% endif %}
+  </article>
+  {% endif %}
+
+  {% if t.status in ('novo', 'reaberto', 'devolvido') or t.ia_status in ('analisando', 'sugerida') %}
   <article class="ia {{ 'analisando' if t.ia_status == 'analisando' }}">
-    <header><strong>🤖 Triagem assistida por IA</strong> {{ m.fonte(t.ia_fonte) }}</header>
+    <header><strong>{{ m.i('sparkles') }}Triagem assistida por IA</strong> {{ m.fonte(t.ia_fonte) }}</header>
     {% if t.ia_status == 'analisando' %}
       <p aria-busy="true">Analisando a demanda: tipo, criticidade, informações faltantes e executor mais adequado…</p>
     {% elif ia %}
       <p><b>Categoria:</b> {{ ia.categoria }} · <b>Criticidade:</b> {{ m.prio(ia.prioridade) }} · <b>Complexidade:</b> {{ ia.complexidade }}/5</p>
       <p><b>Por quê:</b> {{ ia.justificativa }}</p>
       <p><b>Resumo:</b> {{ ia.resumo }}</p>
-      {% if ia.informacoes_faltantes %}<p><b>⚠️ Informações faltantes</b> (confirmar com o solicitante):</p>
+      {% if ia.informacoes_faltantes %}<p><b>{{ m.i('triangle-alert') }}Informações faltantes</b> (confirmar com o solicitante):</p>
         <ul>{% for f in ia.informacoes_faltantes %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
-      {% if ia.executor_id %}<p><b>Executor sugerido:</b> {% for e in executores if e.id == ia.executor_id %}{{ e.avatar }} {{ e.nome }}{% endfor %} — {{ ia.motivo_executor }}</p>{% endif %}
+      {% if ia.resolvivel_no_atendimento %}<p><span class="selo selo-n1">{{ m.i('message-circle') }}Resolvível no atendimento</span>
+        {{ ia.orientacao_atendimento }}</p>{% endif %}
+      {% if ia.executor_id %}<p><b>{{ 'Se precisar de técnico' if ia.resolvivel_no_atendimento else 'Executor sugerido' }}:</b> {% for e in executores if e.id == ia.executor_id %}{{ e.nome }}{% endfor %} — {{ ia.motivo_executor }}</p>{% endif %}
       {% if t.prioridade_ajustada_por and t.prioridade and t.prioridade != ia.prioridade %}
-      <p><span class="selo selo-regras">✋ ajuste manual</span> Criticidade definida como {{ m.prio(t.prioridade) }} por {{ t.prioridade_ajustada_por }} (a IA sugeriu {{ ia.prioridade }}).</p>{% endif %}
-      <small>Status da sugestão: <b>{{ t.ia_status }}</b>. Nada é aplicado sem a conferência do gestor.</small>
+      <p><span class="selo selo-regras">{{ m.i('hand') }}ajuste manual</span> Criticidade definida como {{ m.prio(t.prioridade) }} por {{ t.prioridade_ajustada_por }} (a IA sugeriu {{ ia.prioridade }}).</p>{% endif %}
+      <small>Status da sugestão: <b>{{ t.ia_status }}</b>. Nada é aplicado sem a avaliação do atendimento.</small>
+    {% endif %}
+  </article>
+  {% endif %}
+
+  {# ---------- Avaliação do atendimento: resolver no 1º nível ou encaminhar ao time técnico ---------- #}
+  {% set na_fila = t.status in ('novo', 'reaberto', 'devolvido') %}
+  {% set sug = ia if (ia and t.ia_status == 'sugerida') else {} %}
+  {% if na_fila %}
+  <article class="decisao">
+    <header><strong>{{ m.i('inbox') }}Avaliação do atendimento</strong><br>
+      <small>Este chamado está na fila do atendimento. Resolva aqui mesmo ou encaminhe para a área técnica.</small></header>
+    <details {{ 'open' if sug.resolvivel_no_atendimento }} class="opcao">
+      <summary>{{ m.i('message-circle') }}<b>Resolver no atendimento</b>
+        {% if sug.resolvivel_no_atendimento %}<span class="selo selo-n1">{{ m.i('sparkles') }}IA recomenda</span>{% endif %}</summary>
+      <form method="post" action="/tarefa/{{ t.id }}/resolver-atendimento">
+        <label>Solução dada ao solicitante
+          <textarea name="solucao" rows="3" required placeholder="Ex.: senha desbloqueada no AD após confirmar a matrícula; orientado a trocar no próximo acesso.">{{ sug.orientacao_atendimento or '' }}</textarea></label>
+        <button>{{ m.i('circle-check') }}Registrar solução</button>
+        <small>O chamado fica como Executado e o solicitante confirma pelo link, como nos demais atendimentos.</small>
+      </form>
+    </details>
+    <details {{ 'open' if not sug.resolvivel_no_atendimento }} class="opcao">
+      <summary>{{ m.i('send') }}<b>Encaminhar ao time técnico</b>
+        {% if sug and not sug.resolvivel_no_atendimento %}<span class="selo selo-n1">{{ m.i('sparkles') }}IA recomenda</span>{% endif %}</summary>
+  {% elif t.status == 'encaminhado' %}
+  <article>
+    <header><strong>{{ m.i('send') }}Reencaminhar</strong><br><small>O técnico ainda não iniciou: dá para trocar a área ou o técnico.</small></header>
+    <div>
+  {% endif %}
+  {% if na_fila or t.status == 'encaminhado' %}
+    {% if ia and t.ia_status == 'sugerida' %}<p><small>Campos pré-preenchidos pela IA. Revise e edite se necessário.</small></p>{% endif %}
+    <form method="post" action="/tarefa/{{ t.id }}/atribuir">
+      <div class="grid">
+        <label>Tipo de tarefa
+          <select name="tipo_id" required>{% for tp in tipos %}
+            <option value="{{ tp.id }}" {{ 'selected' if tp.id == (sug.tipo_id or t.tipo_id) }}>{{ tp.setor }} › {{ tp.nome }}</option>{% endfor %}</select></label>
+        <label>Criticidade
+          <select name="prioridade" required>{% for p, n in PRIORIDADES.items() %}
+            <option value="{{ p }}" {{ 'selected' if p == ((t.prioridade if t.prioridade_ajustada_por else sug.prioridade) or t.prioridade or 'P3') }}>{{ p }} – {{ n }}</option>{% endfor %}</select></label>
+      </div>
+      <label>Executor
+        <select name="executor_id" required>{% for e in executores %}
+          <option value="{{ e.id }}" {{ 'selected' if e.id == (sug.executor_id or t.executor_id) }}>{{ e.equipe }} › {{ e.nome }} · {{ e.carga }} ativa(s)</option>{% endfor %}</select></label>
+      <label>Orientação ao executor (opcional) <input name="observacao"></label>
+      <button>{{ m.i('send') }}Encaminhar e notificar</button>
+    </form>
+    {% if na_fila %}</details>{% else %}</div>{% endif %}
+    {% if t.ia_status == 'sugerida' %}
+    <div class="grid">
+      <form method="post" action="/tarefa/{{ t.id }}/rejeitar-ia"><button class="secondary outline" style="width:100%">Rejeitar sugestão da IA</button></form>
+      <form method="post" action="/tarefa/{{ t.id }}/retriar"><button class="secondary outline" style="width:100%">Refazer triagem</button></form>
+    </div>
     {% endif %}
   </article>
   {% endif %}
 
   {# ---------- Criticidade: ajuste manual pelo atendente ou gestor ---------- #}
-  {% if t.status != 'resolvida' %}
+  {% if t.status not in ('concluido', 'cancelado') %}
   <article>
-    <header><strong>⚖️ Criticidade</strong> {{ m.prio(t.prioridade) }}
+    <header><strong>{{ m.i('scale') }}Criticidade</strong> {{ m.prio(t.prioridade) }}
       {% if ia and ia.prioridade %}<small> · sugestão da IA: {{ ia.prioridade }} – {{ PRIORIDADES[ia.prioridade] }}</small>{% endif %}
-      {% if t.prioridade_ajustada_por %}<br><small>✋ Ajustada manualmente por {{ t.prioridade_ajustada_por }}</small>{% endif %}</header>
-    <details {{ 'open' if t.status in ('recebida', 'reaberta') and not eh_gestor and t.ia_status == 'sugerida' }}>
+      {% if t.prioridade_ajustada_por %}<br><small>{{ m.i('hand') }}Ajustada manualmente por {{ t.prioridade_ajustada_por }}</small>{% endif %}</header>
+    <details>
       <summary>Discorda da criticidade? Ajustar manualmente</summary>
       <form method="post" action="/tarefa/{{ t.id }}/prioridade">
         <div class="grid">
@@ -66,50 +127,20 @@
   </article>
   {% endif %}
 
-  {# ---------- Ações do gestor ---------- #}
-  {% if eh_gestor and t.status in ('recebida', 'reaberta', 'atribuida') %}
-  <article>
-    <header><strong>🎯 {{ 'Reatribuir' if t.status == 'atribuida' else 'Conferir triagem e atribuir missão' }}</strong>
-      {% if ia and t.ia_status == 'sugerida' %}<br><small>Campos pré-preenchidos pela IA. Revise e edite se necessário.</small>{% endif %}</header>
-    {% set sug = ia if (ia and t.ia_status == 'sugerida') else {} %}
-    <form method="post" action="/tarefa/{{ t.id }}/atribuir">
-      <div class="grid">
-        <label>Tipo de tarefa
-          <select name="tipo_id" required>{% for tp in tipos %}
-            <option value="{{ tp.id }}" {{ 'selected' if tp.id == (sug.tipo_id or t.tipo_id) }}>{{ tp.setor }} › {{ tp.nome }}</option>{% endfor %}</select></label>
-        <label>Criticidade
-          <select name="prioridade" required>{% for p, n in PRIORIDADES.items() %}
-            <option value="{{ p }}" {{ 'selected' if p == ((t.prioridade if t.prioridade_ajustada_por else sug.prioridade) or t.prioridade or 'P3') }}>{{ p }} – {{ n }}</option>{% endfor %}</select></label>
-      </div>
-      <label>Executor
-        <select name="executor_id" required>{% for e in executores %}
-          <option value="{{ e.id }}" {{ 'selected' if e.id == (sug.executor_id or t.executor_id) }}>{{ e.avatar }} {{ e.nome }} · {{ e.equipe }} · {{ e.carga }} ativa(s)</option>{% endfor %}</select></label>
-      <label>Orientação ao executor (opcional) <input name="observacao"></label>
-      <button>🚀 Atribuir missão e notificar</button>
-    </form>
-    {% if t.ia_status == 'sugerida' %}
-    <div class="grid">
-      <form method="post" action="/tarefa/{{ t.id }}/rejeitar-ia"><button class="secondary outline" style="width:100%">Rejeitar sugestão da IA</button></form>
-      <form method="post" action="/tarefa/{{ t.id }}/retriar"><button class="secondary outline" style="width:100%">Refazer triagem</button></form>
-    </div>
-    {% endif %}
-  </article>
-  {% endif %}
-
   {# ---------- Impedimentos ---------- #}
   {% for i in impedimentos %}
   <article style="{{ 'border:2px solid var(--alerta)' if i.aberto }}">
-    <header><strong>{{ '⛔ Impedimento aberto' if i.aberto else '🔓 Impedimento resolvido' }}</strong> · {{ i.criado_em|datahora }}</header>
+    <header><strong>{{ m.i('octagon-alert' if i.aberto else 'lock-open') }}{{ 'Impedimento aberto' if i.aberto else 'Impedimento resolvido' }}</strong> · {{ i.criado_em|datahora }}</header>
     <p><b>{{ i.motivo }}</b>{% if i.detalhe %} — {{ i.detalhe }}{% endif %}
-      {% if i.externo %}<span class="selo" title="Fora do controle do executor: o SLA é pausado e não há penalidade">⏸️ externo · SLA pausado</span>{% endif %}</p>
-    {% if i.sugestao_ia %}<p><span class="selo">🤖 IA sugere</span> {{ i.sugestao_ia }}</p>{% elif i.aberto %}<p aria-busy="true">IA analisando apoio…</p>{% endif %}
+      {% if i.externo %}<span class="selo" title="Fora do controle do executor: o SLA é pausado e não há penalidade">{{ m.i('pause') }}externo · SLA pausado</span>{% endif %}</p>
+    {% if i.sugestao_ia %}<p><span class="selo">{{ m.i('sparkles') }}IA sugere</span> {{ i.sugestao_ia }}</p>{% elif i.aberto %}<p aria-busy="true">IA analisando apoio…</p>{% endif %}
     {% if i.aberto and eh_gestor %}
     <form method="post" action="/impedimento/{{ i.id }}/resolver">
       <label>Providência tomada <input name="providencia" required placeholder="Ex.: Almoxarifado enviou 2 keystones Cat6 ao local"></label>
       <label>Apoio prestado por (gera pontos de colaboração)
         <select name="apoio_id"><option value="">— ninguém —</option>
-          {% for p in todos %}<option value="{{ p.id }}">{{ p.avatar }} {{ p.nome }}</option>{% endfor %}</select></label>
-      <button>🔓 Resolver impedimento e liberar executor</button>
+          {% for p in todos %}<option value="{{ p.id }}">{{ p.nome }}</option>{% endfor %}</select></label>
+      <button>{{ m.i('lock-open') }}Resolver impedimento e liberar executor</button>
     </form>
     {% elif not i.aberto %}<p><b>Providência:</b> {{ i.providencia }} ({{ i.resolvido_por }}{{ ', apoio: ' ~ i.apoio if i.apoio }}) · {{ i.resolvido_em|datahora }}</p>{% endif %}
   </article>
@@ -117,19 +148,31 @@
 
   {# ---------- Validação ---------- #}
   <article>
-    <header><strong>🧾 Validação pela demandante</strong></header>
-    {% if t.status == 'concluida' %}
+    <header><strong>{{ m.i('receipt-text') }}Validação pela demandante</strong></header>
+    {% if t.status == 'executado' %}
       <p>Link enviado a <b>{{ t.solicitante }}</b>{{ ' (' ~ t.email ~ ')' if t.email }} (SMS/e-mail simulado):</p>
-      <p><a href="/validar/{{ t.token }}" target="_blank" role="button">Abrir link da demandante ↗</a></p>
-    {% elif t.status == 'resolvida' %}<p>✔ Resolução confirmada pela demandante.</p>
-    {% elif t.status == 'reaberta' %}<p>✖ A demandante indicou pendência: <b>{{ t.comentario_demandante }}</b>. Reatribua para continuar o atendimento.</p>
-    {% else %}<p><small>O link será disponibilizado quando o executor concluir a missão. Conclusão do executor ≠ resolução confirmada.</small></p>{% endif %}
+      <p><a href="/validar/{{ t.token }}" target="_blank" role="button">Abrir link da demandante {{ m.i('external-link') }}</a></p>
+    {% elif t.status == 'concluido' %}<p>{{ m.i('check') }}Resolução confirmada pela demandante.</p>
+    {% elif t.status == 'reaberto' %}<p>{{ m.i('x') }}A demandante indicou pendência: <b>{{ t.comentario_demandante }}</b>. Reatribua para continuar o atendimento.</p>
+    {% elif t.status == 'cancelado' %}<p><small>Chamado cancelado: não há validação.</small></p>
+    {% else %}<p><small>O link será disponibilizado quando o técnico marcar o chamado como Executado. Executado ≠ Concluído (resolução confirmada).</small></p>{% endif %}
   </article>
+
+  {# ---------- Cancelamento ---------- #}
+  {% if t.status in CANCELAVEIS %}
+  <details>
+    <summary><small>{{ m.i('circle-x') }}Cancelar chamado</small></summary>
+    <form method="post" action="/tarefa/{{ t.id }}/cancelar">
+      <fieldset role="group"><input name="motivo" required placeholder="Motivo (ex.: chamado duplicado do #12)">
+        <button class="secondary outline">Cancelar chamado</button></fieldset>
+    </form>
+  </details>
+  {% endif %}
 </div>
 
 <div>
   <article>
-    <header><strong>🕓 Linha do tempo (rastreabilidade)</strong></header>
+    <header><strong>{{ m.i('history') }}Linha do tempo (rastreabilidade)</strong></header>
     <ul class="timeline">
     {% for e in eventos %}
       <li><small>{{ e.criado_em|datahora }} · {{ e.usuario }} ({{ e.papel }})</small><br>
@@ -140,18 +183,18 @@
   </article>
   {% if t.origem != 'web' %}
   <article>
-    <header><strong>🔄 Sincronização com {{ SISTEMAS[t.origem].nome }}</strong></header>
+    <header><strong>{{ m.i('refresh-cw') }}Sincronização com {{ SISTEMAS[t.origem].nome }}</strong></header>
     <table><tbody>
     {% for o in outbox %}{% set p = o.payload|fromjson %}
       <tr><td><small>#{{ o.id }}</small></td><td>{{ p.status_label }}</td>
-        <td>{% if o.status == 'entregue' %}✔ entregue {{ o.entregue_em|hora }}{% else %}⏳ pendente ({{ o.tentativas }} tent.){% endif %}</td></tr>
+        <td>{% if o.status == 'entregue' %}{{ m.i('check') }}entregue {{ o.entregue_em|hora }}{% else %}{{ m.i('hourglass') }}pendente ({{ o.tentativas }} tent.){% endif %}</td></tr>
     {% endfor %}
     </tbody></table>
   </article>
   {% endif %}
   {% if pontos %}
   <article>
-    <header><strong>🏅 Pontuação gerada</strong></header>
+    <header><strong>{{ m.i('award') }}Pontuação gerada</strong></header>
     {% for p in pontos %}<p><small>{{ p.nome }}: <b>{{ '+' if p.pontos >= 0 }}{{ p.pontos }}</b> ({{ p.tipo }}) – {{ p.descricao }}</small></p>{% endfor %}
   </article>
   {% endif %}

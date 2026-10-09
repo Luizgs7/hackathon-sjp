@@ -1,5 +1,14 @@
+{% macro i(nome, cls='') -%}
+<svg class="i {{ cls }}" aria-hidden="true" focusable="false"><use href="/static/icones.svg#{{ nome }}"/></svg>
+{%- endmacro %}
+
+{% macro avatar(nome, tam='') -%}
+{% set partes = (nome or '?').split() %}
+<span class="avatar {{ tam }} av-{{ (nome or '')|length % 4 }}" aria-hidden="true">{{ partes[0][0] }}{{ partes[-1][0] if partes|length > 1 }}</span>
+{%- endmacro %}
+
 {% macro status(s) -%}
-<span class="st st-{{ s }}">{{ STATUS[s][0] }} {{ STATUS[s][1] }}</span>
+<span class="st st-{{ s }}">{{ i(STATUS[s][0]) }}{{ STATUS[s][1] }}</span>
 {%- endmacro %}
 
 {% macro prio(p) -%}
@@ -7,26 +16,26 @@
 {%- endmacro %}
 
 {% macro fonte(f) -%}
-{% if f == 'llm' %}<span class="selo" title="Modelo {{ LLM_MODEL }} via endpoint externo de testes">🤖 IA (LLM)</span>
-{% elif f == 'regras' %}<span class="selo selo-regras" title="LLM indisponível — fallback determinístico">⚙️ sugestão por regras</span>{% endif %}
+{% if f == 'llm' %}<span class="selo" title="Modelo {{ LLM_MODEL }} via endpoint externo de testes">{{ i('sparkles') }}IA (LLM)</span>
+{% elif f == 'regras' %}<span class="selo selo-regras" title="LLM indisponível — fallback determinístico">{{ i('settings') }}sugestão por regras</span>{% endif %}
 {%- endmacro %}
 
 {% macro nav_painel(u) -%}
 {% if 'atendente' in u.papeis %}<li><a href="/atendente">Atendimento</a></li>{% endif %}
 {% if 'gestor' in u.papeis %}<li><a href="/gestor">Painel</a></li><li><a href="/config">Configurar</a></li>{% endif %}
 <li><a href="/ranking">Ranking</a></li>
-<li><small>{{ u.avatar }} {{ u.nome }}</small> · <a href="/sair?area=painel">sair</a></li>
+<li class="usuario">{{ avatar(u.nome) }}<span>{{ u.nome }}</span><a href="/sair?area=painel" class="sair" title="Sair">{{ i('log-out') }}<span class="sr">Sair</span></a></li>
 {%- endmacro %}
 
 {% macro abas_gestor(ativa) -%}
 <div class="abas" role="navigation" aria-label="Seções do painel do gestor">
-  <a href="/gestor" {{ 'aria-current=page' if ativa == 'quadro' }}>📋 Quadro de missões</a>
-  <a href="/gestor/metricas" {{ 'aria-current=page' if ativa == 'metricas' }}>📈 Métricas e capacitação</a>
+  <a href="/gestor" {{ 'aria-current=page' if ativa == 'quadro' }}>{{ i('square-kanban') }}Quadro de missões</a>
+  <a href="/gestor/metricas" {{ 'aria-current=page' if ativa == 'metricas' }}>{{ i('chart-line') }}Métricas e capacitação</a>
 </div>
 {%- endmacro %}
 
 {% macro solicitante(t) -%}
-🙋 {{ t.solicitante or t.nome }}{% if t.secretaria %} · 🏛️ {{ t.secretaria }}{% endif %}{% if t.email %} · ✉️ <a href="mailto:{{ t.email }}">{{ t.email }}</a>{% endif %}{% if t.contato %} · ☎️ {{ t.contato }}{% endif %}
+{{ i('user') }}{{ t.solicitante or t.nome }}{% if t.secretaria %} · {{ i('landmark') }}{{ t.secretaria }}{% endif %}{% if t.email %} · {{ i('mail') }}<a href="mailto:{{ t.email }}">{{ t.email }}</a>{% endif %}{% if t.contato %} · {{ i('phone') }}{{ t.contato }}{% endif %}
 {%- endmacro %}
 
 {% macro campos_solicitante(nome='', email='', secretaria='', contato=None, nome_campo='solicitante') -%}
@@ -42,4 +51,8 @@
     </select></label>
   {% if contato is not none %}<label>Telefone/ramal <input name="contato" autocomplete="tel" value="{{ contato }}"></label>{% endif %}
 </div>
+{%- endmacro %}
+
+{% macro nav_servidor() -%}
+<li><a href="/servidor">Assistente</a></li><li><a href="/servidor/solicitar">Abrir solicitação</a></li><li><a href="/meus-chamados">Meus chamados</a></li>
 {%- endmacro %}

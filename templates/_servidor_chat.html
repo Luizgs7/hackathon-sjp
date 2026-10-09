@@ -1,16 +1,17 @@
+{% import "_macros.html" as m %}
 {% for c in conversa %}
-<div class="msg {{ c.autor }}">{% if c.autor == 'assistente' %}<small>🤖 Assistente{{ ' (orientações padrão)' if c.fonte == 'regras' }}</small>
+<div class="msg {{ c.autor }}">{% if c.autor == 'assistente' %}<small>{{ m.i('sparkles') }}Assistente{{ ' (orientações padrão)' if c.fonte == 'regras' }}</small>
 {% endif %}{{ c.texto }}</div>
 {% else %}
-<div class="msg assistente auto-vazio"><small>🤖 Assistente</small>
+<div class="msg assistente auto-vazio"><small>{{ m.i('sparkles') }}Assistente</small>
 Como posso ajudar? Escolha um dos exemplos abaixo ou descreva o problema com suas palavras.</div>
 {% endfor %}
-<div id="digitando" class="msg assistente htmx-indicator"><small>🤖 Assistente</small> digitando…</div>
+<div id="digitando" class="msg assistente htmx-indicator"><small>{{ m.i('sparkles') }}Assistente</small> digitando…</div>
 {% if conversa %}
 <div class="auto-acoes">
-  <form method="post" action="/servidor/resolvido"><button class="btn-ok">✔ Resolvido, obrigado!</button></form>
-  <a href="/servidor/solicitar?via=ia" role="button">📝 Não resolveu: abrir solicitação</a>
-  <form method="post" action="/servidor/nova"><button class="secondary outline">↺ Nova conversa</button></form>
+  <form method="post" action="/servidor/resolvido"><button class="btn-ok">{{ m.i('check') }}Resolvido, obrigado!</button></form>
+  <a href="/servidor/solicitar?via=ia" role="button">{{ m.i('file-pen-line') }}Não resolveu: abrir solicitação</a>
+  <form method="post" action="/servidor/nova"><button class="secondary outline">{{ m.i('rotate-ccw') }}Nova conversa</button></form>
 </div>
 {% endif %}
 <script>(() => { const c = document.getElementById('conversa'); if (c) c.scrollTop = c.scrollHeight; })();</script>

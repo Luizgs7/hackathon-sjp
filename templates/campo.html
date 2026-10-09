@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Minhas missões · Missões SJP{% endblock %}
 {% block body_class %}campo{% endblock %}
-{% block nav %}<li><a href="/ranking">🏆</a></li><li><small>{{ u.avatar }} {{ u.nome.split()[0] }}</small> · <a href="/sair?area=campo">sair</a></li>{% endblock %}
+{% block nav %}<li><a href="/ranking" title="Ranking">{{ m.i('trophy') }}<span class="sr">Ranking</span></a></li><li class="usuario">{{ m.avatar(u.nome) }}<span>{{ u.nome.split()[0] }}</span><a href="/sair?area=campo" class="sair" title="Sair">{{ m.i('log-out') }}<span class="sr">Sair</span></a></li>{% endblock %}
 {% block main %}
 <div id="banner" class="banner-nova" hidden role="alert"></div>
 <div id="push-box">
-  <button id="btn-push" class="outline" style="width:100%">🔔 Ativar notificações de novas missões</button>
+  <button id="btn-push" class="outline" style="width:100%">{{ m.i('bell') }}Ativar notificações de novas missões</button>
 </div>
 <div id="lista" hx-get="/campo/lista" hx-trigger="load, every 3s"></div>
 <script>
@@ -17,7 +17,7 @@
     const v = Number(el.dataset.ultima);
     if (ultima !== null && v > ultima) {
       const b = document.getElementById('banner');
-      b.textContent = '🛡️ Nova missão recebida! Toque para abrir.';
+      b.textContent = 'Nova missão recebida! Toque para abrir.';
       b.hidden = false; b.onclick = () => location.href = '/campo/' + v;
       if (navigator.vibrate) navigator.vibrate(200);
     }
@@ -31,14 +31,14 @@
   async function ativarPush() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) { btn.textContent = 'Push não suportado neste navegador — use o aviso na tela'; return; }
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') { btn.textContent = '🔕 Permissão negada — libere as notificações do site'; return; }
+    if (perm !== 'granted') { btn.textContent = 'Permissão negada — libere as notificações do site'; return; }
     const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
     await navigator.serviceWorker.ready;
     const { chave } = await (await fetch('/api/push/chave')).json();
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToUint8(chave) });
     await fetch('/api/push/inscrever', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) });
-    btn.textContent = '🔔 Notificações ativas — enviar teste';
+    btn.textContent = 'Notificações ativas — enviar teste';
     btn.onclick = () => fetch('/api/push/teste', { method: 'POST' });
   }
   btn.onclick = () => ativarPush().catch(err => { btn.textContent = 'Falha ao ativar push: ' + err.message; });

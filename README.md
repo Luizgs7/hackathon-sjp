@@ -1,7 +1,8 @@
 # 🛡️ Missões SJP — protótipo (Hackathon SJP / SIMOT)
 
 Plataforma genérica de acompanhamento e execução de tarefas, com gamificação ("Guardiões de SJP") e IA.
-O Help Desk de TI é o exemplo. A mesma estrutura atende Manutenção Predial, vistorias e outros setores.
+Os chamados de TI são segmentados em 6 **áreas**: Help Desk, Suporte Técnico, Telecom, Datacenter, Telefonia e Fábrica de Software.
+Status oficiais: **Novo → Encaminhado → Executado → Concluído**, com **Devolvido** (o técnico devolve à triagem), **Reaberto** (a demandante indica pendência) e **Cancelado**. Enquanto está Encaminhado, o técnico registra as etapas de campo (a caminho, em execução, impedido).
 Plano de referência: [`../sdd/plano-prototipo-1h.md`](../sdd/plano-prototipo-1h.md).
 
 ## Como rodar
@@ -41,21 +42,23 @@ O painel web (atendente/gestor) e o campo (executor) usam **sessões separadas**
    - tipo e criticidade **P2**, com justificativa;
    - informações faltantes;
    - executor sugerido (Rafael), com o motivo.
-3. Paula abre o card, **confere** os campos (pré-preenchidos pela IA e editáveis) e clica em **Atribuir missão**.
+3. Paula abre o card, **confere** os campos (pré-preenchidos pela IA e editáveis) e clica em **Encaminhar**.
 4. **Executor** (outra aba → Rafael Costa → *Ativar notificações*): recebe o **push**, toca em **Aceitar e ir ao local** e depois em **Cheguei — iniciar atendimento**.
 5. Rafael pergunta ao **Copiloto de campo**: "o ponto está sem link e o LED do switch apagado". A IA responde com o passo a passo do procedimento PR-TI-07.
 6. Ele reporta o **impedimento** "Falta de material", com foto. O relógio do SLA pausa.
-7. Paula vê o card na faixa **⛔ Impedidas**, lê a sugestão da IA ("acionar Almoxarifado"), registra a providência com **apoio do Bruno** e libera o executor.
-8. Rafael **conclui** com relato e foto e ganha **pontos provisórios**. A IA reescreve o relato para a demandante.
+7. Paula vê o card na faixa **⛔ Impedidos**, lê a sugestão da IA ("acionar Almoxarifado"), registra a providência com **apoio do Diego** e libera o executor.
+8. Rafael marca como **Executado**, com relato e foto, e ganha **pontos provisórios**. A IA reescreve o relato para a demandante.
 9. **Demandante**: na tarefa, Paula clica em *Abrir link da demandante*. Ana marca **✔ Resolvido** e dá ★★★★★.
-10. O **legado** mostra todo o histórico e "Resolvida – confirmada". O **ranking** mostra os pontos definitivos e as medalhas, e os **indicadores** são atualizados.
+10. O **legado** mostra todo o histórico e "Concluído". O **ranking** mostra os pontos definitivos e as medalhas, e os **indicadores** são atualizados.
 
 **Variantes:**
-- ✖ *Ainda com problema*: a tarefa volta como 🔁 **Reaberta** no painel e os pontos ficam suspensos.
+- ✖ *Ainda com problema*: o chamado volta como 🔁 **Reaberto** no painel e os pontos ficam suspensos.
 - No legado, **Simular sistema fora do ar**: as atualizações ficam ⏳ pendentes (veja em *Configurar*) e sincronizam ao religar.
 - **Reenviar** um chamado no legado não cria duplicata.
-- Cadastro direto em *Atendimento* para **Manutenção Predial** (setor sem legado).
-- *Configurar*: regras de pontuação, setores, equipes, tipos e **nova temporada** (placar zera, histórico preservado).
+- Cadastro direto em *Atendimento*, escolhendo a área responsável.
+- O técnico pode **↩️ Devolver à triagem** (falta informação, outra área…); o gestor reencaminha.
+- Atendente ou gestor podem **🚫 Cancelar** o chamado, com motivo.
+- *Configurar*: regras de pontuação, áreas, equipes, tipos e **nova temporada** (placar zera, histórico preservado).
 
 ## Requisitos inegociáveis: onde estão
 

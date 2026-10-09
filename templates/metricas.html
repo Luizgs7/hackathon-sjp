@@ -8,7 +8,7 @@
   <form method="get" action="/gestor/metricas" onchange="this.submit()">
     <select name="dias" aria-label="Período">{% for d, nome in periodos.items() %}
       <option value="{{ d }}" {{ 'selected' if d == mt.dias }}>{{ nome }}</option>{% endfor %}</select>
-    <select name="setor_id" aria-label="Setor responsável"><option value="">Todos os setores</option>{% for s in setores %}
+    <select name="setor_id" aria-label="Área responsável"><option value="">Todas as áreas</option>{% for s in setores %}
       <option value="{{ s.id }}" {{ 'selected' if s.id == setor_id }}>{{ s.nome }}</option>{% endfor %}</select>
     <noscript><button>Filtrar</button></noscript>
   </form>
@@ -16,14 +16,15 @@
 <p><small>Desde {{ mt.inicio }} (semanas de segunda a domingo). Passe o mouse sobre os números e gráficos para ver detalhes.</small></p>
 
 <section class="kpis" aria-label="Indicadores do período">
-  <div class="kpi" title="Chamados abertos no período"><b>{{ mt.abertos }}</b><small>📥 abertos</small></div>
-  <div class="kpi" title="Chamados abertos no período com resolução confirmada pela demandante"><b>{{ mt.resolvidos }}</b><small>🏆 resolvidos</small></div>
-  <div class="kpi" title="Média entre a abertura e a confirmação da demandante"><b>{{ mt.horas_media|duracao }}</b><small>⏱️ tempo médio de resolução</small></div>
-  <div class="kpi" title="Resolvidos dentro do SLA da criticidade (tempo líquido entre atribuição e conclusão, sem impedimentos externos)"><b>{{ mt.sla|dec(0) }}{{ '%' if mt.sla is not none }}</b><small>🎯 dentro do SLA</small></div>
-  <div class="kpi" title="Média das notas 1–5 dadas pelas demandantes ({{ mt.n_notas }} avaliações)"><b>{{ mt.csat|dec }}{{ '★' if mt.csat }}</b><small>😊 satisfação</small></div>
-  <div class="kpi" title="Resolvidos que precisaram ser reabertos ao menos uma vez"><b>{{ mt.reabertura|dec(0) }}{{ '%' if mt.reabertura is not none }}</b><small>🔁 reabertura</small></div>
-  <div class="kpi" title="Chamados em que a criticidade final é igual à sugerida pela IA ({{ mt.ajustes_ia }} ajustados manualmente)"><b>{{ mt.concordancia_ia|dec(0) }}{{ '%' if mt.concordancia_ia is not none }}</b><small>🤖 criticidade igual à IA</small></div>
-  <div class="kpi" title="Conversas do autoatendimento que o servidor marcou como resolvidas (chamados evitados)"><b>{{ mt.auto_resolvidos }}</b><small>💬 evitados pelo assistente</small></div>
+  <div class="kpi" title="Chamados abertos no período"><b>{{ mt.abertos }}</b><small>{{ m.i('inbox') }}abertos</small></div>
+  <div class="kpi" title="Chamados abertos no período com resolução confirmada pela demandante"><b>{{ mt.resolvidos }}</b><small>{{ m.i('trophy') }}resolvidos</small></div>
+  <div class="kpi" title="Média entre a abertura e a confirmação da demandante"><b>{{ mt.horas_media|duracao }}</b><small>{{ m.i('timer') }}tempo médio de resolução</small></div>
+  <div class="kpi" title="Resolvidos dentro do SLA da criticidade (tempo líquido entre atribuição e conclusão, sem impedimentos externos)"><b>{{ mt.sla|dec(0) }}{{ '%' if mt.sla is not none }}</b><small>{{ m.i('target') }}dentro do SLA</small></div>
+  <div class="kpi" title="Média das notas 1–5 dadas pelas demandantes ({{ mt.n_notas }} avaliações)"><b>{{ mt.csat|dec }}{{ '★' if mt.csat }}</b><small>{{ m.i('smile') }}satisfação</small></div>
+  <div class="kpi" title="Resolvidos que precisaram ser reabertos ao menos uma vez"><b>{{ mt.reabertura|dec(0) }}{{ '%' if mt.reabertura is not none }}</b><small>{{ m.i('rotate-ccw') }}reabertura</small></div>
+  <div class="kpi" title="Chamados em que a criticidade final é igual à sugerida pela IA ({{ mt.ajustes_ia }} ajustados manualmente)"><b>{{ mt.concordancia_ia|dec(0) }}{{ '%' if mt.concordancia_ia is not none }}</b><small>{{ m.i('sparkles') }}criticidade igual à IA</small></div>
+  <div class="kpi" title="Resolvidos pelo próprio atendimento, sem acionar o time técnico"><b>{{ mt.nivel1|dec(0) }}{{ '%' if mt.nivel1 is not none }}</b><small>{{ m.i('message-circle') }}resolvidos no atendimento</small></div>
+  <div class="kpi" title="Conversas do autoatendimento que o servidor marcou como resolvidas (chamados evitados)"><b>{{ mt.auto_resolvidos }}</b><small>{{ m.i('message-circle') }}evitados pelo assistente</small></div>
 </section>
 
 <div class="grade-graf">
@@ -77,7 +78,7 @@
 <div class="grade-graf">
   {# ---------- Volume por secretaria ---------- #}
   <article>
-    <header><strong>🏛️ Chamados por secretaria</strong><br><small>Quem mais demanda atendimento no período</small></header>
+    <header><strong>{{ m.i('landmark') }}Chamados por secretaria</strong><br><small>Quem mais demanda atendimento no período</small></header>
     <div class="barras-h">
     {% for d in mt.secretarias %}
       <div class="barra-h" title="{{ d.nome }}: {{ d.n }} chamados · tempo médio {{ d.horas_media|duracao }} · satisfação {{ d.csat|dec }}">
@@ -91,12 +92,12 @@
 
   {# ---------- Produtividade por executor ---------- #}
   <article>
-    <header><strong>👷 Produtividade do time</strong><br><small>Missões resolvidas no período e qualidade da entrega</small></header>
+    <header><strong>{{ m.i('hard-hat') }}Produtividade do time</strong><br><small>Missões resolvidas no período e qualidade da entrega</small></header>
     <div class="tabela-rolavel">
     <table class="tab-num">
       <thead><tr><th>Executor</th><th>Resolvidas</th><th>Tempo médio</th><th>Satisfação</th><th>Reaberturas</th><th>Ativas agora</th></tr></thead>
       <tbody>{% for d in mt.executores %}
-        <tr><td>{{ d.avatar }} {{ d.nome }}</td>
+        <tr><td class="pessoa">{{ m.avatar(d.nome, 'p') }}{{ d.nome }}</td>
           <td><span class="mini-barra" style="width:{{ (48 * d.n / mt.max_exec)|round }}px"></span> {{ d.n }}</td>
           <td>{{ d.horas_media|duracao }}</td><td>{{ d.csat|dec }}{{ '★' if d.csat }}</td>
           <td>{{ d.reab }}</td><td>{{ d.ativos }}</td></tr>
@@ -108,7 +109,7 @@
 
 {# ---------- Recorrência secretaria × tipo ---------- #}
 <article>
-  <header><strong>🔥 Recorrência: secretaria × tipo de chamado</strong><br>
+  <header><strong>{{ m.i('flame') }}Recorrência: secretaria × tipo de chamado</strong><br>
     <small>Quanto mais escura a célula, mais chamados. Concentrações indicam onde uma ação de capacitação ou prevenção rende mais.</small></header>
   <div class="tabela-rolavel">
   <table class="calor">
@@ -124,12 +125,12 @@
 
 {# ---------- Análise por IA ---------- #}
 <article class="ia">
-  <header><strong>🎓 Oportunidades de capacitação por secretaria</strong> <span class="selo">🤖 análise por IA</span><br>
+  <header><strong>{{ m.i('graduation-cap') }}Oportunidades de capacitação por secretaria</strong> <span class="selo">{{ m.i('sparkles') }}análise por IA</span><br>
     <small>A IA cruza a recorrência e os tipos de chamado de cada secretaria e sugere ações em massa (treinamentos, tutoriais,
       comunicados, prevenção) para reduzir a demanda futura. As sugestões apoiam a decisão; não são aplicadas automaticamente.</small></header>
   <form hx-post="/gestor/metricas/analise" hx-target="#analise" hx-swap="innerHTML" style="margin-bottom:.75rem">
     <input type="hidden" name="dias" value="{{ mt.dias }}">
-    <button class="secondary" style="width:auto">{{ '🔄 Gerar nova análise' if analise and analise.acoes else '✨ Gerar análise' }} ({{ periodos[mt.dias]|lower }})</button>
+    <button class="secondary" style="width:auto">{{ m.i('sparkles') }}{{ 'Gerar nova análise' if analise and analise.acoes else 'Gerar análise' }} ({{ periodos[mt.dias]|lower }})</button>
   </form>
   <div id="analise">{% include "_analise.html" %}</div>
 </article>

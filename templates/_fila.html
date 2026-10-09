@@ -1,0 +1,28 @@
+{% import "_macros.html" as m %}
+{% if fila %}
+<div class="fila">
+{% for x in fila %}{% set t = x.t %}{% set ia = x.ia %}
+  <a class="fila-item" href="/tarefa/{{ t.id }}">
+    <div class="fila-prio">{{ m.prio(x.prio) }}<small title="Tempo aguardando na fila">{{ m.i('timer') }}{{ x.minutos|espera }}</small></div>
+    <div class="fila-corpo">
+      <div class="fila-topo">
+        <span class="protocolo">{{ t.external_id or ('#' ~ t.id) }}</span>{{ m.status(t.status) }}
+        {% if t.origem != 'web' %}<span class="selo">{{ m.i('link') }}{{ SISTEMAS[t.origem].nome }}</span>{% endif %}
+      </div>
+      <h4>{{ t.titulo }}</h4>
+      <small>{{ m.i('user') }}{{ t.solicitante or '—' }}{% if t.secretaria %} · {{ t.secretaria }}{% endif %} · {{ m.i('map-pin') }}{{ t.local or '—' }}</small>
+    </div>
+    <div class="fila-ia">
+      {% if t.ia_status == 'analisando' %}<span class="selo" aria-busy="true">IA analisando…</span>
+      {% elif ia %}
+        {% if ia.resolvivel_no_atendimento %}<span class="selo selo-n1">{{ m.i('message-circle') }}Resolver no atendimento</span>
+        {% else %}<span class="selo">{{ m.i('send') }}Encaminhar: {{ tipos[ia.tipo_id].area if ia.tipo_id in tipos else '—' }}</span>{% endif %}
+        <small>{{ ia.categoria }}{% if not ia.resolvivel_no_atendimento and ia.executor_id in execs %} · {{ execs[ia.executor_id] }}{% endif %}</small>
+      {% endif %}
+    </div>
+  </a>
+{% endfor %}
+</div>
+{% else %}
+<p class="vazio">{{ m.i('thumbs-up') }}Fila vazia: nenhum chamado aguardando avaliação.</p>
+{% endif %}

@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Abrir solicitação · Help Desk SJP{% endblock %}
-{% block nav %}<li><a href="/servidor">Assistente</a></li><li><a href="/servidor/solicitar">Abrir solicitação</a></li>{% endblock %}
+{% block nav %}{{ m.nav_servidor() }}{% endblock %}
 {% block main %}
-<p><a href="/servidor">← voltar ao assistente</a></p>
-<h2>📝 Solicitação de atendimento</h2>
+<p><a href="/servidor" class="voltar">{{ m.i('arrow-left') }}Voltar ao assistente</a></p>
+<h2>{{ m.i('file-pen-line') }}Solicitação de atendimento</h2>
 {% if via_ia %}
-<div class="aviso">🤖 Preenchi os campos com base na nossa conversa{{ ' (modo simplificado)' if fonte == 'regras' }}.
+<div class="aviso">{{ m.i('sparkles') }}Preenchi os campos com base na nossa conversa{{ ' (modo simplificado)' if fonte == 'regras' }}.
   Revise, complete seus dados e envie. A conversa também será enviada ao atendente.</div>
 {% else %}
 <p>Antes de enviar, que tal <a href="/servidor"><b>tentar o assistente virtual</b></a>? Muitos problemas se resolvem na hora.</p>
@@ -18,7 +18,7 @@
     <label>Assunto <input name="titulo" required maxlength="80" value="{{ r.titulo or '' }}"></label>
     <label>O que está acontecendo? <textarea name="descricao" required rows="4">{{ r.descricao or '' }}</textarea></label>
     <label>O que você já tentou? <input name="tentativas" value="{{ r.tentativas or '' }}" placeholder="Ex.: reiniciei o computador"></label>
-    <label>Tipo de atendimento
+    <label>Área de atendimento
       <select name="setor_id">{% for s in setores %}<option value="{{ s.id }}" {{ 'selected' if s.id == r.setor_id }}>{{ s.nome }}</option>{% endfor %}</select></label>
     <button class="btn-grande">Enviar solicitação</button>
     <small>Pela regra municipal, o chamado é registrado por um atendente, que confere estas informações e pode ligar para você.</small>
