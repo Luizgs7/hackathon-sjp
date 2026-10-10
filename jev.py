@@ -87,6 +87,7 @@ def route_conversation(messages, allowed_guidance):
             "Se a orientação já falhou, encaminhe ao Helpdesk. Qual é o próximo passo seguro?", {
                 "orientar": "Dúvida simples que pode receber orientação da base sem acesso privilegiado ou risco.",
                 "esclarecer": "Relato vago: precisa explicar o sintoma ou impacto antes de orientar.",
-                "helpdesk": "Orientação falhou ou exige técnico, acesso restrito, manutenção ou está fora da base.",
+                "helpdesk": "Problema de suporte municipal: orientação falhou ou exige técnico, acesso restrito, manutenção ou está fora da base de suporte.",
+                "fora_escopo": "Pedido alheio ao Helpdesk municipal, como receita culinária, entretenimento ou assunto pessoal. Recusar sem sugerir chamado.",
                 "risco": "Fogo, choque ou risco físico: afastar pessoas e encaminhar imediatamente.",
             })})

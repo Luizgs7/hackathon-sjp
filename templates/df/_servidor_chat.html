@@ -1,14 +1,19 @@
 {% import "df/_ui.html" as ui %}
+<input type="hidden" id="estado-chat" name="estado_chat" value="{{ estado_chat|default('') }}">
+{% if chamado_chat %}{% include 'df/_chat_status.html' %}{% endif %}
+{% if conversa_resolvida %}<span class="df-badge" data-conversa-resolvida="{{ conversa_id }}">Resolvida pelo assistente · sem chamado</span>{% endif %}
 {% for c in conversa %}
 <div class="df-bubble {{ 'me' if c.autor == 'servidor' else 'ia' }}">{% if c.autor == 'assistente' %}<small>{{ ui.icon('sparkle') }}Assistente{{ ' (orientações padrão)' if c.fonte == 'regras' }}</small>{% endif %}{{ c.texto }}</div>
 {% else %}
 <div class="df-bubble ia df-vazio"><small>{{ ui.icon('sparkle') }}Assistente</small>Como posso ajudar? Escolha um dos exemplos abaixo ou descreva o problema com suas palavras.</div>
 {% endfor %}
 <div id="digitando" class="df-bubble ia typing htmx-indicator" role="status"><small>{{ ui.icon('sparkle') }}Assistente</small>digitando…</div>
-{% if conversa %}
+{% if conversa and not conversa_resolvida %}
 <div class="df-chat-actions">
-  <form method="post" action="/servidor/resolvido" data-df-form>{{ ui.button('Resolvido, obrigado!', glyph='check') }}</form>
-  <a class="df-button df-secondary" href="/servidor/solicitar?via=ia"><span class="df-button-content">{{ ui.icon('note-pencil') }}Não resolveu: abrir solicitação</span></a>
-  <form method="post" action="/servidor/nova" data-df-form data-confirm="Iniciar uma nova conversa? A conversa atual será encerrada sem gerar solicitação." data-confirm-label="Nova conversa">{{ ui.button('Nova conversa', style='ghost', glyph='arrows-clockwise') }}</form>
+  {% if not chamado_chat and conversa[-1].fonte != 'fora_escopo' %}
+  <form method="post" action="/servidor/resolvido" data-df-form><input type="hidden" name="estado_chat" value="{{ estado_chat|default('') }}">{{ ui.button('Resolvido, obrigado!', size='small', style='secondary', glyph='check') }}</form>
+  {{ ui.button('Não resolveu: abrir solicitação', href='/servidor/solicitar?via=ia', size='small', style='secondary', glyph='note-pencil') }}
+  {% endif %}
+  <form method="post" action="/servidor/nova" data-df-form data-confirm="Iniciar uma nova conversa? Seus atendimentos continuam no dashboard." data-confirm-label="Nova conversa">{{ ui.button('Nova conversa', size='small', style='ghost', glyph='arrows-clockwise') }}</form>
 </div>
 {% endif %}

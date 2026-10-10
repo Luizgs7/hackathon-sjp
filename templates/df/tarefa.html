@@ -2,7 +2,7 @@
 {% import "df/_ui.html" as ui %}
 {% set nav_perfil = 'painel' %}
 {% set ativo = 'painel' if eh_gestor else 'atendimento' %}
-{% set has_list = true %}
+{% set has_list = 'gestor_tecnico' not in u.papeis %}
 {% set has_context = true %}
 {% set na_fila = t.status in ('novo', 'reaberto', 'devolvido') %}
 {% set sug = ia if (ia and t.ia_status == 'sugerida') else {} %}
@@ -71,6 +71,7 @@
     {% if setor %}<span>área <b>{{ setor.nome }}</b></span>{% endif %}{% if tipo %}<span>{{ tipo.nome }}</span>{% endif %}</p>
 </header>
 <div class="df-stack">
+{% if eh_gestor and t.executor_id %}{% set tid = t.id %}{% set token = "" %}{% include "df/_mapa.html" %}{% endif %}
   <section class="df-card" aria-labelledby="res-t">
     <h2 id="res-t">Resumo do chamado</h2>
     <p><b>Descrição:</b> <span class="df-prewrap">{{ t.descricao }}</span></p>
@@ -99,7 +100,7 @@
       <small>{{ 'Este chamado está na fila do atendimento. Resolva aqui mesmo ou encaminhe para a área técnica.' if na_fila else 'O técnico ainda não iniciou: dá para trocar a área ou o técnico.' }}</small>
     </header>
 
-    {% if na_fila %}
+    {% if na_fila and 'gestor_tecnico' not in u.papeis %}
     <details class="df-details"{% if sug.resolvivel_no_atendimento %} open{% endif %}>
       <summary><span>{{ ui.icon('chat-circle') }} Resolver no atendimento {% if sug.resolvivel_no_atendimento %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}IA recomenda</span>{% endif %}</span></summary>
       <div class="df-details-body">

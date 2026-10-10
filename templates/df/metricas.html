@@ -27,8 +27,9 @@
   {{ ui.kpi((mt.reabertura|dec(0)) ~ ('%' if mt.reabertura is not none else ''), 'reabertura', titulo='Resolvidos que precisaram ser reabertos ao menos uma vez') }}
   {{ ui.kpi((mt.concordancia_ia|dec(0)) ~ ('%' if mt.concordancia_ia is not none else ''), 'criticidade igual à IA', titulo='Criticidade final igual à sugerida pela IA (' ~ mt.ajustes_ia ~ ' ajustados manualmente)') }}
   {{ ui.kpi((mt.nivel1|dec(0)) ~ ('%' if mt.nivel1 is not none else ''), 'resolvidos no atendimento', titulo='Resolvidos pelo próprio atendimento, sem acionar o time técnico') }}
-  {{ ui.kpi(mt.auto_resolvidos, 'evitados pelo assistente', titulo='Conversas do autoatendimento que o servidor marcou como resolvidas') }}
+  {{ ui.kpi(mt.auto_ia_resolvidos, 'resolvidos com IA, sem chamado', titulo='Conversas iniciadas no período e confirmadas pelo solicitante, com respostas de IA e sem orientações padrão; indicador global, independente da área dos chamados') }}
 </section>
+<p class="df-muted"><small>Autoatendimento: {{ mt.auto_resolvidos }} resolvidos sem chamado; {{ mt.auto_ia_resolvidos }} com IA e {{ mt.auto_resolvidos - mt.auto_ia_resolvidos }} com orientações padrão. Contagem por conversa, mediante confirmação do solicitante. Conversas iniciadas no período; indicador global, independente do filtro de área.</small></p>
 
 <div class="df-grid-eq">
   {% set L = mt.linhas %}

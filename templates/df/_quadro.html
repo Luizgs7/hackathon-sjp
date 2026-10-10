@@ -12,7 +12,7 @@
   {{ ui.kpi(ind.tempo_confirmacao, 'até confirmar', titulo="Média entre 'Executado' (técnico) e 'Concluído' (confirmação da demandante)") }}
   {{ ui.kpi(ind.csat, 'satisfação', titulo='Média das notas 1–5 dadas pelos demandantes (quantidade entre parênteses)') }}
   {{ ui.kpi(ind.reaberturas, 'reaberturas', titulo='Soma de reaberturas por pendência indicada pela demandante') }}
-  {{ ui.kpi(ind.auto_resolvidos, 'resolvidos pelo assistente', titulo="Conversas do autoatendimento em que o servidor marcou 'Resolvido' (chamados evitados)") }}
+  {{ ui.kpi(ind.auto_ia_resolvidos, 'resolvidos com IA, sem chamado', titulo="Resolução confirmada pelo solicitante, com respostas de IA e sem orientações padrão. Não inclui resolução do Helpdesk.") }}
   {{ ui.kpi(ind.solicitacoes_aguardando, 'solicitações a registrar', titulo='Solicitações de servidores aguardando conferência e registro pelo atendente') }}
   {{ ui.kpi(ind.outbox_pendente, 'sincronização pendente', ind.outbox_pendente, 'Atualizações aguardando entrega ao sistema de origem (outbox)') }}
 </section>
@@ -38,6 +38,11 @@
   {% else %}<small>Nenhum chamado impedido.</small>{% endif %}
 </section>
 
+<div class="df-board-nav" data-board-nav>
+  <button type="button" class="df-button df-secondary df-size-sm" data-board-dir="-1" aria-label="Coluna anterior"><span class="df-button-content">{{ ui.icon('caret-left') }}Anterior</span></button>
+  <small class="df-muted" data-board-pos role="status"></small>
+  <button type="button" class="df-button df-secondary df-size-sm" data-board-dir="1" aria-label="Próxima coluna"><span class="df-button-content">Próxima{{ ui.icon('caret-right') }}</span></button>
+</div>
 <div class="df-board" role="region" aria-label="Quadro de chamados por estado" tabindex="0">
   {% for s in STATUS_OFICIAIS %}
   <section class="df-board-col" aria-labelledby="col-{{ s }}">

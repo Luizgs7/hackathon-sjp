@@ -3,11 +3,12 @@
    has_list / has_context: colunas opcionais (lista à esquerda, contexto à direita), como nos quadros do Figma. #}
 {% set nav_perfil = nav_perfil|default('publico') %}
 {% set papeis = (u.papeis.split(',') if u else []) %}
+{% set gestor_tecnico = 'gestor_tecnico' in papeis %}
 {% set nav = [] %}
 {% if nav_perfil == 'painel' %}
-  {% set _ = nav.append(('atendimento', '/atendente', 'Atendimento', 'tray')) %}
-  {% if 'gestor' in papeis %}
-    {% set _ = nav.append(('painel', '/gestor', 'Painel', 'squares-four')) %}
+  {% if not gestor_tecnico %}{% set _ = nav.append(('atendimento', '/atendente', 'Atendimento', 'tray')) %}{% endif %}
+  {% if 'gestor' in papeis or gestor_tecnico %}
+    {% set _ = nav.append(('painel', '/gestor', 'Equipes técnicas' if gestor_tecnico else 'Painel', 'squares-four')) %}
     {% set _ = nav.append(('metricas', '/gestor/metricas', 'Métricas', 'chart-bar')) %}
   {% endif %}
   {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy-fill')) %}
@@ -16,6 +17,7 @@
   {% set _ = nav.append(('missoes', '/campo', 'Missões', 'list-checks')) %}
   {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy-fill')) %}
 {% else %}
+  {% set _ = nav.append(('dashboard', '/servidor/dashboard', 'Dashboard', 'squares-four')) %}
   {% set _ = nav.append(('assistente', '/servidor', 'Assistente', 'chat-circle')) %}
   {% set _ = nav.append(('solicitar', '/servidor/solicitar', 'Solicitar', 'note-pencil')) %}
   {% set _ = nav.append(('chamados', '/meus-chamados', 'Acompanhar', 'list-checks')) %}
@@ -27,9 +29,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}Help Desk SJP{% endblock %} · DataForge</title>
+  {% include "df/_clarity.html" %}
   <script>try{var c=localStorage.getItem('dataforge.theme')||'system';var d=c==='dark'||(c==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}</script>
   <link rel="stylesheet" href="/static/ui/library.css">
-  <link rel="stylesheet" href="/static/ui/app.css">
+  <link rel="stylesheet" href="/static/ui/app.css?v=20261010-fluid">
   <script src="/static/htmx.min.js" defer></script>
 </head>
 <body class="df-ui df-app{{ ' df-bare' if bare }}" data-theme="light">
@@ -57,8 +60,10 @@
         <a class="df-brand-mobile" href="/" aria-label="Help Desk SJP: início"><span class="df-brand-name">Help Desk SJP</span><span class="df-page-name">{% block page_name %}{{ self.title() }}{% endblock %}</span></a>
       </div>
       <details class="df-usermenu" data-menu>
-        <summary aria-label="Menu do usuário">{% if u %}{{ ui.avatar(u.nome, 'sm') }}<b>{{ u.nome.split()[0] }}</b>{% else %}{{ ui.avatar('Visitante', 'sm') }}<b>Visitante</b>{% endif %}</summary>
+        <summary aria-label="Menu do usuário">{% if u %}{{ ui.avatar(u.nome, 'sm') }}<b>{{ u.nome.split()[0] }}</b>{% elif solicitante_demo %}{{ ui.avatar(solicitante_demo.nome, 'sm') }}<b>{{ solicitante_demo.nome }}</b>{% else %}{{ ui.avatar('Visitante', 'sm') }}<b>Visitante</b>{% endif %}</summary>
         <div class="df-menu-panel">
+          {% if gestor_tecnico %}<p><strong>{{ u.nome }}</strong><br><small>Gestor técnico</small></p>{% elif u and 'gestor' in papeis %}<p><strong>{{ u.nome }}</strong><br><small>Gestor do atendimento</small></p>{% endif %}
+          {% if solicitante_demo and not u %}<p><strong>{{ solicitante_demo.nome }}</strong><br><small>Solicitante fictício · Secretaria de {{ solicitante_demo.secretaria }}</small></p>{% endif %}
           <div class="df-stack-sm"><small>Tema da interface</small>
             <div class="df-strip" role="group" aria-label="Tema da interface">
               <button type="button" class="df-chip" data-theme-choice="light" aria-pressed="false">{{ ui.icon('sun') }}Claro</button>
@@ -68,6 +73,8 @@
           </div>
           {% if u %}
           <a class="df-button df-secondary" href="/sair?area={{ 'campo' if nav_perfil == 'campo' else 'painel' }}"><span class="df-button-content">Sair</span></a>
+          {% elif solicitante_demo %}
+          <a class="df-button df-secondary" href="/meus-chamados-sair"><span class="df-button-content">Sair do perfil de exemplo</span></a>
           {% else %}
           <a class="df-button df-primary" href="/login"><span class="df-button-content">Entrar</span></a>
           {% endif %}
@@ -85,6 +92,7 @@
 <div class="df-toasts" aria-live="polite"></div>
 <script src="/static/ui/library.js"></script>
 <script src="/static/ui/app.js"></script>
+<script src="/static/ui/chat-history.js?v=20261010"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

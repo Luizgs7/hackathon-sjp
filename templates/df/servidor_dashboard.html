@@ -1,0 +1,29 @@
+{% extends 'df/_base.html' %}
+{% import 'df/_ui.html' as ui %}
+{% set nav_perfil = 'publico' %}
+{% set ativo = 'dashboard' %}
+{% block title %}Dashboard{% endblock %}
+{% block main %}
+<div class="df-page-head"><div><h1>Seus atendimentos</h1><p>Solicitações, chamados e conversas em um só lugar.</p></div>{{ ui.button('Novo atendimento',href='/servidor',glyph='chat-circle') }}</div>
+<section class="df-kpis df-kpis-4" aria-label="Resumo dos seus atendimentos">
+  <div class="df-stat-tile"><small>Solicitações enviadas</small><b>{{ solicitacoes|length }}</b></div>
+  <div class="df-stat-tile"><small>Chamados registrados</small><b>{{ chamados|length }}</b></div>
+  <div class="df-stat-tile"><small>Conversas</small><b>{{ conversas|length }}</b></div>
+  <div class="df-stat-tile"><small>Resolvidas sem chamado</small><b>{{ conversas|selectattr('resolvido')|rejectattr('solicitacao_id')|list|length }}</b></div>
+</section>
+<section class="df-card df-stack"><h2>Solicitações e chamados</h2>
+{% for s in solicitacoes %}
+<a class="df-list-item" href="/servidor/acompanhar/{{ s.token }}"><b>{{ s.protocolo }} · {{ s.titulo }}</b><small>{{ STATUS[s.tarefa_status][1] if s.tarefa_status else ('Aguardando Helpdesk' if s.status == 'aguardando' else s.status) }} · {{ s.criado_em|datahora }}</small></a>
+{% else %}<p class="df-muted">Você ainda não enviou solicitações.</p>{% endfor %}
+{{ ui.button('Acompanhar todos os chamados',href='/meus-chamados',style='secondary',size='small') }}
+</section>
+<section class="df-card df-stack"><h2>Chamados</h2>
+{% for t in chamados %}<a class="df-list-item" href="/validar/{{ t.token }}"><b>#{{ t.id }} · {{ t.titulo }}</b><small>{{ STATUS[t.status][1] }} · {{ t.criado_em|datahora }}</small></a>
+{% else %}<p class="df-muted">Nenhum chamado registrado ainda.</p>{% endfor %}
+</section>
+<section class="df-card df-stack"><h2>Conversas</h2>
+{% for c in conversas %}
+<a class="df-list-item" href="/servidor/conversas/{{ c.token }}"><b>{{ c.titulo or 'Conversa com o assistente' }}</b><small>{{ c.protocolo if c.protocolo else ('Resolvida sem chamado' if c.resolvido else 'Conversa iniciada') }} · {{ c.criado_em|datahora }}</small></a>
+{% else %}<p class="df-muted">Suas conversas aparecerão aqui após falar com o assistente.</p>{% endfor %}
+</section>
+{% endblock %}

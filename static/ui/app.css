@@ -17,8 +17,8 @@
 .df-topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 56px; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
 .df-topbar .df-brand-mobile { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--text); text-decoration: none; min-width: 0; }
 .df-topbar-title { font-weight: 600; font-size: 16px; margin: 0; text-align: center; flex: 1; }
-.df-main { width: 100%; max-width: 1080px; margin: 0 auto; padding: 20px 16px 96px; display: grid; gap: 20px; align-content: start; flex: 1; }
-.df-main.df-main-wide { max-width: 1320px; }
+.df-main { width: 100%; max-width: none; margin: 0; padding: 20px 16px 96px; display: grid; gap: 20px; align-content: start; flex: 1; }
+.df-main.df-main-wide { max-width: none; }
 .df-main.df-main-flush { padding: 0; gap: 0; max-width: none; }
 .df-context-col { grid-area: context; background: var(--surface); border-top: 1px solid var(--border); padding: 16px 16px 96px; display: grid; gap: 16px; align-content: start; }
 .df-list-col { position: fixed; z-index: 60; inset: 0 auto 0 0; width: min(340px, 90vw); transform: translateX(-104%); visibility: hidden; transition: transform .2s ease, visibility .2s; background: var(--subtle); border-right: 1px solid var(--border); overflow: auto; padding: 20px 16px; display: grid; gap: 12px; align-content: start; }
@@ -31,6 +31,7 @@
 .df-list-item[aria-current=true], .df-list-item[aria-current=page] { background: var(--df-brand-semantic-primary-subtle); border-color: transparent; }
 .df-list-item b { font-weight: 600; overflow-wrap: anywhere; }
 .df-list-item small { color: var(--muted); }
+.df-history-item { text-align: left; font: inherit; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { .df-list-col { transition: none; } }
 @media (min-width: 768px) {
   .df-shell { grid-template-columns: 80px minmax(0, 1fr); grid-template-areas: "nav main" "nav context"; }
@@ -126,6 +127,10 @@
 .df-form-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .df-form-actions.df-end { justify-content: flex-end; }
 .df-ui .df-field input:not([type=checkbox],[type=radio]), .df-ui .df-field select, .df-ui .df-field textarea { border-color: var(--df-brand-semantic-border-input); }
+.df-app .df-field > select:not([multiple]) { appearance: none; padding-right: 44px; grid-area: 2 / 1; }
+.df-app .df-field:has(> select:not([multiple]))::after { content: ""; grid-area: 2 / 1; justify-self: end; align-self: center; margin-right: 16px; width: 16px; height: 16px; background: var(--muted); pointer-events: none; mask: url("data:image/svg+xml,%3Csvg xmlns='http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat; }
+.df-app .df-filters { --df-control-height: 48px; }
+.df-ui.df-app .df-filters :is(input:not([type=checkbox],[type=radio]), select, .df-button) { height: var(--df-control-height); min-height: var(--df-control-height); box-sizing: border-box; }
 .df-ui .df-button[data-busy] { position: relative; }
 .df-ui .df-button[data-busy] .df-button-content { visibility: hidden; }
 .df-form-error { display: none; }
@@ -264,7 +269,9 @@ a.df-item-card:hover { border-color: var(--primary); }
 .df-composer-card:focus-within { border-color: var(--focus); }
 .df-ui .df-composer-card textarea { border: 0; min-height: 44px; padding: 4px 0; background: transparent; resize: none; border-radius: 0; }
 .df-ui .df-composer-card textarea:focus-visible { outline: 0; }
-.df-composer-foot { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.df-composer-foot { display: flex; justify-content: flex-end; align-items: flex-end; gap: 12px; }
+.df-chat-disclaimer { text-align: center; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.df-chat-actions .df-button { font-size: 12px; padding-inline: 12px; }
 .df-composer-foot small { max-width: 60ch; }
 .df-bubble.ia { border: 0; background: transparent; padding: 4px 0; max-width: min(680px, 100%); }
 .df-dl dt { font-weight: 600; margin-top: 12px; font-size: 14px; }
@@ -275,6 +282,8 @@ a.df-item-card:hover { border-color: var(--primary); }
 .df-context-col, .df-list-col, .df-main-wrap { min-width: 0; }
 .df-context-col .df-card, .df-list-col .df-card { min-width: 0; }
 .df-ai-info .df-row { flex-wrap: wrap; }
+.df-ai-info .df-row h2 { flex: 1 0 auto; white-space: nowrap; }
+.df-ai-info .df-row > .df-badge { flex: 0 0 auto; max-width: 100%; }
 .df-ui .df-ai-info { gap: 8px; }
 
 /* ---------- fila dentro da coluna lateral (Figma 3.6) ---------- */
@@ -313,7 +322,7 @@ a.df-item-card:hover { border-color: var(--primary); }
 .df-tablist { max-width: 100%; }
 [data-tabs] [role="tabpanel"] { min-width: 0; }
 /* Painel 1:1 com o Figma 4.1: largura total, KPIs em até 8 colunas, colunas do quadro com altura do conteúdo */
-.df-main.df-main-wide { max-width: 1600px; }
+.df-main.df-main-wide { max-width: none; }
 .df-kpis { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .df-kpi b { font-size: 24px; }
 .df-board { align-items: start; grid-auto-columns: minmax(200px, 1fr); }
@@ -362,7 +371,7 @@ a.df-item-card:hover { border-color: var(--primary); }
 .df-score b { padding: 12px; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .df-score-pts { border-color: var(--df-brand-semantic-reward-gold); }
 .df-score-pts small { background: var(--df-brand-semantic-reward-gold); color: #3a2a00; }
-@media (min-width: 1100px) { .df-main { margin: 0; max-width: 1296px; } .df-main.df-main-wide { max-width: 1600px; } }
+@media (min-width: 1100px) { .df-main { margin: 0; max-width: none; } }
 .df-button-content { gap: 8px; }
 .df-help .df-icon, small .df-icon { margin-right: 6px; vertical-align: -3px; }
 /* Meus chamados 1:1 com o Figma 2.5 */
@@ -402,6 +411,11 @@ a.df-item-card:hover { border-color: var(--primary); }
 .df-login-mark { margin: 0 auto; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; }
 .df-login h1 { font-size: 24px; }
 .df-login-links { text-align: center; }
+.df-login-card { padding: 32px; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; box-shadow: 0 12px 40px rgb(0 0 0 / 6%); gap: 24px; }
+.df-login-heading { display: grid; gap: 12px; }
+.df-login-brand { font-size: 14px; font-weight: 600; color: var(--muted); }
+.df-login-footer { padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); }
+@media (max-width: 479px) { .df-login-card { padding: 24px 20px; } }
 body[data-theme="dark"] .df-link, body[data-theme="dark"] .df-ui a.df-link { color: #8ac8f5; }
 .df-page-head { max-width: 100%; min-width: 0; }
 .df-main-wrap { overflow-x: clip; }
@@ -498,3 +512,12 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-score b { font-size: 20px; min-width: 0; overflow-wrap: anywhere; text-align: center; }
 .df-cols-3.df-wide-only .df-score b { font-size: 16px; padding: 12px 6px; }
 .df-cols-3.df-wide-only .df-score b { font-size: 14px; overflow-wrap: normal; word-break: normal; padding: 12px 4px; }
+
+/* Mapa do técnico a caminho */
+.df-mapa-canvas { height: 260px; border-radius: var(--radius-md, 12px); overflow: hidden; background: var(--surface-2, #eef1f5); }
+@media (min-width: 1024px) { .df-mapa-canvas { height: 320px; } }
+
+/* Navegação do quadro kanban */
+.df-board-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.df-board-nav [data-board-pos] { flex: 1; text-align: center; }
+.df-board-nav button:disabled { opacity: .4; cursor: default; }

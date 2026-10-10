@@ -7,7 +7,7 @@ import unittest
 from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from fastapi.testclient import TestClient
 
@@ -110,7 +110,7 @@ class PaginasTests(UiFlowBase):
                 r = self.client.get(path, cookies=ck or {})
                 self.assertEqual(r.status_code, 200, path)
                 inv = inventory(r.text)
-                self.assertEqual(inv.stylesheets, ["/static/ui/library.css", "/static/ui/app.css"])
+                self.assertEqual([urlsplit(url).path for url in inv.stylesheets], ["/static/ui/library.css", "/static/ui/app.css"])
                 self.assertNotIn("pico", r.text.lower().replace("picos", ""))
                 self.assertNotIn("/static/app.css", r.text)
                 self.assertNotIn("lucide", r.text.lower())
@@ -407,3 +407,45 @@ class LegadoTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RastroTecnicoTests(unittest.TestCase):
+    def test_posicao_simulada_avanca_e_chega(self):
+        from datetime import datetime, timedelta
+        import rastro
+        ini = "2026-10-10 10:00:00"
+        t0 = datetime(2026, 10, 10, 10, 0, 0)
+        a = rastro.estado(7, "a_caminho", ini, t0)
+        b = rastro.estado(7, "a_caminho", ini, t0 + timedelta(seconds=180))
+        c = rastro.estado(7, "a_caminho", ini, t0 + timedelta(hours=1))
+        self.assertEqual(a["posicao"], list(rastro.BASE))
+        self.assertNotEqual(a["posicao"], b["posicao"])
+        self.assertTrue(c["chegou"])
+        self.assertEqual(c["posicao"], c["destino"])
+        self.assertTrue(rastro.estado(7, "em_execucao", ini)["chegou"])
+        self.assertIsNone(rastro.estado(7, "encaminhado", ini))
+        self.assertEqual(rastro.destino(7), rastro.destino(7))
+
+
+class RastroApiTests(UiFlowBase):
+    def test_acesso_ao_mapa_por_perfil(self):
+        sol = self.solicitar()
+        tid = self.registrar(sol)
+        with app.db() as c:
+            c.execute("UPDATE tarefas SET executor_id=? WHERE id=?", (self.users["Rafael Costa"], tid))
+        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.gestor, data={
+            "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}").status_code, 403)
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}", cookies=self.atendente).status_code, 403)
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}", cookies=self.gestor).json()["ativo"], False)
+        self.client.post(f"/campo/{tid}/avancar", cookies=self.tecnico, data={"para": "a_caminho"})
+        d = self.client.get(f"/api/rastro/{tid}", cookies=self.gestor).json()
+        self.assertTrue(d["simulado"] and len(d["posicao"]) == 2)
+        t = self.tarefa(tid)
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}?token={t['token']}").status_code, 200)
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}?token={sol['token']}").status_code, 200)
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}?token=errado").status_code, 403)
+        self.assertIn("mapa-tecnico", self.client.get(f"/tarefa/{tid}", cookies=self.gestor).text)
+        self.assertNotIn("mapa-tecnico", self.client.get(f"/tarefa/{tid}", cookies=self.atendente).text)
+        self.assertIn("mapa-tecnico", self.client.get(f"/validar/{t['token']}").text)
+        self.assertIn("mapa-tecnico", self.client.get(f"/servidor/acompanhar/{sol['token']}").text)

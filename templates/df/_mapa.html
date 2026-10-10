@@ -1,0 +1,8 @@
+{# Mapa do técnico a caminho. Parâmetros: tid, token (opcional, para quem acessa pelo link do chamado). #}
+<section class="df-card df-mapa" id="mapa-tecnico" aria-labelledby="mapa-t" hidden
+         data-url="/api/rastro/{{ tid }}{% if token %}?token={{ token }}{% endif %}">
+  <div class="df-row"><h2 id="mapa-t">Técnico a caminho</h2><span class="df-badge" id="mapa-eta" role="status"></span></div>
+  <div id="mapa-canvas" class="df-mapa-canvas" role="img" aria-label="Mapa com a posição do técnico"></div>
+  <small class="df-muted">Posição simulada para a demonstração. Nenhuma localização real é coletada.</small>
+</section>
+<script src="/static/ui/mapa.js?v=2" defer></script>

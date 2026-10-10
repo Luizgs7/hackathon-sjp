@@ -15,6 +15,7 @@
 {% endblock %}
 {% block main %}
 <div hx-get="/servidor/acompanhar/{{ s.token }}" hx-trigger="every 5s" hx-select="#acomp" hx-target="#acomp" hx-swap="outerHTML"></div>
+{% if t %}{% set tid = t.id %}{% set token = s.token %}{% include "df/_mapa.html" %}{% endif %}
 <div id="acomp" class="df-stack">
   <div class="df-page-head">
     <div>

@@ -20,7 +20,8 @@
   </div>
 </div>
 
-<div class="df-stack" style="max-width:720px">
+<div class="df-stack">
+{% if t.executor_id %}{% set tid = t.id %}{% set token = t.token %}{% include "df/_mapa.html" %}{% endif %}
 {% if t.status == 'executado' %}
   <section class="df-card" aria-labelledby="exec-t">
     <h2 id="exec-t">O que foi feito</h2>

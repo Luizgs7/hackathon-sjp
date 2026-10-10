@@ -18,6 +18,7 @@ import secrets
 import sqlite3
 import threading
 import unicodedata
+import zlib
 from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -31,6 +32,7 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadF
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from rastro import estado as rastro_estado
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 BASE = Path(__file__).parent
@@ -224,6 +226,7 @@ CREATE TABLE IF NOT EXISTS autoatendimento(token TEXT PRIMARY KEY, resolvido INT
   solicitacao_id INTEGER, criado_em TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS auto_msgs(id INTEGER PRIMARY KEY, token TEXT NOT NULL REFERENCES autoatendimento(token),
   autor TEXT NOT NULL, texto TEXT NOT NULL, fonte TEXT, criado_em TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS conversa_acessos(token TEXT PRIMARY KEY REFERENCES autoatendimento(token) ON DELETE CASCADE, email TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS solicitacoes(id INTEGER PRIMARY KEY, protocolo TEXT UNIQUE, token TEXT NOT NULL UNIQUE,
   nome TEXT NOT NULL, local TEXT NOT NULL, contato TEXT NOT NULL DEFAULT '', email TEXT NOT NULL DEFAULT '',
   secretaria TEXT NOT NULL DEFAULT '', titulo TEXT NOT NULL, descricao TEXT NOT NULL,
@@ -294,8 +297,15 @@ def init_db():
                 c.execute(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}")
         if c.execute("SELECT count(*) n FROM usuarios").fetchone()["n"] == 0:
             seed(c)
+        garantir_gestor_tecnico(c)
         if SEED_HISTORICO and not cfg(c, "historico_metricas"):
             seed_historico(c)
+
+
+def garantir_gestor_tecnico(c):
+    """Perfil fictício adicional, também aplicado aos bancos existentes da demonstração."""
+    c.execute("INSERT INTO usuarios(nome,papeis,competencias,avatar) SELECT 'Roberto Nunes','gestor_tecnico','','' "
+              "WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE papeis='gestor_tecnico')")
 
 
 def seed(c):
@@ -865,7 +875,8 @@ def indicadores(c):
         "csat": f"{csat['m']:.1f}★ ({csat['n']})" if csat["n"] else "–",
         "motivos": motivos,
         "outbox_pendente": c.execute("SELECT count(*) n FROM outbox WHERE status='pendente'").fetchone()["n"],
-        "auto_resolvidos": c.execute("SELECT count(*) n FROM autoatendimento WHERE resolvido=1").fetchone()["n"],
+        "auto_resolvidos": contar_auto_resolvidos(c),
+        "auto_ia_resolvidos": contar_auto_resolvidos(c, somente_ia=True),
         "solicitacoes_aguardando": c.execute("SELECT count(*) n FROM solicitacoes WHERE status='aguardando'").fetchone()["n"],
     }
 
@@ -1003,8 +1014,8 @@ def metricas(c, dias, setor_id=None):
         "csat": media(notas), "n_notas": len(notas),
         "reabertura": (100 * sum(1 for t, _ in resolvidas if t["reaberturas"]) / len(resolvidas)) if resolvidas else None,
         "concordancia_ia": (100 * concordam / com_ia) if com_ia else None, "ajustes_ia": com_ia - concordam,
-        "auto_resolvidos": c.execute("SELECT count(*) n FROM autoatendimento WHERE resolvido=1 AND criado_em>=?",
-                                     (inicio,)).fetchone()["n"],
+        "auto_resolvidos": contar_auto_resolvidos(c, inicio),
+        "auto_ia_resolvidos": contar_auto_resolvidos(c, inicio, somente_ia=True),
         "secretarias": secretarias, "max_sec": max([d["n"] for d in secretarias] + [1]),
         "tipos": tipos, "max_cel": max_cel, "executores": executores, "max_exec": max_exec,
     }
@@ -1168,6 +1179,9 @@ DF_PAGINAS = {p.name for p in (BASE / "templates" / "df").glob("*.html")} - {"_b
 
 def render(request, nome, **ctx):
     ctx.setdefault("msg", request.query_params.get("msg"))
+    ctx.setdefault("solicitante_demo", perfil_solicitante_demo(request))
+    if nome == "login.html":
+        ctx.setdefault("perfil_demo", SOLICITANTE_DEMO)
     if nome in DF_PAGINAS:
         nome = f"df/{nome}"
     return templates.TemplateResponse(request, nome, ctx)
@@ -1175,6 +1189,49 @@ def render(request, nome, **ctx):
 
 def assinar(uid):
     return f"{uid}.{hmac.new(SECRET.encode(), str(uid).encode(), hashlib.sha256).hexdigest()[:32]}"
+
+
+# Identidade fixa e fictícia para demonstrar a entrada do solicitante.
+SOLICITANTE_DEMO = {"nome": "Ana Souza", "email": "ana.souza.demo@example.com",
+                    "secretaria": "Saúde", "contato": "2231"}
+
+
+def recuperar_acesso_demo(request, c):
+    """Só a identidade fictícia assinada pode recompor uma sessão perdida na demonstração."""
+    cookie = request.cookies.get("solicitante_demo", "")
+    if not cookie or len(cookie) > 300 or "." not in cookie:
+        return None
+    token = request.cookies.get("acesso_solicitante")
+    if not token:
+        return None
+    payload = cookie.rsplit(".", 1)[0]
+    if not hmac.compare_digest(cookie, assinar(payload)):
+        return None
+    acesso = c.execute("SELECT email, criado_em FROM acessos_solicitante WHERE token=?", (token,)).fetchone()
+    # Cookies anteriores continuam válidos somente quando o registro ainda existe.
+    if payload == "solicitante-demo":
+        pass
+    else:
+        try:
+            tipo, assinado_token, expires = payload.split(":")
+            expires = int(expires)
+            if tipo != "solicitante-demo" or assinado_token != token or expires <= datetime.now().timestamp():
+                return None
+        except (ValueError, TypeError):
+            return None
+        if not acesso:
+            criado = datetime.fromtimestamp(expires) - timedelta(days=ACESSO_DIAS)
+            c.execute("INSERT OR IGNORE INTO acessos_solicitante(token,email,criado_em) VALUES(?,?,?)",
+                      (token, SOLICITANTE_DEMO["email"], criado.strftime("%Y-%m-%d %H:%M:%S")))
+            acesso = c.execute("SELECT email, criado_em FROM acessos_solicitante WHERE token=?", (token,)).fetchone()
+    if not acesso or acesso["email"] != SOLICITANTE_DEMO["email"] or _data(acesso["criado_em"]) < datetime.now() - timedelta(days=ACESSO_DIAS):
+        return None
+    return SOLICITANTE_DEMO
+
+
+def perfil_solicitante_demo(request):
+    with db() as c:
+        return recuperar_acesso_demo(request, c)
 
 
 def usuario_do_cookie(request, nome):
@@ -1274,6 +1331,7 @@ def inicio(request: Request):
 @app.get("/login", response_class=HTMLResponse)
 def login_form(request: Request):
     with db() as c:
+        garantir_gestor_tecnico(c)
         usuarios = c.execute("SELECT u.*, e.nome equipe FROM usuarios u LEFT JOIN equipes e ON e.id=u.equipe_id ORDER BY u.id").fetchall()
     return render(request, "login.html", usuarios=usuarios,
                   painel=usuario_do_cookie(request, "sess_painel"), campo=usuario_do_cookie(request, "sess_campo"))
@@ -1281,7 +1339,10 @@ def login_form(request: Request):
 
 @app.post("/login")
 def login(uid: int = Form(...)):
+    if uid == 0:
+        return login_solicitante_demo()
     with db() as c:
+        garantir_gestor_tecnico(c)
         u = c.execute("SELECT * FROM usuarios WHERE id=?", (uid,)).fetchone()
     if not u:
         raise HTTPException(404, "Usuário não encontrado")
@@ -1289,6 +1350,21 @@ def login(uid: int = Form(...)):
     resp = redirect("/campo" if executor else ("/gestor" if "gestor" in u["papeis"] else "/atendente"))
     # Sessões separadas para painel (web) e campo (mobile): permite demonstrar gestor e executor lado a lado.
     resp.set_cookie("sess_campo" if executor else "sess_painel", assinar(u["id"]), httponly=True, samesite="lax")
+    return resp
+
+
+@app.post("/login/solicitante")
+def login_solicitante_demo():
+    """Acesso de demonstração restrito à identidade fictícia; não autentica pessoas reais."""
+    token = secrets.token_urlsafe(16)
+    with db() as c:
+        c.execute("INSERT INTO acessos_solicitante(token,email,criado_em) VALUES(?,?,?)",
+                  (token, SOLICITANTE_DEMO["email"], agora()))
+    resp = redirect("/servidor")
+    expires = int((datetime.now() + timedelta(days=ACESSO_DIAS)).timestamp())
+    for nome, valor in (("acesso_solicitante", token),
+                        ("solicitante_demo", assinar(f"solicitante-demo:{token}:{expires}"))):
+        resp.set_cookie(nome, valor, httponly=True, samesite="lax", max_age=ACESSO_DIAS * 86400)
     return resp
 
 
@@ -1411,7 +1487,7 @@ def criar_tarefa(request: Request, titulo: str = Form(...), descricao: str = For
 
 @app.get("/gestor", response_class=HTMLResponse)
 def gestor(request: Request):
-    u = exige_painel(request, "gestor")
+    u = exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
         setores = c.execute("SELECT * FROM setores ORDER BY id").fetchall()
     return render(request, "gestor.html", u=u, setores=setores)
@@ -1419,7 +1495,7 @@ def gestor(request: Request):
 
 @app.get("/gestor/quadro", response_class=HTMLResponse)
 def gestor_quadro(request: Request, setor_id: int | None = None):
-    exige_painel(request, "gestor")
+    exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
         sql = ("SELECT t.*, u.nome executor, u.avatar, tp.nome tipo FROM tarefas t LEFT JOIN usuarios u ON u.id=t.executor_id "
                "LEFT JOIN tipos tp ON tp.id=t.tipo_id")
@@ -1440,7 +1516,7 @@ PERIODOS = {30: "Últimos 30 dias", 60: "Últimos 60 dias", 90: "Últimos 90 dia
 
 @app.get("/gestor/metricas", response_class=HTMLResponse)
 def gestor_metricas(request: Request, dias: int = 90, setor_id: int | None = None):
-    u = exige_painel(request, "gestor")
+    u = exige_painel(request, "gestor", "gestor_tecnico")
     dias = dias if dias in PERIODOS else 90
     with db() as c:
         mt = metricas(c, dias, setor_id)
@@ -1452,7 +1528,7 @@ def gestor_metricas(request: Request, dias: int = 90, setor_id: int | None = Non
 
 @app.get("/gestor/metricas/analise", response_class=HTMLResponse)
 def ver_analise(request: Request):
-    exige_painel(request, "gestor")
+    exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
         analise = cfg(c, "analise_capacitacao")
     return render(request, "_analise.html", analise=analise)
@@ -1460,7 +1536,7 @@ def ver_analise(request: Request):
 
 @app.post("/gestor/metricas/analise", response_class=HTMLResponse)
 def pedir_analise(request: Request, dias: int = Form(90)):
-    exige_painel(request, "gestor")
+    exige_painel(request, "gestor", "gestor_tecnico")
     dias = dias if dias in PERIODOS else 90
     with db() as c:
         anterior = cfg(c, "analise_capacitacao") or {}
@@ -1472,7 +1548,7 @@ def pedir_analise(request: Request, dias: int = Form(90)):
 
 @app.get("/tarefa/{tid}", response_class=HTMLResponse)
 def tarefa_detalhe(request: Request, tid: int):
-    u = exige_painel(request, "atendente", "gestor")
+    u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
     with db() as c:
         t = tarefa_ou_404(c, tid)
         ctx = dict(
@@ -1499,7 +1575,7 @@ def tarefa_detalhe(request: Request, tid: int):
 @app.post("/tarefa/{tid}/cancelar")
 def cancelar(request: Request, tid: int, motivo: str = Form(...)):
     """Atendente ou gestor cancela o chamado (duplicado, aberto por engano, solicitante desistiu…)."""
-    u = exige_painel(request, "atendente", "gestor")
+    u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
     if not motivo.strip():
         return redirect(f"/tarefa/{tid}?msg=Informe o motivo do cancelamento")
     with db() as c:
@@ -1525,7 +1601,7 @@ def tarefa_estado(request: Request, tid: int, v: str = ""):
 def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: int = Form(...),
              prioridade: str = Form(...), observacao: str = Form("")):
     """O atendimento (ou o gestor) avalia o chamado da fila e o encaminha ao time técnico."""
-    u = exige_painel(request, "atendente", "gestor")
+    u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
     papel = papel_painel(u)
     with db() as c:
         t = tarefa_ou_404(c, tid)
@@ -1576,7 +1652,7 @@ def resolver_no_atendimento(request: Request, tid: int, solucao: str = Form(...)
 @app.post("/tarefa/{tid}/prioridade")
 def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), motivo: str = Form(...)):
     """Atendente ou gestor corrige a criticidade manualmente quando discorda da IA (fica registrado na trilha)."""
-    u = exige_painel(request, "atendente", "gestor")
+    u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
     if prioridade not in PRIORIDADES:
         raise HTTPException(422, "Criticidade inválida")
     if not motivo.strip():
@@ -1604,7 +1680,7 @@ def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), 
 
 @app.post("/tarefa/{tid}/rejeitar-ia")
 def rejeitar_ia(request: Request, tid: int):
-    u = exige_painel(request, "atendente", "gestor")
+    u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
     with db() as c:
         c.execute("UPDATE tarefas SET ia_status='rejeitada', atualizado_em=? WHERE id=?", (agora(), tid))
         registrar_evento(c, tid, u["nome"], papel_painel(u), f"Sugestão da IA rejeitada pelo {papel_painel(u)}")
@@ -1613,7 +1689,7 @@ def rejeitar_ia(request: Request, tid: int):
 
 @app.post("/tarefa/{tid}/retriar")
 def retriar(request: Request, tid: int):
-    exige_painel(request, "gestor", "atendente")
+    exige_painel(request, "gestor", "atendente", "gestor_tecnico")
     with db() as c:
         c.execute("UPDATE tarefas SET ia_status='analisando', atualizado_em=? WHERE id=?", (agora(), tid))
     em_segundo_plano(triar, tid)
@@ -1622,7 +1698,7 @@ def retriar(request: Request, tid: int):
 
 @app.post("/impedimento/{iid}/resolver")
 def resolver_impedimento(request: Request, iid: int, providencia: str = Form(...), apoio_id: int | None = Form(None)):
-    u = exige_painel(request, "gestor")
+    u = exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
         i = c.execute("SELECT * FROM impedimentos WHERE id=? AND aberto=1", (iid,)).fetchone()
         if not i:
@@ -1867,9 +1943,71 @@ def validar(request: Request, token: str, resultado: str = Form(...), nota: int 
 # O servidor conversa com a IA antes de ligar para o Help Desk. Se não resolver, envia uma SOLICITAÇÃO, que um
 # atendente confere e registra como tarefa (Req. 1: a abertura é feita por atendente ou responsável autorizado).
 
-def _sessao_auto(request, c):
+def contar_auto_resolvidos(c, inicio="", somente_ia=False):
+    """Confirmação do solicitante, sem solicitação/OS; uma contagem por conversa."""
+    sql = "SELECT count(*) FROM autoatendimento a WHERE a.resolvido=1 AND a.solicitacao_id IS NULL AND a.criado_em>=?"
+    if somente_ia:
+        sql += " AND EXISTS (SELECT 1 FROM auto_msgs m WHERE m.token=a.token AND m.autor='assistente' AND m.fonte IN ('llm','jev'))"
+        sql += " AND NOT EXISTS (SELECT 1 FROM auto_msgs m WHERE m.token=a.token AND m.autor='assistente' AND coalesce(m.fonte,'') NOT IN ('llm','jev'))"
+    return c.execute(sql, (inicio,)).fetchone()[0]
+
+
+def estado_conversa(token, conversa, resolvida=False):
+    """Snapshot assinado permite retomar o chat entre instâncias do protótipo."""
+    payload = json.dumps({"token": token, "resolvida": resolvida,
+                          "expires": (datetime.now() + timedelta(days=1)).timestamp(),
+                          "msgs": [{k: m[k] for k in ("autor", "texto", "fonte", "criado_em")} for m in conversa]},
+                         ensure_ascii=False, separators=(",", ":")).encode()
+    data = base64.urlsafe_b64encode(zlib.compress(payload)).decode()
+    signature = hmac.new(SECRET.encode(), ("chat:" + data).encode(), hashlib.sha256).hexdigest()
+    return data + "." + signature
+
+
+def ler_estado_conversa(estado):
+    if not estado or len(estado) > 100000:
+        return None
+    try:
+        data, signature = estado.rsplit(".", 1)
+        expected = hmac.new(SECRET.encode(), ("chat:" + data).encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(signature, expected):
+            return None
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(base64.urlsafe_b64decode(data), 200001)
+        if len(raw) > 200000 or not decoder.eof:
+            return None
+        snapshot = json.loads(raw)
+        return snapshot
+    except (ValueError, KeyError, TypeError, zlib.error):
+        return None
+
+
+def restaurar_conversa(c, estado, token_cookie):
+    snapshot = ler_estado_conversa(estado)
+    if not snapshot or snapshot.get("resolvida"):
+        return None
+    try:
+        token = snapshot["token"]
+        if snapshot["expires"] < datetime.now().timestamp() or (token_cookie and token_cookie != token):
+            return None
+        row = c.execute("SELECT resolvido, solicitacao_id FROM autoatendimento WHERE token=?", (token,)).fetchone()
+        if row and row["resolvido"]:
+            return None
+        c.execute("INSERT OR IGNORE INTO autoatendimento(token,criado_em) VALUES(?,?)", (token, agora()))
+        count = c.execute("SELECT count(*) FROM auto_msgs WHERE token=?", (token,)).fetchone()[0]
+        for m in snapshot["msgs"][count:]:
+            c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
+                      (token, m["autor"], m["texto"], m["fonte"], m["criado_em"]))
+        return token
+    except (ValueError, KeyError, TypeError, zlib.error):
+        return None
+
+
+def _sessao_auto(request, c, estado=None):
     token = request.cookies.get("auto_token")
-    if token and c.execute("SELECT 1 FROM autoatendimento WHERE token=? AND resolvido=0 AND solicitacao_id IS NULL",
+    restored = restaurar_conversa(c, estado or request.cookies.get("auto_estado"), token)
+    if restored:
+        return restored
+    if token and c.execute("SELECT 1 FROM autoatendimento WHERE token=? AND resolvido=0",
                            (token,)).fetchone():
         return token
     return None
@@ -1877,6 +2015,7 @@ def _sessao_auto(request, c):
 
 def solicitacoes_do_visitante(request, c):
     """Lista lateral do assistente: só aparece para quem já acessou 'Meus chamados' neste navegador (leitura apenas)."""
+    recuperar_acesso_demo(request, c)
     token = request.cookies.get("acesso_solicitante")
     acesso = c.execute("SELECT email FROM acessos_solicitante WHERE token=? AND criado_em>=?", (
         token, (datetime.now() - timedelta(days=ACESSO_DIAS)).strftime("%Y-%m-%d %H:%M:%S"))).fetchone() if token else None
@@ -1886,7 +2025,40 @@ def solicitacoes_do_visitante(request, c):
                      "ORDER BY criado_em DESC LIMIT 12", (acesso["email"],)).fetchall()
 
 
+FORA_ESCOPO = "Posso ajudar apenas com suporte do Helpdesk municipal, como computadores, sistemas, internet, impressoras e telefonia. Não posso ajudar com esse assunto."
+
+
+def pedido_fora_escopo(pergunta):
+    texto = pergunta.casefold()
+    return bool(re.search(r"\breceita\s+(?:de|para|do|da)\s+(?:um\s+|uma\s+)?(?:bolo|pão|pao|torta|brigadeiro|comida)|\b(?:cozinhar|horóscopo|horoscopo|piada|poema|aposta|futebol)\b", texto))
+
+
+def email_solicitante_atual(request, c):
+    recuperar_acesso_demo(request, c)
+    r = c.execute("SELECT email FROM acessos_solicitante WHERE token=? AND criado_em>=?",
+                  (request.cookies.get('acesso_solicitante'), (datetime.now() - timedelta(days=ACESSO_DIAS)).strftime('%Y-%m-%d %H:%M:%S'))).fetchone()
+    return r['email'] if r else None
+
+
+def chamado_da_conversa(c, token):
+    return c.execute("SELECT s.*, t.status tarefa_status FROM autoatendimento a JOIN solicitacoes s ON s.id=a.solicitacao_id "
+                     "LEFT JOIN tarefas t ON t.id=s.tarefa_id WHERE a.token=?", (token,)).fetchone() if token else None
+
+
+def texto_status_chat(s):
+    if s['tarefa_status']:
+        status = STATUS[s['tarefa_status']][1]
+    else:
+        status = 'Aguardando conferência do Helpdesk' if s['status'] == 'aguardando' else 'Solicitação devolvida: ' + (s['motivo_descarte'] or s['status'])
+    return f"{s['protocolo']}: {status}."
+
+
 def responder_autoatendimento(c, token, pergunta):
+    if pedido_fora_escopo(pergunta):
+        return FORA_ESCOPO, 'fora_escopo'
+    chamado = chamado_da_conversa(c, token)
+    if chamado:
+        return texto_status_chat(chamado) + ' Você pode continuar consultando o andamento nesta conversa.', 'sistema'
     historico = c.execute("SELECT autor, texto FROM auto_msgs WHERE token=? ORDER BY id DESC LIMIT 10", (token,)).fetchall()
     relatos = [h["texto"] for h in reversed(historico) if h["autor"] == "servidor"]
     if not relatos or relatos[-1] != pergunta:
@@ -1896,6 +2068,8 @@ def responder_autoatendimento(c, token, pergunta):
         c.execute("UPDATE autoatendimento SET jev_json=? WHERE token=?",
                   (json.dumps(decisao, ensure_ascii=False), token))
         acao = decisao["answers"]["acao"]["choice"]
+        if acao == 'fora_escopo':
+            return FORA_ESCOPO, 'fora_escopo'
         if acao == "esclarecer":
             return "Pode descrever o que acontece e qual mensagem de erro aparece? Se preferir, clique em 'Abrir solicitação'.", "jev"
         if acao == "helpdesk":
@@ -1908,6 +2082,7 @@ def responder_autoatendimento(c, token, pergunta):
     msgs = [{"role": "system", "content":
              "Você é o Assistente Virtual do Help Desk da Prefeitura de São José dos Pinhais, atendendo servidores "
              "municipais que NÃO são técnicos. Objetivo: resolver problemas simples com orientações seguras antes que "
+             "precisem de atendimento. Recuse assuntos alheios ao suporte municipal, como receitas, entretenimento e pedidos pessoais; nessa recusa nunca sugira abrir chamado. "
              "precisem abrir um chamado. Regras: linguagem simples e cordial; no máximo 4 passos curtos por resposta; "
              "faça no máximo 1 pergunta por vez para entender o problema (o que aconteceu, onde, desde quando, afeta "
              "outras pessoas?); nunca peça senhas; nunca oriente abrir equipamentos, tomadas ou quadros elétricos; em "
@@ -1964,42 +2139,115 @@ def servidor(request: Request):
         token = _sessao_auto(request, c)
         conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall() if token else []
         minhas = solicitacoes_do_visitante(request, c)
-    return render(request, "servidor.html", conversa=conversa, minhas=minhas)
+        chamado = chamado_da_conversa(c, token)
+    return render(request, "servidor.html", conversa=conversa, minhas=minhas,
+                  chamado_chat=chamado, estado_chat=estado_conversa(token, conversa) if token else "")
 
 
 @app.post("/servidor/chat", response_class=HTMLResponse)
-def servidor_chat(request: Request, pergunta: str = Form(...)):
+def servidor_chat(request: Request, pergunta: str = Form(...), estado_chat: str = Form("")):
     with db() as c:
-        token = _sessao_auto(request, c)
+        token = _sessao_auto(request, c, estado_chat)
         if not token:
             token = secrets.token_urlsafe(16)
             c.execute("INSERT INTO autoatendimento(token,criado_em) VALUES(?,?)", (token, agora()))
+        email = email_solicitante_atual(request, c)
+        if email:
+            c.execute('INSERT OR IGNORE INTO conversa_acessos(token,email) VALUES(?,?)', (token,email))
         c.execute("INSERT INTO auto_msgs(token,autor,texto,criado_em) VALUES(?,?,?,?)", (token, "servidor", pergunta, agora()))
     with db() as c:
         resposta, fonte = responder_autoatendimento(c, token, pergunta)
         c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
                   (token, "assistente", resposta, fonte, agora()))
         conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
-    resp = render(request, "_servidor_chat.html", conversa=conversa)
+        chamado = chamado_da_conversa(c, token)
+    estado = estado_conversa(token, conversa)
+    resp = render(request, "_servidor_chat.html", conversa=conversa, estado_chat=estado, chamado_chat=chamado)
     resp.set_cookie("auto_token", token, httponly=True, samesite="lax")
+    if len(estado) <= 3800:
+        resp.set_cookie("auto_estado", estado, httponly=True, samesite="lax", max_age=86400,
+                        secure=request.url.scheme == "https")
+    else:
+        resp.delete_cookie("auto_estado")
     return resp
 
 
 @app.post("/servidor/resolvido")
-def servidor_resolvido(request: Request):
+def servidor_resolvido(request: Request, estado_chat: str = Form("")):
     with db() as c:
-        token = _sessao_auto(request, c)
-        if token:
-            c.execute("UPDATE autoatendimento SET resolvido=1 WHERE token=?", (token,))
-    resp = redirect("/servidor?msg=Que bom que deu certo! Nenhum chamado foi necessário. Obrigado por usar o assistente.")
+        token = _sessao_auto(request, c, estado_chat)
+        if not token:
+            return redirect("/servidor")
+        conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
+        if not any(m["autor"] == "assistente" for m in conversa):
+            raise HTTPException(400, "Converse com o assistente antes de confirmar a resolução.")
+        if chamado_da_conversa(c, token) or conversa[-1]['fonte'] == 'fora_escopo':
+            raise HTTPException(409, 'Esta conversa não pode ser contabilizada como resolução sem chamado.')
+        c.execute("UPDATE autoatendimento SET resolvido=1 WHERE token=?", (token,))
+        minhas = solicitacoes_do_visitante(request, c)
+    resp = render(request, "servidor.html", conversa=conversa, minhas=minhas, conversa_resolvida=True,
+                  estado_chat=estado_conversa(token, conversa, resolvida=True), conversa_id=token,
+                  msg="Resolvido pelo assistente, sem abrir chamado. A conversa foi mantida no histórico.")
     resp.delete_cookie("auto_token")
+    resp.delete_cookie("auto_estado")
     return resp
+
+
+@app.post("/servidor/historico", response_class=HTMLResponse)
+def servidor_historico(request: Request, estado_chat: str = Form(...)):
+    snapshot = ler_estado_conversa(estado_chat)
+    if not snapshot or not snapshot.get("resolvida"):
+        raise HTTPException(400, "Conversa inválida. Abra uma conversa salva no histórico.")
+    with db() as c:
+        minhas = solicitacoes_do_visitante(request, c)
+    # Consulta de histórico não altera contadores nem recria atendimentos encerrados.
+    return render(request, "servidor.html", conversa=snapshot["msgs"], minhas=minhas, conversa_resolvida=True,
+                  estado_chat=estado_chat, conversa_id=snapshot["token"])
 
 
 @app.post("/servidor/nova")
 def servidor_nova():
     resp = redirect("/servidor")
     resp.delete_cookie("auto_token")
+    resp.delete_cookie("auto_estado")
+    return resp
+
+
+@app.get('/servidor/status', response_class=HTMLResponse)
+def servidor_status(request: Request):
+    with db() as c:
+        token = _sessao_auto(request, c)
+        chamado = chamado_da_conversa(c, token)
+    return render(request, '_chat_status.html', chamado_chat=chamado)
+
+
+@app.get('/servidor/dashboard', response_class=HTMLResponse)
+def servidor_dashboard(request: Request):
+    with db() as c:
+        email = email_solicitante_atual(request,c)
+        if not email:
+            return redirect('/login?msg=Entre para consultar seu dashboard.')
+        solicitacoes = c.execute('SELECT s.*,t.status tarefa_status FROM solicitacoes s LEFT JOIN tarefas t ON t.id=s.tarefa_id WHERE lower(s.email)=? ORDER BY s.id DESC', (email,)).fetchall()
+        chamados = c.execute('SELECT * FROM tarefas WHERE lower(email)=? ORDER BY id DESC',(email,)).fetchall()
+        conversas = c.execute("SELECT a.*,s.protocolo,s.token solicitacao_token, (SELECT texto FROM auto_msgs m WHERE m.token=a.token AND autor='servidor' ORDER BY id LIMIT 1) titulo FROM autoatendimento a JOIN conversa_acessos ca ON ca.token=a.token LEFT JOIN solicitacoes s ON s.id=a.solicitacao_id WHERE ca.email=? ORDER BY a.criado_em DESC", (email,)).fetchall()
+    return render(request,'servidor_dashboard.html',solicitacoes=solicitacoes,conversas=conversas,chamados=chamados)
+
+
+@app.get('/servidor/conversas/{token}')
+def abrir_conversa(request: Request, token: str):
+    with db() as c:
+        email = email_solicitante_atual(request,c)
+        row = c.execute('SELECT a.* FROM autoatendimento a JOIN conversa_acessos ca ON ca.token=a.token WHERE a.token=? AND ca.email=?', (token,email)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Conversa não encontrada para este perfil.')
+        conversa = c.execute('SELECT * FROM auto_msgs WHERE token=? ORDER BY id',(token,)).fetchall()
+        minhas = solicitacoes_do_visitante(request,c)
+    if row['resolvido']:
+        return render(request,'servidor.html',conversa=conversa,minhas=minhas,conversa_resolvida=True,
+                      conversa_id=token,estado_chat=estado_conversa(token,conversa,resolvida=True))
+    resp = redirect('/servidor')
+    resp.set_cookie('auto_token',token,httponly=True,samesite='lax',secure=request.url.scheme=='https')
+    resp.delete_cookie('auto_estado')
     return resp
 
 
@@ -2008,6 +2256,10 @@ def servidor_solicitar_form(request: Request, via: str = ""):
     with db() as c:
         setores = c.execute("SELECT * FROM setores").fetchall()
         token = _sessao_auto(request, c) if via == "ia" else None
+        if token and chamado_da_conversa(c, token):
+            return redirect('/servidor')
+        if token and c.execute("SELECT fonte FROM auto_msgs WHERE token=? ORDER BY id DESC LIMIT 1", (token,)).fetchone()['fonte'] == 'fora_escopo':
+            raise HTTPException(409, 'Esta conversa está fora do escopo do Helpdesk. Inicie uma nova conversa sobre suporte.')
         rascunho, fonte = rascunho_da_conversa(c, token) if token else ({}, None)
         minhas = solicitacoes_do_visitante(request, c)
     return render(request, "servidor_solicitar.html", setores=setores, r=rascunho, fonte=fonte, via_ia=bool(token),
@@ -2018,10 +2270,15 @@ def servidor_solicitar_form(request: Request, via: str = ""):
 def servidor_solicitar(request: Request, nome: str = Form(...), email: str = Form(...), secretaria: str = Form(...),
                        local: str = Form(...), contato: str = Form(""), titulo: str = Form(...),
                        descricao: str = Form(...), tentativas: str = Form(""), setor_id: int = Form(...),
-                       via_ia: int = Form(0)):
+                       via_ia: int = Form(0), continuar_chat: int = Form(0)):
     nome, email, secretaria = validar_solicitante(nome, email, secretaria)
     with db() as c:
         token_auto = _sessao_auto(request, c) if via_ia else None
+        if token_auto and chamado_da_conversa(c, token_auto):
+            raise HTTPException(409, 'Esta conversa já possui uma solicitação.')
+        last = c.execute('SELECT fonte FROM auto_msgs WHERE token=? ORDER BY id DESC LIMIT 1',(token_auto,)).fetchone() if token_auto else None
+        if last and last['fonte'] == 'fora_escopo':
+            raise HTTPException(409, 'O assunto desta conversa não é uma demanda de Helpdesk.')
         conversa = None
         if token_auto:
             conversa = "\n".join(f"{m['autor']}: {m['texto']}" for m in c.execute(
@@ -2034,8 +2291,21 @@ def servidor_solicitar(request: Request, nome: str = Form(...), email: str = For
         c.execute("UPDATE solicitacoes SET protocolo=? WHERE id=?", (f"SOL-{cur.lastrowid:04d}", cur.lastrowid))
         if token_auto:
             c.execute("UPDATE autoatendimento SET solicitacao_id=? WHERE token=?", (cur.lastrowid, token_auto))
-    resp = redirect(f"/servidor/acompanhar/{token}?msg=Solicitação enviada! Um atendente vai conferir e registrar o chamado.")
-    resp.delete_cookie("auto_token")
+        elif continuar_chat:
+            token_auto = secrets.token_urlsafe(16)
+            c.execute('INSERT INTO autoatendimento(token,solicitacao_id,criado_em) VALUES(?,?,?)', (token_auto,cur.lastrowid,agora()))
+            c.execute('INSERT INTO auto_msgs(token,autor,texto,criado_em) VALUES(?,?,?,?)', (token_auto,'servidor',descricao,agora()))
+        if token_auto:
+            email_atual = email_solicitante_atual(request,c)
+            if email_atual:
+                c.execute('INSERT OR IGNORE INTO conversa_acessos(token,email) VALUES(?,?)', (token_auto,email_atual))
+            c.execute('INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)',
+                      (token_auto,'assistente',f'Solicitação SOL-{cur.lastrowid:04d} enviada ao Helpdesk. O histórico continua aqui; você pode consultar o andamento nesta conversa.','sistema',agora()))
+    destination = '/servidor?msg=Solicitação enviada ao Helpdesk.' if continuar_chat else f"/servidor/acompanhar/{token}?msg=Solicitação enviada! Um atendente vai conferir e registrar o chamado."
+    resp = redirect(destination)
+    if token_auto:
+        resp.set_cookie('auto_token',token_auto,httponly=True,samesite='lax',secure=request.url.scheme=='https')
+    resp.delete_cookie('auto_estado')
     return resp
 
 
@@ -2061,6 +2331,7 @@ def meus_chamados_form(request: Request):
     token = request.cookies.get("acesso_solicitante")
     if token:
         with db() as c:
+            recuperar_acesso_demo(request, c)
             if c.execute("SELECT 1 FROM acessos_solicitante WHERE token=? AND criado_em>=?", (token, (
                     datetime.now() - timedelta(days=ACESSO_DIAS)).strftime("%Y-%m-%d %H:%M:%S"))).fetchone():
                 return redirect(f"/meus-chamados/{token}")
@@ -2082,6 +2353,8 @@ def meus_chamados_pedir(request: Request, email: str = Form(...)):
 @app.get("/meus-chamados/{token}", response_class=HTMLResponse)
 def meus_chamados(request: Request, token: str):
     with db() as c:
+        if request.cookies.get("acesso_solicitante") == token:
+            recuperar_acesso_demo(request, c)
         email = email_do_acesso(c, token)
         tarefas = c.execute(
             "SELECT t.*, s.nome area, tp.nome tipo, u.nome executor, "
@@ -2104,6 +2377,7 @@ def meus_chamados(request: Request, token: str):
 def meus_chamados_sair():
     resp = redirect("/meus-chamados")
     resp.delete_cookie("acesso_solicitante")
+    resp.delete_cookie("solicitante_demo")
     return resp
 
 
@@ -2237,3 +2511,21 @@ def novo_tipo(request: Request, nome: str = Form(...), setor_id: int = Form(...)
         c.execute("INSERT INTO tipos(nome,setor_id,complexidade,palavras) VALUES(?,?,?,?)",
                   (nome, setor_id, max(1, min(5, complexidade)), palavras.lower()))
     return redirect("/config?msg=Tipo de tarefa criado")
+
+
+# ---------------------------------------------------------------- mapa do técnico a caminho (simulado)
+@app.get("/api/rastro/{tid}")
+def rastro(request: Request, tid: int, token: str = ""):
+    """Posição simulada do técnico. Visível ao gestor (sessão) e a quem tem o link do chamado; atendente não."""
+    with db() as c:
+        t = tarefa_ou_404(c, tid)
+        autorizado = bool(token) and (token == t["token"] or c.execute(
+            "SELECT 1 FROM solicitacoes WHERE token=? AND tarefa_id=?", (token, tid)).fetchone())
+        if not autorizado:
+            u = usuario_do_cookie(request, "sess_painel")
+            if not u or "gestor" not in u["papeis"].split(","):
+                raise HTTPException(403, "Acesso restrito ao gestor ou ao link do chamado")
+        ini = c.execute("SELECT criado_em FROM eventos WHERE tarefa_id=? AND para='a_caminho' ORDER BY id DESC LIMIT 1",
+                        (tid,)).fetchone()
+    dados = rastro_estado(tid, t["status"], ini["criado_em"] if ini else None)
+    return JSONResponse(dados or {"simulado": True, "ativo": False}, headers={"Cache-Control": "no-store"})

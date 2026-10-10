@@ -1,0 +1,7 @@
+{% import 'df/_ui.html' as ui %}
+<section id="chat-status" class="df-notice df-notice-info" aria-label="Status do atendimento" hx-get="/servidor/status" hx-trigger="every 15s" hx-target="this" hx-swap="outerHTML">
+{% if chamado_chat %}
+  {{ ui.icon('list-checks') }}<div><strong>{{ chamado_chat.protocolo }}</strong> · {% if chamado_chat.tarefa_status %}{{ STATUS[chamado_chat.tarefa_status][1] }}{% elif chamado_chat.status == 'aguardando' %}Aguardando conferência do Helpdesk{% else %}{{ chamado_chat.motivo_descarte or chamado_chat.status }}{% endif %}<br>
+  <a class="df-link" href="/servidor/acompanhar/{{ chamado_chat.token }}">Ver detalhes do atendimento</a></div>
+{% else %}<div>Nenhuma solicitação vinculada a esta conversa.</div>{% endif %}
+</section>

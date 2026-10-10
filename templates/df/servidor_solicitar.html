@@ -24,7 +24,8 @@
   <h2 id="sol-t" class="df-sr">Dados da solicitação</h2>
   <form class="df-form" method="post" action="/servidor/solicitar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
     <input type="hidden" name="via_ia" value="{{ 1 if via_ia else 0 }}">
-    {{ ui.campos_solicitante(contato='', nome_campo='nome') }}
+    <input type="hidden" name="continuar_chat" value="1">
+    {{ ui.campos_solicitante(nome=solicitante_demo.nome if solicitante_demo else '', email=solicitante_demo.email if solicitante_demo else '', secretaria=solicitante_demo.secretaria if solicitante_demo else '', contato=solicitante_demo.contato if solicitante_demo else '', nome_campo='nome') }}
     <div class="df-form-row">
       {{ ui.field('local', 'Local (unidade, sala, andar)', r.local or '', required=True, placeholder='Ex.: UBS Vila Nova – Sala de vacinação') }}
       {{ ui.field('titulo', 'Assunto', r.titulo or '', required=True, maxlength=80, placeholder='Resuma em poucas palavras') }}

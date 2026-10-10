@@ -5,17 +5,24 @@
 {% block title %}Entrar{% endblock %}
 {% set bare = true %}
 {% block main %}
-<div class="df-login">
-  <span class="df-brand-mark df-login-mark">{{ ui.icon('headset') }}</span>
-  <h1>Quem está usando?</h1>
-  <p class="df-muted">Escolha um usuário fictício para entrar na demonstração.</p>
+<div class="df-login df-login-card">
+  <header class="df-login-heading">
+    <span class="df-brand-mark df-login-mark">{{ ui.icon('headset') }}</span>
+    <p class="df-login-brand">DataForge</p>
+    <h1>Entrar</h1>
+    <p class="df-muted">Selecione seu perfil para acessar a plataforma.</p>
+  </header>
   <form class="df-form" method="post" action="/login" data-df-form>
-    {% set opts = [] %}{% for x in usuarios %}{% set _ = opts.append((x.id, x.nome ~ ' · ' ~ (x.papeis.replace(',', ' + ') if 'executor' not in x.papeis else 'campo (' ~ x.equipe ~ ')'))) %}{% endfor %}
-    {{ ui.select('uid', 'Usuário', opts, '', required=True, id='login-uid') }}
-    {% call ui.notice('', 'info', 'info') %}Atendimento e painel: {% for x in usuarios if 'executor' not in x.papeis %}{{ x.nome }}{{ ', ' if not loop.last }}{% endfor %}. Campo: {% for x in usuarios if 'executor' in x.papeis %}{{ x.nome }}{{ ', ' if not loop.last }}{% endfor %}.{% endcall %}
-    {% if painel or campo %}<small role="status">Sessões ativas: {% if painel %}<a class="df-link" href="/">{{ painel.nome }} (painel)</a>{% endif %}{% if painel and campo %} · {% endif %}{% if campo %}<a class="df-link" href="/campo">{{ campo.nome }} (campo)</a>{% endif %}</small>{% endif %}
+    {% set opts = [(0, 'Solicitante · ' ~ perfil_demo.nome)] %}
+    {% for papel, rotulo in [('atendente', 'Helpdesk'), ('gestor', 'Gestor do atendimento'), ('gestor_tecnico', 'Gestor técnico'), ('executor', 'Técnico')] %}
+      {% set candidatos = usuarios|selectattr('papeis', 'equalto', papel)|list %}
+      {% if papel == 'gestor' %}{% set candidatos = usuarios|selectattr('papeis', 'equalto', 'gestor,atendente')|list %}{% endif %}
+      {% if candidatos %}{% set _ = opts.append((candidatos[0].id, rotulo ~ ' · ' ~ candidatos[0].nome)) %}{% endif %}
+    {% endfor %}
+    {{ ui.select('uid', 'Tipo de usuário', opts, 0, required=True, id='login-uid') }}
     {{ ui.button('Entrar', cls='df-wide') }}
   </form>
-  <p class="df-login-links"><small>Servidor com um problema? <a class="df-link" href="/servidor">Assistente Virtual</a> · <a class="df-link" href="/meus-chamados">Meus chamados</a> · Sistema legado simulado: <a class="df-link" href="http://localhost:8001" target="_blank" rel="noopener">localhost:8001</a></small></p>
+  <p class="df-login-links"><small><a class="df-link" href="/servidor">Assistente Virtual</a> · <a class="df-link" href="/meus-chamados">Acompanhar chamados</a></small></p>
+  <footer class="df-login-footer"><small>Helpdesk · Atendimento ao servidor</small></footer>
 </div>
 {% endblock %}

@@ -287,3 +287,29 @@
   document.addEventListener('DOMContentLoaded', iniciar);
   document.addEventListener('htmx:afterSettle', iniciar);
 })();
+
+/* Quadro kanban: botões Anterior/Próxima levam de coluna em coluna; a posição sobrevive às atualizações do htmx. */
+(() => {
+  const cols = b => [...b.querySelectorAll('.df-board-col')];
+  const atual = b => { const x = b.scrollLeft + 4; let i = 0; cols(b).forEach((c, k) => { if (c.offsetLeft - b.offsetLeft <= x) i = k; }); return i; };
+  const sincronizar = () => document.querySelectorAll('[data-board-nav]').forEach(nav => {
+    const b = nav.nextElementSibling; if (!b || !b.classList.contains('df-board')) return;
+    const n = cols(b).length, i = atual(b), fim = b.scrollLeft + b.clientWidth >= b.scrollWidth - 4;
+    nav.querySelector('[data-board-dir="-1"]').disabled = b.scrollLeft <= 0;
+    nav.querySelector('[data-board-dir="1"]').disabled = fim;
+    const nome = cols(b)[i] && cols(b)[i].querySelector('header span');
+    nav.querySelector('[data-board-pos]').textContent = nome ? nome.textContent + ' · ' + (i + 1) + ' de ' + n : '';
+    if (!b.dataset.navBound) { b.dataset.navBound = '1'; b.addEventListener('scroll', sincronizar, { passive: true }); }
+  });
+  document.addEventListener('click', e => {
+    const bt = e.target.closest && e.target.closest('[data-board-dir]'); if (!bt) return;
+    const b = bt.closest('[data-board-nav]').nextElementSibling, cs = cols(b);
+    const alvo = Math.min(Math.max(atual(b) + Number(bt.dataset.boardDir), 0), cs.length - 1);
+    b.scrollTo({ left: cs[alvo].offsetLeft - b.offsetLeft, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  });
+  let guardado = 0;
+  document.addEventListener('htmx:beforeSwap', e => { const b = e.detail.target && e.detail.target.querySelector && e.detail.target.querySelector('.df-board'); if (b) guardado = b.scrollLeft; });
+  document.addEventListener('htmx:afterSettle', () => { const b = document.querySelector('.df-board'); if (b && guardado) { b.scrollLeft = guardado; } sincronizar(); });
+  document.addEventListener('DOMContentLoaded', sincronizar);
+  window.addEventListener('resize', sincronizar);
+})();
