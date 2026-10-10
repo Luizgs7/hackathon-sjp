@@ -829,3 +829,43 @@ class SinoDeNotificacoesTests(UiFlowBase):
         # a pessoa sem identidade não vê sino
         self.client.cookies.clear()
         self.assertNotIn("df-sino-btn", self.client.get("/notificacoes/sino?perfil=publico").text)
+
+
+class PessoasEHistoricoTests(UiFlowBase):
+    def test_gestor_cria_edita_e_desativa_pessoas(self):
+        self.assertEqual(self.client.post("/config/pessoa", cookies=self.atendente, data={"nome": "X", "papel": "executor"}).status_code, 403)
+        r = self.client.post("/config/pessoa", cookies=self.gestor, data={
+            "nome": "Nova Técnica", "papel": "executor", "equipe_id": "3", "area_id": "", "competencias": "redes, wi-fi"})
+        self.assertEqual(r.status_code, 303)
+        with app.db() as c:
+            p = c.execute("SELECT * FROM usuarios WHERE nome='Nova Técnica'").fetchone()
+        self.assertEqual((p["papeis"], p["equipe_id"], p["disponivel"]), ("executor", 3, 1))
+        # técnico exige equipe; gestor técnico exige área
+        self.assertEqual(self.client.post("/config/pessoa", cookies=self.gestor, data={"nome": "Y", "papel": "executor", "equipe_id": ""}).status_code, 422)
+        self.assertEqual(self.client.post("/config/pessoa", cookies=self.gestor, data={"nome": "Z", "papel": "gestor_tecnico", "area_id": ""}).status_code, 422)
+        # edita: troca de equipe e desativa -> some da distribuição
+        r = self.client.post(f"/config/pessoa/{p['id']}", cookies=self.gestor, data={
+            "nome": "Nova Técnica", "papel": "executor", "equipe_id": "2", "area_id": "", "competencias": "impressoras", "ativo": 0})
+        self.assertEqual(r.status_code, 303)
+        with app.db() as c:
+            self.assertEqual(c.execute("SELECT equipe_id, disponivel FROM usuarios WHERE id=?", (p["id"],)).fetchone()[:], (2, 0))
+            self.assertNotIn(p["id"], [e["id"] for e in app.carga_executores(c)])
+        # não retira o próprio perfil de gestor
+        paula = self.users["Paula Mendes"]
+        self.assertEqual(self.client.post(f"/config/pessoa/{paula}", cookies=self.gestor, data={
+            "nome": "Paula Mendes", "papel": "atendente"}).status_code, 409)
+        pagina = self.client.get("/config", cookies=self.gestor).text
+        self.assertIn("Nova Técnica", pagina)
+        self.assertIn("Equipe e pessoas", pagina)
+
+    def test_historico_de_rotas_do_gestor(self):
+        tid = self.registrar(self.solicitar(local="UBS Centro"))
+        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P3"})
+        for para in ("a_caminho", "em_execucao"):
+            self.client.post(f"/campo/{tid}/avancar", cookies=self.tecnico, data={"para": para})
+        r = self.client.get("/gestor/equipe/historico", cookies=self.gestor)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Rafael Costa", r.text)
+        self.assertIn(f"#{tid}", r.text)
+        self.assertEqual(self.client.get("/gestor/equipe/historico", cookies=self.atendente).status_code, 403)

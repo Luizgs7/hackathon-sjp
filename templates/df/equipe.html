@@ -16,6 +16,10 @@
   <div id="equipe-mapa" class="df-mapa-canvas df-mapa-equipe" role="img" aria-label="Mapa com a posição dos técnicos e dos chamados aguardando direcionamento" data-url="/gestor/equipe/dados"></div>
   <div class="df-strip" aria-label="Legenda"><span class="df-badge"><span style="color:#2563eb" aria-hidden="true">●</span> Técnico</span><span class="df-badge"><span style="color:#f59e0b" aria-hidden="true">●</span> Aguardando direcionamento</span></div>
 </section>
+<section class="df-card" aria-labelledby="hist-t">
+  <div class="df-row"><h2 id="hist-t">{{ ui.icon('path') }}Histórico de rotas executadas</h2><span class="df-strip"><a class="df-chip" href="#" hx-get="/gestor/equipe/historico?dias=7" hx-target="#historico-rotas">7 dias</a><a class="df-chip" href="#" hx-get="/gestor/equipe/historico?dias=30" hx-target="#historico-rotas">30 dias</a></span></div>
+  <div id="historico-rotas" hx-get="/gestor/equipe/historico" hx-trigger="load" aria-live="polite"><div class="df-skeleton-group"><div class="df-skeleton"></div></div></div>
+</section>
 <div id="equipe-painel" class="df-stack" aria-live="polite" hx-get="/gestor/equipe/painel" hx-trigger="load, every 5s" hx-indicator="#ind-eq">
   <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando a equipe"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
 </div>

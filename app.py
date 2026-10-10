@@ -1654,6 +1654,34 @@ def equipe_pagina(request: Request):
     return render(request, "equipe.html", u=u)
 
 
+# ---------------------------------------------------------------- histórico de rotas executadas (gestor)
+def historico_rotas(c, u, dias=7):
+    desde = (datetime.now() - timedelta(days=dias)).strftime("%Y-%m-%d %H:%M:%S")
+    area = u["area_id"] if eh_gestor_tecnico(u) else None
+    linhas = c.execute(
+        "SELECT * FROM (SELECT t.id, t.titulo, t.local, t.km_percorrido km, t.executor_id, us.nome executor, t.setor_id, "
+        "(SELECT min(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='a_caminho') saida, "
+        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='em_execucao') chegada "
+        "FROM tarefas t JOIN usuarios us ON us.id=t.executor_id WHERE t.km_percorrido>0) x "
+        "WHERE x.chegada>=?" + (" AND x.setor_id=?" if area else "") + " ORDER BY x.chegada DESC",
+        (desde, area) if area else (desde,)).fetchall()
+    por = {}
+    for r in linhas:
+        d = por.setdefault(r["executor_id"], {"nome": r["executor"], "km": 0.0, "trechos": []})
+        d["km"] += r["km"]
+        d["trechos"].append({"id": r["id"], "titulo": r["titulo"], "local": r["local"], "km": r["km"], "saida": r["saida"],
+                             "chegada": r["chegada"], "min": minutos(r["saida"], r["chegada"]) if r["saida"] and r["chegada"] else None})
+    return sorted(por.values(), key=lambda d: -d["km"])
+
+
+@app.get("/gestor/equipe/historico", response_class=HTMLResponse)
+def equipe_historico(request: Request, dias: int = 7):
+    u = exige_painel(request, "gestor", "gestor_tecnico")
+    with db() as c:
+        tecnicos = historico_rotas(c, u, dias if dias in (7, 30) else 7)
+    return render(request, "_historico_rotas.html", tecnicos=tecnicos, dias=dias if dias in (7, 30) else 7)
+
+
 @app.get("/gestor/equipe/painel", response_class=HTMLResponse)
 def equipe_painel(request: Request):
     u = exige_painel(request, "gestor", "gestor_tecnico")
@@ -2987,6 +3015,11 @@ def config(request: Request):
             tipos=c.execute("SELECT t.*, s.nome setor FROM tipos t JOIN setores s ON s.id=t.setor_id").fetchall(),
             temporadas=c.execute("SELECT * FROM temporadas ORDER BY numero DESC").fetchall(),
             outbox=c.execute("SELECT * FROM outbox ORDER BY id DESC LIMIT 20").fetchall(),
+            perfis_n={k: c.execute("SELECT count(*) n FROM usuarios WHERE " + w).fetchone()["n"] for k, w in (
+                ("atendente", "papeis LIKE '%atendente%'"), ("gestor", "papeis LIKE '%gestor%' AND papeis NOT LIKE '%gestor_tecnico%'"),
+                ("gestor_tecnico", "papeis LIKE '%gestor_tecnico%'"), ("executor", "papeis LIKE '%executor%'"))},
+            pessoas=c.execute("SELECT u.*, e.nome equipe, s.nome area FROM usuarios u LEFT JOIN equipes e ON e.id=u.equipe_id "
+                              "LEFT JOIN setores s ON s.id=u.area_id ORDER BY u.papeis, u.nome").fetchall(),
         )
     return render(request, "config.html", **ctx)
 
@@ -3022,6 +3055,62 @@ def novo_setor(request: Request, nome: str = Form(...)):
     with db() as c:
         c.execute("INSERT INTO setores(nome) VALUES(?)", (nome,))
     return redirect("/config?msg=Área criada")
+
+
+# ---------------------------------------------------------------- pessoas e equipes (gestor)
+PAPEIS_PESSOA = {"atendente": "atendente", "executor": "executor", "gestor": "gestor,atendente", "gestor_tecnico": "gestor_tecnico"}
+
+
+def _int_ou_none(v):
+    return int(v) if str(v).strip().isdigit() else None
+
+
+def _dados_pessoa(c, nome, papel, equipe_id, area_id, competencias):
+    nome = nome.strip()
+    if not nome or papel not in PAPEIS_PESSOA:
+        raise HTTPException(422, "Informe o nome e o perfil da pessoa.")
+    if papel == "executor" and not c.execute("SELECT 1 FROM equipes WHERE id=?", (equipe_id,)).fetchone():
+        raise HTTPException(422, "Escolha a equipe do técnico.")
+    if papel == "gestor_tecnico" and not c.execute("SELECT 1 FROM setores WHERE id=?", (area_id,)).fetchone():
+        raise HTTPException(422, "Escolha a área do gestor técnico.")
+    return (nome, PAPEIS_PESSOA[papel], equipe_id if papel == "executor" else None,
+            area_id if papel == "gestor_tecnico" else None, competencias.strip())
+
+
+@app.post("/config/pessoa")
+def nova_pessoa(request: Request, nome: str = Form(...), papel: str = Form(...), equipe_id: str = Form(""),
+                area_id: str = Form(""), competencias: str = Form("")):
+    exige_painel(request, "gestor")
+    with db() as c:
+        d = _dados_pessoa(c, nome, papel, _int_ou_none(equipe_id), _int_ou_none(area_id), competencias)
+        c.execute("INSERT INTO usuarios(nome,papeis,equipe_id,area_id,competencias,avatar) VALUES(?,?,?,?,?,'')", d)
+    return redirect("/config?msg=Pessoa cadastrada&aba=pessoas")
+
+
+@app.post("/config/pessoa/{pid}")
+def editar_pessoa(request: Request, pid: int, nome: str = Form(...), papel: str = Form(...), equipe_id: str = Form(""),
+                  area_id: str = Form(""), competencias: str = Form(""), ativo: int = Form(1)):
+    u = exige_painel(request, "gestor")
+    with db() as c:
+        p = c.execute("SELECT * FROM usuarios WHERE id=?", (pid,)).fetchone()
+        if not p:
+            raise HTTPException(404, "Pessoa não encontrada")
+        d = _dados_pessoa(c, nome, papel, _int_ou_none(equipe_id), _int_ou_none(area_id), competencias)
+        if pid == u["id"] and "gestor" not in d[1].split(","):
+            raise HTTPException(409, "Você não pode retirar o seu próprio perfil de gestor.")
+        c.execute("UPDATE usuarios SET nome=?, papeis=?, equipe_id=?, area_id=?, competencias=?, disponivel=? WHERE id=?",
+                  (*d, 1 if ativo else 0, pid))
+    return redirect("/config?msg=Cadastro atualizado&aba=pessoas")
+
+
+@app.post("/config/equipe/{eid}")
+def editar_equipe(request: Request, eid: int, nome: str = Form(...), setor_id: int = Form(...)):
+    exige_painel(request, "gestor")
+    with db() as c:
+        if not c.execute("SELECT 1 FROM equipes WHERE id=?", (eid,)).fetchone() or not nome.strip():
+            raise HTTPException(422, "Equipe inválida")
+        c.execute("UPDATE equipes SET nome=?, setor_id=? WHERE id=?", (nome.strip(), setor_id, eid))
+    return redirect("/config?msg=Equipe atualizada&aba=pessoas")
 
 
 @app.post("/config/equipe")

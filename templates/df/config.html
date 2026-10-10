@@ -8,7 +8,7 @@
 <div class="df-page-head"><div><h1>{{ ui.icon('gear') }} Configuração</h1><p>Cadastros e regras que adaptam a plataforma a outras áreas.</p></div></div>
 
 <div data-tabs>
-<div class="df-tablist" role="tablist" aria-label="Seções da configuração"><button type="button" role="tab" id="t-areas" aria-controls="p-areas" aria-selected="false">Áreas e equipes</button><button type="button" role="tab" id="t-tipos" aria-controls="p-tipos" aria-selected="false">Tipos de tarefa</button><button type="button" role="tab" id="t-pontos" aria-controls="p-pontos" aria-selected="false">Pontuação e temporadas</button><button type="button" role="tab" id="t-integ" aria-controls="p-integ" aria-selected="false">Integração</button><button type="button" role="tab" id="t-perfis" aria-controls="p-perfis" aria-selected="false">Perfis e permissões</button></div>
+<div class="df-tablist" role="tablist" aria-label="Seções da configuração"><button type="button" role="tab" id="t-areas" aria-controls="p-areas" aria-selected="false">Áreas e equipes</button><button type="button" role="tab" id="t-tipos" aria-controls="p-tipos" aria-selected="false">Tipos de tarefa</button><button type="button" role="tab" id="t-pontos" aria-controls="p-pontos" aria-selected="false">Pontuação e temporadas</button><button type="button" role="tab" id="t-integ" aria-controls="p-integ" aria-selected="false">Integração</button><button type="button" role="tab" id="t-pessoas" aria-controls="p-pessoas" aria-selected="false">Equipe e pessoas</button><button type="button" role="tab" id="t-perfis" aria-controls="p-perfis" aria-selected="false">Perfis e permissões</button></div>
 <div id="p-areas" role="tabpanel" aria-labelledby="t-areas" tabindex="0" hidden><div class="df-stack">
   <section class="df-card" aria-labelledby="area-t">
     <header><h2 id="area-t">{{ ui.icon('users') }} Áreas</h2></header>
@@ -81,13 +81,53 @@
     </div>
   </section>
 </div></div>
+<div id="p-pessoas" role="tabpanel" aria-labelledby="t-pessoas" tabindex="0" hidden><div class="df-stack">
+  {% set eq_opts = [] %}{% for e in equipes %}{% set _ = eq_opts.append((e.id, e.nome ~ ' (' ~ e.setor ~ ')')) %}{% endfor %}
+  {% set papel_opts = [('atendente', 'Atendente'), ('executor', 'Técnico'), ('gestor', 'Gestor do Help Desk'), ('gestor_tecnico', 'Gestor técnico')] %}
+  <section class="df-card" aria-labelledby="pes-t">
+    <header><h2 id="pes-t">{{ ui.icon('users') }} Pessoas</h2><small>Crie, edite, mude de equipe ou de perfil. Desativar tira o técnico das listas de distribuição.</small></header>
+    <div class="df-stack">
+    {% for p in pessoas %}
+      {% set papel_atual = 'gestor_tecnico' if 'gestor_tecnico' in p.papeis else ('gestor' if 'gestor' in p.papeis else ('executor' if 'executor' in p.papeis else 'atendente')) %}
+      <details class="df-details"><summary><span><b>{{ p.nome }}</b> · {{ dict(papel_opts)[papel_atual] }}{% if p.equipe %} · {{ p.equipe }}{% elif p.area %} · {{ p.area }}{% endif %}{% if not p.disponivel %} · <span class="df-badge df-ia">Inativo</span>{% endif %}</span></summary>
+        <div class="df-details-body">
+          <form class="df-form" method="post" action="/config/pessoa/{{ p.id }}" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+            <div class="df-form-row">{{ ui.field('nome', 'Nome', p.nome, required=True, id='p' ~ p.id ~ '-nome') }}{{ ui.select('papel', 'Perfil', papel_opts, papel_atual, required=True, id='p' ~ p.id ~ '-papel') }}</div>
+            <div class="df-form-row">{{ ui.select('equipe_id', 'Equipe (técnico)', eq_opts, p.equipe_id or '', empty='—', empty_value='', id='p' ~ p.id ~ '-eq') }}{{ ui.select('area_id', 'Área (gestor técnico)', setor_opts, p.area_id or '', empty='—', empty_value='', id='p' ~ p.id ~ '-area') }}</div>
+            {{ ui.field('competencias', 'Competências', p.competencias, id='p' ~ p.id ~ '-comp') }}
+            {{ ui.select('ativo', 'Situação', [(1, 'Ativo'), (0, 'Inativo')], p.disponivel, id='p' ~ p.id ~ '-ativo') }}
+            <div class="df-form-actions">{{ ui.button('Salvar', style='secondary', glyph='check') }}</div>
+          </form>
+        </div></details>
+    {% endfor %}
+    </div>
+  </section>
+  <section class="df-card" aria-labelledby="novo-pes-t">
+    <header><h2 id="novo-pes-t">Nova pessoa</h2></header>
+    <form class="df-form" method="post" action="/config/pessoa" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      <div class="df-form-row">{{ ui.field('nome', 'Nome', '', required=True, id='np-nome') }}{{ ui.select('papel', 'Perfil', papel_opts, 'executor', required=True, id='np-papel') }}</div>
+      <div class="df-form-row">{{ ui.select('equipe_id', 'Equipe (técnico)', eq_opts, '', empty='—', empty_value='', id='np-eq') }}{{ ui.select('area_id', 'Área (gestor técnico)', setor_opts, '', empty='—', empty_value='', id='np-area') }}</div>
+      {{ ui.field('competencias', 'Competências', '', placeholder='Ex.: redes, cabeamento, wi-fi', id='np-comp') }}
+      <div class="df-form-actions">{{ ui.button('Cadastrar pessoa', glyph='plus') }}</div>
+    </form>
+  </section>
+  <section class="df-card" aria-labelledby="ed-eq-t">
+    <header><h2 id="ed-eq-t">Editar equipes</h2></header>
+    {% for e in equipes %}
+    <form class="df-form" method="post" action="/config/equipe/{{ e.id }}" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      <div class="df-form-row">{{ ui.field('nome', 'Equipe', e.nome, required=True, id='ee' ~ e.id ~ '-nome') }}{{ ui.select('setor_id', 'Área', setor_opts, e.setor_id, required=True, id='ee' ~ e.id ~ '-setor') }}<div class="df-form-actions" style="align-self:end">{{ ui.button('Salvar', style='secondary', size='small') }}</div></div>
+    </form>
+    {% endfor %}
+  </section>
+</div></div>
 <div id="p-perfis" role="tabpanel" aria-labelledby="t-perfis" tabindex="0" hidden><div class="df-stack">
   <section class="df-card" aria-labelledby="perf-t">
     <header><h2 id="perf-t">{{ ui.icon('shield-check') }} Perfis e permissões</h2></header>
     <ul class="df-stack-sm" style="margin:0;padding-left:20px">
-      <li><b>Atendente:</b> cadastra tarefas, avalia a fila e resolve ou encaminha chamados.</li>
-      <li><b>Gestor:</b> confere a triagem da IA, atribui, resolve impedimentos, configura e vê indicadores.</li>
-      <li><b>Executor:</b> vê e atualiza apenas as próprias missões (interface de campo).</li>
+      <li><b>Atendente:</b> cadastra tarefas, avalia a fila, assume conversas e resolve ou encaminha chamados. <small>({{ perfis_n.atendente }} pessoa(s))</small></li>
+      <li><b>Gestor do Help Desk:</b> vê todos os chamados, cancela com justificativa, acompanha métricas e configura. <small>({{ perfis_n.gestor }} pessoa(s))</small></li>
+      <li><b>Gestor técnico:</b> vê só os chamados da sua área, reavalia devolvidos e direciona técnicos. <small>({{ perfis_n.gestor_tecnico }} pessoa(s))</small></li>
+      <li><b>Técnico (executor):</b> vê e atualiza apenas as próprias missões (interface de campo). <small>({{ perfis_n.executor }} pessoa(s))</small></li>
       <li><b>Demandante:</b> acessa só o próprio chamado, por link com token único.</li>
     </ul>
   </section>

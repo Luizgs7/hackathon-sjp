@@ -1,0 +1,13 @@
+{% import "df/_ui.html" as ui %}
+<p class="df-muted"><small>Trechos até o local nos últimos {{ dias }} dias (km simulados, ida). Cada trecho vai de "a caminho" até "em execução".</small></p>
+{% if tecnicos %}
+<div class="df-stack">
+{% for t in tecnicos %}
+<details class="df-details"{% if loop.first %} open{% endif %}><summary><span><b>{{ t.nome }}</b> · {{ t.km|dec }} km · {{ t.trechos|length }} trecho(s)</span></summary>
+  <div class="df-details-body"><div class="df-table-scroll" role="region" aria-label="Trechos de {{ t.nome }}" tabindex="0"><table class="df-table">
+    <thead><tr><th scope="col">Chegada</th><th scope="col">Chamado</th><th scope="col">Local</th><th scope="col" class="num">Km</th><th scope="col" class="num">Duração</th></tr></thead>
+    <tbody>{% for x in t.trechos %}<tr><td class="df-nowrap">{{ x.chegada|datahora }}</td><td><a class="df-link" href="/tarefa/{{ x.id }}">#{{ x.id }} · {{ x.titulo }}</a></td><td>{{ x.local or "—" }}</td><td class="num">{{ x.km|dec }}</td><td class="num">{{ x.min ~ " min" if x.min is not none else "—" }}</td></tr>{% endfor %}</tbody>
+  </table></div></div></details>
+{% endfor %}
+</div>
+{% else %}{{ ui.empty("Nenhuma rota executada no período.", "path") }}{% endif %}
