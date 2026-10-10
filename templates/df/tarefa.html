@@ -7,6 +7,7 @@
 {% set na_fila = t.status in ('novo', 'reaberto', 'devolvido') %}
 {% set sug = ia if (ia and t.ia_status == 'sugerida') else {} %}
 {% set gestor_hd = eh_gestor and 'gestor_tecnico' not in u.papeis %}
+{% set gt = 'gestor_tecnico' in u.papeis %}
 {% block title %}#{{ t.id }} {{ t.titulo }}{% endblock %}
 {% block list_label %}Fila de atendimento{% endblock %}
 {% block context_label %}Triagem da IA{% endblock %}
@@ -88,7 +89,7 @@
   {% if ultimo and t.status in ('devolvido', 'cancelado') %}
   {% call ui.notice('', 'warn' if t.status == 'devolvido' else 'info', 'arrow-bend-up-left' if t.status == 'devolvido' else 'prohibit') %}
     <b>{{ STATUS[t.status][1] }}</b> por {{ ultimo.usuario }} em {{ ultimo.criado_em|datahora }}<br>{{ ultimo.texto }}
-    {% if t.status == 'devolvido' %}<br><small>O chamado voltou para a fila do atendimento: revise as informações com o solicitante, se necessário, e resolva ou reencaminhe.</small>{% endif %}
+    {% if t.status == 'devolvido' %}<br><small>Aguardando reavaliação do gestor técnico da área: direcionar a outro técnico ou cancelar com justificativa.</small>{% endif %}
   {% endcall %}
   {% endif %}
 
@@ -107,11 +108,19 @@
   </section>
   {% endif %}
 
-  {% if (na_fila or t.status == 'encaminhado') and not gestor_hd %}
+  {% if t.status == 'devolvido' and not gt %}
+  <section class="df-card" aria-labelledby="dev-t">
+    <h2 id="dev-t">{{ ui.icon('arrow-bend-up-left') }}Devolvido ao gestor técnico</h2>
+    <p>O técnico devolveu este chamado. Quem reavalia é o gestor técnico da área, que redireciona a outro técnico ou cancela com justificativa.</p>
+    {% if ultimo %}<p class="df-muted">{{ ultimo.texto }}</p>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if (na_fila or t.status == 'encaminhado') and not gestor_hd and not (t.status == 'devolvido' and not gt) %}
   <section class="df-card" aria-labelledby="dec-t">
     <header>
-      <h2 id="dec-t">{{ 'Avaliação do atendimento' if na_fila else 'Reencaminhar' }}</h2>
-      <small>{{ 'Este chamado está na fila do atendimento. Resolva aqui mesmo ou encaminhe para a área técnica.' if na_fila else 'O técnico ainda não iniciou: dá para trocar a área ou o técnico.' }}</small>
+      <h2 id="dec-t">{{ 'Reavaliar chamado devolvido' if t.status == 'devolvido' else ('Avaliação do atendimento' if na_fila else 'Reencaminhar') }}</h2>
+      <small>{% if t.status == 'devolvido' %}O técnico devolveu este chamado{% if ultimo %} ({{ ultimo.texto }}){% endif %}. Direcione a outro técnico da sua área ou cancele com justificativa obrigatória.{% else %}{{ 'Este chamado está na fila do atendimento. Resolva aqui mesmo ou encaminhe para a área técnica.' if na_fila else 'O técnico ainda não iniciou: dá para trocar a área ou o técnico.' }}{% endif %}</small>
     </header>
 
     {% if na_fila and 'gestor_tecnico' not in u.papeis %}
@@ -217,11 +226,11 @@
   </section>
 
   {% if t.status in CANCELAVEIS and not gestor_hd %}
-  <details class="df-details">
+  <details class="df-details"{% if t.status == 'devolvido' and gt %} open{% endif %}>
     <summary><span>{{ ui.icon('prohibit') }} Cancelar chamado</span></summary>
     <div class="df-details-body">
       <form class="df-form" method="post" action="/tarefa/{{ t.id }}/cancelar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Cancelar o chamado #{{ t.id }}? Esta ação encerra o atendimento." data-confirm-label="Cancelar chamado">
-        {{ ui.field('motivo', 'Motivo do cancelamento', '', required=True, placeholder='Ex.: chamado duplicado do #12', id='motivo-cancel') }}
+        {{ ui.field('motivo', 'Justificativa do cancelamento (obrigatória)', '', required=True, placeholder='Ex.: chamado duplicado do #12', id='motivo-cancel') }}
         <div class="df-form-actions">{{ ui.button('Cancelar chamado', style='destructive') }}</div>
       </form>
     </div>

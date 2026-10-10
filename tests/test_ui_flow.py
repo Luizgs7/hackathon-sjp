@@ -279,16 +279,20 @@ class CaminhosTests(UiFlowBase):
         sol = self.solicitar()
         tid = self.registrar(sol)
         with app.db() as c:
-            tipo = c.execute("SELECT id FROM tipos WHERE setor_id=?", (self.setor,)).fetchone()["id"]
-        atribuir = lambda: self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente,
-                                            data={"executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P3"})
-        atribuir()
-        # devolução com motivo oficial volta à fila do atendimento
+            tipo = c.execute("SELECT id FROM tipos WHERE setor_id=3").fetchone()["id"]  # área do Rafael (Telecom)
+        helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}  # gestora técnica de Telecom
+        atribuir = lambda ck: self.client.post(f"/tarefa/{tid}/atribuir", cookies=ck,
+                                               data={"executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P3"})
+        atribuir(self.atendente)
+        # devolução com motivo oficial vai ao gestor técnico da área (não à fila do atendimento)
         r = self.client.post(f"/campo/{tid}/devolver", cookies=self.tecnico, data={"motivo": app.MOTIVOS_DEVOLUCAO[0], "detalhe": ""})
         self.assertEqual(r.status_code, 303)
         self.assertEqual(self.tarefa(tid)["status"], "devolvido")
-        self.assertIn("Devolvido", self.client.get(f"/tarefa/{tid}", cookies=self.atendente).text)
-        atribuir()
+        self.assertIn("Devolvido ao gestor técnico", self.client.get(f"/tarefa/{tid}", cookies=self.atendente).text)
+        self.assertNotIn(f"#{tid}", self.client.get("/atendente/fila", cookies=self.atendente).text)
+        self.assertEqual(atribuir(self.atendente).status_code, 403)  # o atendimento não reavalia
+        self.assertIn("Reavaliar chamado devolvido", self.client.get(f"/tarefa/{tid}", cookies=helena).text)
+        self.assertEqual(atribuir(helena).status_code, 303)
         for para in ("a_caminho", "em_execucao"):
             self.client.post(f"/campo/{tid}/avancar", cookies=self.tecnico, data={"para": para})
         # impedimento (motivo externo) e resolução pelo gestor
@@ -558,7 +562,7 @@ class PainelEquipeTests(UiFlowBase):
         self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "a_caminho"})
         self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "em_execucao"})
         pend = self.novo("Escola Municipal Sul")
-        pagina = self.client.get("/gestor/equipe/painel", cookies=self.gt).text
+        pagina = self.client.get("/gestor/equipe/painel", cookies=self.gestor).text
         self.assertIn("chamado(s) no backlog", pagina)
         self.assertIn("Rafael Costa", pagina)
         self.assertIn("Em atendimento agora", pagina)
@@ -584,7 +588,7 @@ class PainelEquipeTests(UiFlowBase):
 
     def test_dados_do_mapa(self):
         self.novo("UBS Centro")
-        r = self.client.get("/gestor/equipe/dados", cookies=self.gt)
+        r = self.client.get("/gestor/equipe/dados", cookies=self.gestor)
         self.assertEqual(r.status_code, 200)
         j = r.json()
         self.assertEqual(len(j["pendentes"]), 1)
@@ -660,3 +664,65 @@ class EvidenciaEBotaoTests(UiFlowBase):
         self.assertIn("Falar com atendente", r.text)
         self.assertIn('id="acoes-vazio"', r.text)
         self.assertIn("/servidor/atendente", r.text)
+
+
+class AreaDoGestorTecnicoTests(UiFlowBase):
+    def setUp(self):
+        super().setUp()
+        self.helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}   # Telecom (área 3)
+        self.roberto = {"sess_painel": app.assinar(self.users["Roberto Nunes"])}  # Suporte (área 2)
+
+    def chamado(self, setor, titulo="Sem rede"):
+        tid = self.registrar(self.solicitar(titulo=titulo))
+        with app.db() as c:
+            c.execute("UPDATE tarefas SET setor_id=? WHERE id=?", (setor, tid))
+        return tid
+
+    def test_gestor_tecnico_ve_apenas_a_sua_area(self):
+        a = self.chamado(3, "Chamado de Telecom")
+        b = self.chamado(2, "Chamado de Suporte")
+        quadro = self.client.get("/gestor/quadro", cookies=self.helena).text
+        self.assertIn("Chamado de Telecom", quadro)
+        self.assertNotIn("Chamado de Suporte", quadro)
+        # tenta forçar outra área pelo parâmetro: continua só a sua
+        self.assertNotIn("Chamado de Suporte", self.client.get("/gestor/quadro", params={"setor_id": 2}, cookies=self.helena).text)
+        self.assertEqual(self.client.get(f"/tarefa/{a}", cookies=self.helena).status_code, 200)
+        self.assertEqual(self.client.get(f"/tarefa/{b}", cookies=self.helena).status_code, 403)
+        self.assertEqual(self.client.post(f"/tarefa/{b}/cancelar", data={"motivo": "x"}, cookies=self.helena).status_code, 403)
+        # gestor do Help Desk continua vendo tudo
+        todos = self.client.get("/gestor/quadro", cookies=self.gestor).text
+        self.assertIn("Chamado de Telecom", todos)
+        self.assertIn("Chamado de Suporte", todos)
+
+    def test_devolvido_so_para_o_gestor_tecnico_da_area_com_cancelamento_justificado(self):
+        tid = self.chamado(3)
+        with app.db() as c:
+            tipo = c.execute("SELECT id FROM tipos WHERE setor_id=3").fetchone()["id"]
+        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            "executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P3"})
+        self.client.post(f"/campo/{tid}/devolver", cookies=self.tecnico, data={"motivo": app.MOTIVOS_DEVOLUCAO[1], "detalhe": ""})
+        # aparece para o gestor técnico da área e não para o de outra área
+        self.assertIn(f"#{tid}", self.client.get("/gestor/equipe/painel", cookies=self.helena).text)
+        self.assertNotIn(f"#{tid}", self.client.get("/gestor/equipe/painel", cookies=self.roberto).text)
+        # direcionar a técnico de outra área é recusado
+        r = self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.helena, data={
+            "executor_id": self.users["Diego Santos"], "tipo_id": tipo, "prioridade": "P3"})
+        self.assertEqual(r.status_code, 403)
+        # cancelar exige justificativa
+        r = self.client.post(f"/tarefa/{tid}/cancelar", cookies=self.helena, data={"motivo": "  "})
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(self.tarefa(tid)["status"], "devolvido")
+        self.client.post(f"/tarefa/{tid}/cancelar", cookies=self.helena, data={"motivo": "Chamado duplicado"})
+        self.assertEqual(self.tarefa(tid)["status"], "cancelado")
+
+
+class BancoNovoComHistoricoTests(unittest.TestCase):
+    def test_inicializacao_com_historico_e_gestores_por_area(self):
+        with tempfile.TemporaryDirectory() as d, patch.object(app, "DB_PATH", Path(d) / "novo.db"), \
+                patch.object(app, "SEED_HISTORICO", True):
+            app.init_db()
+            with app.db() as c:
+                self.assertGreater(c.execute("SELECT count(*) FROM tarefas").fetchone()[0], 100)
+                areas = {r["area_id"] for r in c.execute("SELECT area_id FROM usuarios WHERE papeis='gestor_tecnico'")}
+                self.assertEqual(areas, {2, 3, 4, 5, 6})
+                self.assertTrue(all(e["setor_id"] for e in app.carga_executores(c)))

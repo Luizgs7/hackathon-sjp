@@ -87,6 +87,7 @@ TRANSICOES = {
 ATIVOS = ("encaminhado", "a_caminho", "em_execucao", "impedido")
 FINAIS = ("concluido", "cancelado")
 A_ENCAMINHAR = ("novo", "devolvido", "reaberto")
+FILA_ATENDIMENTO = ("novo", "reaberto")  # devolvidos pelo técnico vão ao gestor técnico da área
 MOTIVOS_DEVOLUCAO = [
     "Faltam informações do solicitante",
     "Chamado pertence a outra área",
@@ -281,6 +282,7 @@ MIGRACOES = [
     ("autoatendimento", "jev_json", "TEXT"),
     ("usuarios", "disponivel", "INTEGER NOT NULL DEFAULT 1"),
     ("tarefas", "km_percorrido", "REAL NOT NULL DEFAULT 0"),
+    ("usuarios", "area_id", "INTEGER"),
     ("autoatendimento", "modo", "TEXT NOT NULL DEFAULT 'ia'"),
     ("autoatendimento", "atendente_id", "INTEGER"),
     ("autoatendimento", "modo_desde", "TEXT"),
@@ -309,8 +311,12 @@ def init_db():
 
 def garantir_gestor_tecnico(c):
     """Perfil fictício adicional, também aplicado aos bancos existentes da demonstração."""
-    c.execute("INSERT INTO usuarios(nome,papeis,competencias,avatar) SELECT 'Roberto Nunes','gestor_tecnico','','' "
-              "WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE papeis='gestor_tecnico')")
+    # Cada gestor técnico responde por uma área e só enxerga os chamados dela.
+    for nome, setor in (("Roberto Nunes", 2), ("Helena Prado", 3), ("Otávio Brandão", 4), ("Camila Duarte", 5),
+                        ("Renato Paiva", 6)):
+        c.execute("INSERT INTO usuarios(nome,papeis,competencias,avatar,area_id) SELECT ?,'gestor_tecnico','','',? "
+                  "WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE nome=?)", (nome, setor, nome))
+    c.execute("UPDATE usuarios SET area_id=2 WHERE papeis='gestor_tecnico' AND area_id IS NULL")
 
 
 def seed(c):
@@ -852,39 +858,41 @@ def nivel(pontos_totais):
 
 # ---------------------------------------------------------------- indicadores
 
-def indicadores(c):
-    por_status = {r["status"]: r["n"] for r in c.execute("SELECT status, count(*) n FROM tarefas GROUP BY status")}
+def indicadores(c, setor_id=None):
+    w, wa, p = (" WHERE t.setor_id=?", " AND t.setor_id=?", (setor_id,)) if setor_id else ("", "", ())
+    por_status = {r["status"]: r["n"] for r in c.execute(f"SELECT t.status, count(*) n FROM tarefas t{w} GROUP BY t.status", p)}
     tempos_inicio, tempos_conf = [], []
     for r in c.execute(
         "SELECT (SELECT min(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='encaminhado') a, "
         "(SELECT min(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='em_execucao') e, "
         "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='executado') c, "
-        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='concluido') r FROM tarefas t"):
+        "(SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para='concluido') r FROM tarefas t" + w, p):
         if r["a"] and r["e"]:
             tempos_inicio.append(minutos(r["a"], r["e"]))
         if r["c"] and r["r"]:
             tempos_conf.append(minutos(r["c"], r["r"]))
     media = lambda xs: f"{sum(xs) / len(xs):.0f} min" if xs else "–"  # noqa: E731
-    csat = c.execute("SELECT avg(nota) m, count(nota) n FROM tarefas WHERE nota IS NOT NULL").fetchone()
-    motivos = c.execute("SELECT motivo, count(*) n FROM impedimentos GROUP BY motivo ORDER BY n DESC LIMIT 3").fetchall()
+    csat = c.execute("SELECT avg(t.nota) m, count(t.nota) n FROM tarefas t WHERE t.nota IS NOT NULL" + wa, p).fetchone()
+    motivos = c.execute("SELECT i.motivo, count(*) n FROM impedimentos i JOIN tarefas t ON t.id=i.tarefa_id" + w +
+                        " GROUP BY i.motivo ORDER BY n DESC LIMIT 3", p).fetchall()
     return {
         "recebidas": sum(por_status.values()),
-        "novos": sum(por_status.get(s, 0) for s in A_ENCAMINHAR),
+        "novos": sum(por_status.get(s, 0) for s in FILA_ATENDIMENTO),
         "em_execucao": sum(por_status.get(s, 0) for s in ("encaminhado", "a_caminho", "em_execucao")),
         "devolvidos": por_status.get("devolvido", 0),
         "cancelados": por_status.get("cancelado", 0),
         "impedidas": por_status.get("impedido", 0),
         "aguardando": por_status.get("executado", 0),
         "resolvidas": por_status.get("concluido", 0),
-        "reaberturas": c.execute("SELECT coalesce(sum(reaberturas),0) n FROM tarefas").fetchone()["n"],
+        "reaberturas": c.execute("SELECT coalesce(sum(t.reaberturas),0) n FROM tarefas t" + w, p).fetchone()["n"],
         "tempo_inicio": media(tempos_inicio),
         "tempo_confirmacao": media(tempos_conf),
         "csat": f"{csat['m']:.1f}★ ({csat['n']})" if csat["n"] else "–",
         "motivos": motivos,
-        "outbox_pendente": c.execute("SELECT count(*) n FROM outbox WHERE status='pendente'").fetchone()["n"],
-        "auto_resolvidos": contar_auto_resolvidos(c),
-        "auto_ia_resolvidos": contar_auto_resolvidos(c, somente_ia=True),
-        "solicitacoes_aguardando": c.execute("SELECT count(*) n FROM solicitacoes WHERE status='aguardando'").fetchone()["n"],
+        "outbox_pendente": 0 if setor_id else c.execute("SELECT count(*) n FROM outbox WHERE status='pendente'").fetchone()["n"],
+        "auto_resolvidos": 0 if setor_id else contar_auto_resolvidos(c),
+        "auto_ia_resolvidos": 0 if setor_id else contar_auto_resolvidos(c, somente_ia=True),
+        "solicitacoes_aguardando": 0 if setor_id else c.execute("SELECT count(*) n FROM solicitacoes WHERE status='aguardando'").fetchone()["n"],
     }
 
 
@@ -1290,6 +1298,16 @@ def exige_painel(request, *papeis):
     return u
 
 
+def eh_gestor_tecnico(u):
+    return "gestor_tecnico" in u["papeis"].split(",")
+
+
+def exige_acesso(u, t):
+    """O gestor técnico só enxerga e age nos chamados direcionados para a sua área."""
+    if eh_gestor_tecnico(u) and t["setor_id"] != u["area_id"]:
+        raise HTTPException(403, "Este chamado pertence a outra área técnica.")
+
+
 def exige_executor(request):
     u = usuario_do_cookie(request, "sess_campo")
     if not u:
@@ -1365,7 +1383,8 @@ def login_form(request: Request):
     with db() as c:
         garantir_gestor_tecnico(c)
         usuarios = c.execute("SELECT u.*, e.nome equipe FROM usuarios u LEFT JOIN equipes e ON e.id=u.equipe_id ORDER BY u.id").fetchall()
-    return render(request, "login.html", usuarios=usuarios,
+        areas = {r["id"]: r["nome"] for r in c.execute("SELECT id, nome FROM setores")}
+    return render(request, "login.html", usuarios=usuarios, areas=areas,
                   painel=usuario_do_cookie(request, "sess_painel"), campo=usuario_do_cookie(request, "sess_campo"))
 
 
@@ -1467,7 +1486,7 @@ def fila_atendimento(c):
     """Chamados que aguardam avaliação do atendimento: novos, devolvidos pelo técnico e reabertos pela demandante."""
     fila = c.execute(
         "SELECT t.*, (SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para=t.status) entrou_em "
-        f"FROM tarefas t WHERE t.status IN ({','.join('?' * len(A_ENCAMINHAR))})", A_ENCAMINHAR).fetchall()
+        f"FROM tarefas t WHERE t.status IN ({','.join('?' * len(FILA_ATENDIMENTO))})", FILA_ATENDIMENTO).fetchall()
     itens = []
     for t in fila:
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
@@ -1539,13 +1558,15 @@ def _casa_busca(t, q):
 
 @app.get("/gestor/quadro", response_class=HTMLResponse)
 def gestor_quadro(request: Request, setor_id: int | None = None, q: str = ""):
-    exige_painel(request, "gestor", "gestor_tecnico")
+    u = exige_painel(request, "gestor", "gestor_tecnico")
+    if eh_gestor_tecnico(u):
+        setor_id = u["area_id"]
     with db() as c:
         sql = ("SELECT t.*, u.nome executor, u.avatar, tp.nome tipo FROM tarefas t LEFT JOIN usuarios u ON u.id=t.executor_id "
                "LEFT JOIN tipos tp ON tp.id=t.tipo_id")
         tarefas = c.execute(sql + (" WHERE t.setor_id=?" if setor_id else "") + " ORDER BY coalesce(t.prioridade,'P9'), t.id",
                             (setor_id,) if setor_id else ()).fetchall()
-        ind = indicadores(c)
+        ind = indicadores(c, u["area_id"] if eh_gestor_tecnico(u) else None)
     q = q.strip()
     if q:  # busca somente entre os chamados em aberto
         tarefas = [t for t in tarefas if t["status"] not in FINAIS and _casa_busca(t, q)]
@@ -1556,7 +1577,7 @@ def gestor_quadro(request: Request, setor_id: int | None = None, q: str = ""):
         colunas[s] = sorted(colunas[s], key=lambda t: t["atualizado_em"], reverse=True)[:10]
     impedidos = [t for t in tarefas if t["status"] == "impedido"]
     return render(request, "_quadro.html", colunas=colunas, totais=totais, impedidos=impedidos, ind=ind,
-                  busca=q, n_busca=len(tarefas))
+                  busca=q, n_busca=len(tarefas), so_area=eh_gestor_tecnico(u))
 
 
 PERIODOS = {30: "Últimos 30 dias", 60: "Últimos 60 dias", 90: "Últimos 90 dias"}
@@ -1583,13 +1604,14 @@ def _posicao_do_tecnico(c, tid_ativos):
     return list(BASE_RASTRO), None
 
 
-def painel_equipe(c):
+def painel_equipe(c, u=None):
     tecnicos, ativos_por = [], {}
     for r in c.execute("SELECT t.*, tp.nome tipo FROM tarefas t LEFT JOIN tipos tp ON tp.id=t.tipo_id "
                        f"WHERE t.executor_id IS NOT NULL AND t.status IN ({','.join('?' * len(ATIVOS))}) "
                        "ORDER BY t.prioridade, t.id", ATIVOS):
         ativos_por.setdefault(r["executor_id"], []).append(r)
-    for e in carga_executores(c, todos=True):
+    area = u["area_id"] if u is not None and eh_gestor_tecnico(u) else None
+    for e in carga_executores(c, area, todos=True):
         ativas = ativos_por.get(e["id"], [])
         pos, atual = _posicao_do_tecnico(c, ativas)
         etapas = {s: sum(1 for t in ativas if t["status"] == s) for s in ATIVOS}
@@ -1605,7 +1627,12 @@ def painel_equipe(c):
         t["pct"] = round(100 * t["total"] / maior)
     # chamados aguardando direcionamento, com sugestão por distância e carga
     pendentes = []
-    for item in fila_atendimento(c):
+    itens = fila_atendimento(c) if area is None else []
+    for t in c.execute("SELECT * FROM tarefas WHERE status='devolvido'" + (" AND setor_id=?" if area else ""),
+                       (area,) if area else ()):
+        ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
+        itens.append({"t": t, "ia": ia, "prio": t["prioridade"] or ia.get("prioridade") or "P3"})
+    for item in itens:
         t = item["t"]
         alvo = rastro_destino(chave_local(t))
         ranking = sorted(({"id": x["id"], "nome": x["nome"], "total": x["total"], "km": round(km_entre(x["posicao"], alvo), 1),
@@ -1623,18 +1650,18 @@ def equipe_pagina(request: Request):
 
 @app.get("/gestor/equipe/painel", response_class=HTMLResponse)
 def equipe_painel(request: Request):
-    exige_painel(request, "gestor", "gestor_tecnico")
+    u = exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
-        dados = painel_equipe(c)
+        dados = painel_equipe(c, u)
         tipos = c.execute("SELECT id, setor_id FROM tipos ORDER BY id").fetchall()
     return render(request, "_equipe_painel.html", **dados, tipo_padrao=tipos[0]["id"] if tipos else 1)
 
 
 @app.get("/gestor/equipe/dados")
 def equipe_dados(request: Request):
-    exige_painel(request, "gestor", "gestor_tecnico")
+    u = exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
-        d = painel_equipe(c)
+        d = painel_equipe(c, u)
     return JSONResponse({
         "base": list(BASE_RASTRO),
         "tecnicos": [{"nome": t["nome"], "posicao": t["posicao"], "disponivel": t["disponivel"], "total": t["total"],
@@ -1648,6 +1675,8 @@ def equipe_dados(request: Request):
 @app.get("/gestor/metricas", response_class=HTMLResponse)
 def gestor_metricas(request: Request, dias: int = 90, setor_id: int | None = None):
     u = exige_painel(request, "gestor", "gestor_tecnico")
+    if eh_gestor_tecnico(u):
+        setor_id = u["area_id"]
     dias = dias if dias in PERIODOS else 90
     with db() as c:
         mt = metricas(c, dias, setor_id)
@@ -1659,7 +1688,7 @@ def gestor_metricas(request: Request, dias: int = 90, setor_id: int | None = Non
 
 @app.get("/gestor/metricas/analise", response_class=HTMLResponse)
 def ver_analise(request: Request):
-    exige_painel(request, "gestor", "gestor_tecnico")
+    exige_painel(request, "gestor")
     with db() as c:
         analise = cfg(c, "analise_capacitacao")
     return render(request, "_analise.html", analise=analise)
@@ -1667,7 +1696,7 @@ def ver_analise(request: Request):
 
 @app.post("/gestor/metricas/analise", response_class=HTMLResponse)
 def pedir_analise(request: Request, dias: int = Form(90)):
-    exige_painel(request, "gestor", "gestor_tecnico")
+    exige_painel(request, "gestor")
     dias = dias if dias in PERIODOS else 90
     with db() as c:
         anterior = cfg(c, "analise_capacitacao") or {}
@@ -1682,11 +1711,13 @@ def tarefa_detalhe(request: Request, tid: int):
     u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
     with db() as c:
         t = tarefa_ou_404(c, tid)
+        exige_acesso(u, t)
         ctx = dict(
             t=t, u=u, eh_gestor="gestor" in u["papeis"],
             ia=json.loads(t["ia_json"]) if t["ia_json"] else None,
-            tipos=c.execute("SELECT t.*, s.nome setor FROM tipos t JOIN setores s ON s.id=t.setor_id").fetchall(),
-            executores=carga_executores(c),
+            tipos=[x for x in c.execute("SELECT t.*, s.nome setor FROM tipos t JOIN setores s ON s.id=t.setor_id").fetchall()
+                   if not eh_gestor_tecnico(u) or x["setor_id"] == u["area_id"]],
+            executores=carga_executores(c, u["area_id"] if eh_gestor_tecnico(u) else None),
             todos=c.execute("SELECT * FROM usuarios ORDER BY nome").fetchall(),
             eventos=c.execute("SELECT * FROM eventos WHERE tarefa_id=? ORDER BY id DESC", (tid,)).fetchall(),
             impedimentos=c.execute("SELECT i.*, u.nome apoio FROM impedimentos i LEFT JOIN usuarios u ON u.id=i.apoio_id "
@@ -1711,6 +1742,7 @@ def cancelar(request: Request, tid: int, motivo: str = Form(...)):
         return redirect(f"/tarefa/{tid}?msg=Informe o motivo do cancelamento")
     with db() as c:
         t = tarefa_ou_404(c, tid)
+        exige_acesso(u, t)
         c.execute("UPDATE impedimentos SET aberto=0, providencia='Chamado cancelado', resolvido_por=?, resolvido_em=? "
                   "WHERE tarefa_id=? AND aberto=1", (u["nome"], agora(), tid))
         mudar_status(c, t, "cancelado", u, "gestor" if "gestor" in u["papeis"] else "atendente",
@@ -1723,8 +1755,9 @@ def cancelar(request: Request, tid: int, motivo: str = Form(...)):
 
 @app.get("/tarefa/{tid}/estado")
 def tarefa_estado(request: Request, tid: int, v: str = ""):
-    exige_painel(request)
+    u = exige_painel(request)
     with db() as c:
+        exige_acesso(u, tarefa_ou_404(c, tid))
         return recarregar_se_mudou(c, tid, v)
 
 
@@ -1736,6 +1769,9 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
     papel = papel_painel(u)
     with db() as c:
         t = tarefa_ou_404(c, tid)
+        exige_acesso(u, t)
+        if t["status"] == "devolvido" and not eh_gestor_tecnico(u):
+            raise HTTPException(403, "Chamado devolvido pelo técnico: quem reavalia é o gestor técnico da área.")
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
         ia_status = t["ia_status"]
         if ia_status == "sugerida":
@@ -1746,6 +1782,10 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
         ex = c.execute("SELECT * FROM usuarios WHERE id=?", (executor_id,)).fetchone()
         if not ex or not ex["disponivel"]:
             raise HTTPException(409, "Este técnico está inativo e não recebe novas missões.")
+        if eh_gestor_tecnico(u):
+            area_ex = c.execute("SELECT setor_id FROM equipes WHERE id=?", (ex["equipe_id"],)).fetchone()
+            if not area_ex or area_ex["setor_id"] != u["area_id"] or tipo["setor_id"] != u["area_id"]:
+                raise HTTPException(403, "Direcione apenas a técnicos e tipos da sua área.")
         ajustada_por = t["prioridade_ajustada_por"]
         if prioridade != t["prioridade"] and ia.get("prioridade") and prioridade != ia["prioridade"]:
             ajustada_por = u["nome"]
@@ -1773,6 +1813,7 @@ def resolver_no_atendimento(request: Request, tid: int, solucao: str = Form(...)
         return redirect(f"/tarefa/{tid}?msg=Descreva a solução dada ao solicitante")
     with db() as c:
         t = tarefa_ou_404(c, tid)
+        exige_acesso(u, t)
         if t["status"] not in A_ENCAMINHAR:
             raise HTTPException(409, "Só chamados na fila do atendimento podem ser resolvidos no 1º nível")
         c.execute("UPDATE tarefas SET relato=?, resolvido_atendimento_por=? WHERE id=?", (solucao.strip(), u["nome"], tid))
@@ -1792,6 +1833,7 @@ def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), 
         return redirect(f"/tarefa/{tid}?msg=Informe o motivo do ajuste de criticidade")
     with db() as c:
         t = tarefa_ou_404(c, tid)
+        exige_acesso(u, t)
         if t["status"] in FINAIS:
             raise HTTPException(409, f"Chamado {STATUS[t['status']][1].lower()}: a criticidade não pode mais ser alterada")
         if prioridade == t["prioridade"]:
@@ -1815,6 +1857,7 @@ def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), 
 def rejeitar_ia(request: Request, tid: int):
     u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
     with db() as c:
+        exige_acesso(u, tarefa_ou_404(c, tid))
         c.execute("UPDATE tarefas SET ia_status='rejeitada', atualizado_em=? WHERE id=?", (agora(), tid))
         registrar_evento(c, tid, u["nome"], papel_painel(u), f"Sugestão da IA rejeitada pelo {papel_painel(u)}")
     return redirect(f"/tarefa/{tid}")
@@ -1822,8 +1865,9 @@ def rejeitar_ia(request: Request, tid: int):
 
 @app.post("/tarefa/{tid}/retriar")
 def retriar(request: Request, tid: int):
-    exige_painel(request, "gestor", "atendente", "gestor_tecnico")
+    u = exige_painel(request, "gestor", "atendente", "gestor_tecnico")
     with db() as c:
+        exige_acesso(u, tarefa_ou_404(c, tid))
         c.execute("UPDATE tarefas SET ia_status='analisando', atualizado_em=? WHERE id=?", (agora(), tid))
     em_segundo_plano(triar, tid)
     return redirect(f"/tarefa/{tid}")
@@ -1834,6 +1878,8 @@ def resolver_impedimento(request: Request, iid: int, providencia: str = Form(...
     u = exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
         i = c.execute("SELECT * FROM impedimentos WHERE id=? AND aberto=1", (iid,)).fetchone()
+        if i:
+            exige_acesso(u, tarefa_ou_404(c, i["tarefa_id"]))
         if not i:
             raise HTTPException(404, "Impedimento não encontrado ou já resolvido")
         t = tarefa_ou_404(c, i["tarefa_id"])
@@ -1959,9 +2005,9 @@ def campo_devolver(request: Request, tid: int, motivo: str = Form(...), detalhe:
         return redirect(f"/campo/{tid}?msg=Explique o motivo da devolução")
     with db() as c:
         u, t = _missao_do_executor(c, request, tid)
-        mudar_status(c, t, "devolvido", u, "executor", f"Devolvido à triagem: {motivo}" + (f" – {detalhe}" if detalhe else ""))
+        mudar_status(c, t, "devolvido", u, "executor", f"Devolvido ao gestor técnico da área: {motivo}" + (f" – {detalhe}" if detalhe else ""))
     em_segundo_plano(processar_outbox)
-    return redirect("/campo?msg=Chamado devolvido à fila do atendimento, que vai reavaliar.")
+    return redirect("/campo?msg=Chamado devolvido ao gestor técnico da sua área, que vai reavaliar.")
 
 
 @app.post("/campo/{tid}/impedimento")

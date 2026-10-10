@@ -25,21 +25,24 @@ class GestorTecnicoTests(UiFlowBase):
     def test_technical_manager_can_assign_but_cannot_resolve_at_helpdesk(self):
         sol=self.solicitar()
         tid=self.registrar(sol)
+        with app.db() as c:  # Roberto responde pela área 2 (Suporte Técnico)
+            tipo2=c.execute('SELECT id FROM tipos WHERE setor_id=2').fetchone()['id']
+            c.execute('UPDATE tarefas SET setor_id=2 WHERE id=?',(tid,))
         self.client.post('/login',data={'uid':self.users['Roberto Nunes']})
         task=self.client.get(f'/tarefa/{tid}')
         self.assertEqual(task.status_code,200)
         self.assertNotIn(f'action="/tarefa/{tid}/resolver-atendimento"',task.text)
         self.assertNotIn('hx-get="/atendente/fila',task.text)
         self.assertEqual(self.client.post(f'/tarefa/{tid}/resolver-atendimento',data={'solucao':'Fictícia'}).status_code,403)
-        r=self.client.post(f'/tarefa/{tid}/atribuir',data={'executor_id':self.users['Rafael Costa'],'tipo_id':1,'prioridade':'P3'})
+        r=self.client.post(f'/tarefa/{tid}/atribuir',data={'executor_id':self.users['Diego Santos'],'tipo_id':tipo2,'prioridade':'P3'})
         self.assertEqual(r.status_code,303)
         self.assertEqual(self.tarefa(tid)['status'],'encaminhado')
-        self.assertEqual(self.tarefa(tid)['executor_id'],self.users['Rafael Costa'])
+        self.assertEqual(self.tarefa(tid)['executor_id'],self.users['Diego Santos'])
         self.assertEqual(self.client.post(f"/solicitacoes/{sol['id']}/descartar",data={'motivo':'Teste'}).status_code,403)
 
     def test_existing_database_upgrade_is_idempotent(self):
         with app.db() as c:
             for _ in range(3):
                 app.garantir_gestor_tecnico(c)
-            self.assertEqual(c.execute("SELECT count(*) FROM usuarios WHERE papeis='gestor_tecnico'").fetchone()[0],1)
+            self.assertEqual(c.execute("SELECT count(*) FROM usuarios WHERE papeis='gestor_tecnico'").fetchone()[0],5)  # um por área técnica
             self.assertEqual(c.execute("SELECT papeis FROM usuarios WHERE nome='Paula Mendes'").fetchone()[0],'gestor,atendente')

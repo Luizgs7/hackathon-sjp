@@ -105,7 +105,7 @@
   </div>
 </section>
 
-<section class="df-card" aria-labelledby="cap-t">
+{% if 'gestor_tecnico' not in u.papeis %}<section class="df-card" aria-labelledby="cap-t">
   <header><h2 id="cap-t">{{ ui.icon('lightbulb') }} Oportunidades de capacitação por secretaria</h2>
     <div><span class="df-badge df-ia">{{ ui.icon('sparkle') }}análise por IA</span></div>
     <small>A IA cruza a recorrência e os tipos de chamado de cada secretaria e sugere ações em massa (treinamentos, tutoriais, comunicados, prevenção) para reduzir a demanda futura. As sugestões apoiam a decisão; não são aplicadas automaticamente.</small></header>
@@ -114,7 +114,7 @@
     {{ ui.button(('Gerar nova análise' if analise and analise.acoes else 'Gerar análise') ~ ' (' ~ (periodos[mt.dias]|lower) ~ ')', style='secondary', glyph='sparkle') }}
   </form>
   <div id="analise" aria-live="polite">{% include "df/_analise.html" %}</div>
-</section>
+</section>{% endif %}
 
 <details class="df-details">
   <summary>Ver dados semanais em tabela</summary>

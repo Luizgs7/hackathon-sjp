@@ -78,7 +78,7 @@
       </div>
     </details>
   {% elif t.status == 'devolvido' %}
-    {% call ui.notice('', 'warn', 'arrow-bend-up-left') %}<b>Devolvido à triagem.</b> O atendimento vai reavaliar e reencaminhar, se necessário.{% endcall %}
+    {% call ui.notice('', 'warn', 'arrow-bend-up-left') %}<b>Devolvido ao gestor técnico.</b> O gestor técnico da sua área vai reavaliar: redirecionar a outro técnico ou cancelar.{% endcall %}
   {% elif t.status == 'cancelado' %}
     {% call ui.notice('', 'info', 'prohibit') %}<b>Chamado cancelado.</b> Nenhuma ação necessária.{% endcall %}
   {% elif t.status == 'impedido' %}
@@ -98,7 +98,7 @@
   <details class="df-details">
     <summary><span>{{ ui.icon('arrow-bend-up-left') }} Devolver à triagem</span></summary>
     <div class="df-details-body">
-      <form class="df-form" method="post" action="/campo/{{ t.id }}/devolver" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Devolver este chamado à fila do atendimento?" data-confirm-label="Devolver chamado">
+      <form class="df-form" method="post" action="/campo/{{ t.id }}/devolver" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Devolver este chamado ao gestor técnico da sua área?" data-confirm-label="Devolver chamado">
         {% set md = [] %}{% for m in MOTIVOS_DEVOLUCAO %}{% set _ = md.append((m, m, '')) %}{% endfor %}
         {{ ui.choice('motivo', 'Motivo da devolução', md, MOTIVOS_DEVOLUCAO[0]) }}
         {{ ui.field('detalhe', 'Detalhe', '', placeholder='Ex.: não informaram o número do ramal', id='detalhe-dev') }}

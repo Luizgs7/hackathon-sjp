@@ -13,7 +13,8 @@
   <form class="df-filters" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change, input delay:300ms, submit" role="search">
     <div class="df-field df-search df-search-quadro">{{ ui.icon('magnifying-glass') }}<label class="df-sr" for="busca-quadro">Buscar chamados em aberto</label><input id="busca-quadro" type="search" name="q" placeholder="Buscar por ID, descrição, local…" autocomplete="off"></div>
     {% set opts = [] %}{% for s in setores %}{% set _ = opts.append((s.id, s.nome)) %}{% endfor %}
-    {{ ui.select('setor_id', 'Filtrar por área', opts, 0, empty='Todas as áreas', empty_value=0, id='filtro-area') }}
+    {% if 'gestor_tecnico' in u.papeis %}<p class="df-badge" role="status">{{ ui.icon('map-pin') }}Área: {% for s in setores if s.id == u.area_id %}{{ s.nome }}{% endfor %}</p>
+    {% else %}{{ ui.select('setor_id', 'Filtrar por área', opts, 0, empty='Todas as áreas', empty_value=0, id='filtro-area') }}{% endif %}
     {{ ui.button('Métricas e capacitação', href='/gestor/metricas', style='secondary') }}{% if 'gestor_tecnico' not in u.papeis %}{{ ui.button('Novo chamado', href='/atendente', style='secondary') }}{% endif %}
   </form>
 </div>

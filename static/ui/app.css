@@ -567,3 +567,5 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
   .df-nav-item { flex: 1 1 0; min-width: 0; padding: 6px 2px; font-size: 10.5px; }
   .df-nav-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+.df-filters .df-search-quadro { min-width: min(100%, 340px); flex: 1 1 340px; }

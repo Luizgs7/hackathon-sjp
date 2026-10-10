@@ -17,7 +17,8 @@
     {% for papel, rotulo in [('atendente', 'Helpdesk'), ('gestor', 'Gestor do atendimento'), ('gestor_tecnico', 'Gestor técnico'), ('executor', 'Técnico')] %}
       {% set candidatos = usuarios|selectattr('papeis', 'equalto', papel)|list %}
       {% if papel == 'gestor' %}{% set candidatos = usuarios|selectattr('papeis', 'equalto', 'gestor,atendente')|list %}{% endif %}
-      {% if candidatos %}{% set _ = opts.append((candidatos[0].id, rotulo ~ ' · ' ~ candidatos[0].nome)) %}{% endif %}
+      {% if papel == 'gestor_tecnico' %}{% for g in candidatos %}{% set _ = opts.append((g.id, rotulo ~ ' · ' ~ g.nome ~ ' (' ~ areas.get(g.area_id, '') ~ ')')) %}{% endfor %}
+      {% elif candidatos %}{% set _ = opts.append((candidatos[0].id, rotulo ~ ' · ' ~ candidatos[0].nome)) %}{% endif %}
     {% endfor %}
     {{ ui.select('uid', 'Tipo de usuário', opts, 0, required=True, id='login-uid') }}
     {{ ui.button('Entrar', cls='df-wide') }}
