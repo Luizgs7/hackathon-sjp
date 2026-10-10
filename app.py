@@ -1617,6 +1617,8 @@ def painel_equipe(c, u=None):
                        "ORDER BY t.prioridade, t.id", ATIVOS):
         ativos_por.setdefault(r["executor_id"], []).append(r)
     area = u["area_id"] if u is not None and eh_gestor_tecnico(u) else None
+    conf_por = {r["executor_id"]: r["n"] for r in c.execute(
+        "SELECT executor_id, count(*) n FROM tarefas WHERE status='executado' AND executor_id IS NOT NULL GROUP BY executor_id")}
     for e in carga_executores(c, area, todos=True):
         ativas = ativos_por.get(e["id"], [])
         pos, atual = _posicao_do_tecnico(c, ativas)
@@ -1627,10 +1629,24 @@ def painel_equipe(c, u=None):
             "criticas": sum(1 for t in ativas if t["prioridade"] in ("P1", "P2")),
             "atual": atual, "posicao": pos, "ativas": ativas,
             "km_hoje": round(sum(t["km_percorrido"] or 0 for t in ativas), 1),
+            "conf": conf_por.get(e["id"], 0), "equipe_id": e["equipe_id"],
         })
     maior = max([t["total"] for t in tecnicos] + [1])
     for t in tecnicos:
         t["pct"] = round(100 * t["total"] / maior)
+        t["carga"] = t["total"] + t["conf"]
+    maior_carga = max([t["carga"] for t in tecnicos] + [1])
+    for t in tecnicos:
+        t["pct_carga"] = round(100 * t["carga"] / maior_carga)
+    por_eq = {}
+    for t in tecnicos:
+        d = por_eq.setdefault(t["equipe"], {"nome": t["equipe"], "chamados": 0, "membros": 0})
+        d["chamados"] += t["carga"]
+        d["membros"] += 1
+    equipes = sorted(por_eq.values(), key=lambda d: -d["chamados"])
+    maior_eq = max([d["chamados"] for d in equipes] + [1])
+    for d in equipes:
+        d["pct"] = round(100 * d["chamados"] / maior_eq)
     # chamados aguardando direcionamento, com sugestão por distância e carga
     pendentes = []
     itens = fila_atendimento(c) if area is None else []
@@ -1645,7 +1661,7 @@ def painel_equipe(c, u=None):
                            "atual": x["atual"]} for x in tecnicos if x["disponivel"]), key=lambda x: (x["km"], x["total"]))
         pendentes.append({"t": t, "prio": item["prio"], "alvo": list(alvo), "ranking": ranking[:3],
                           "ia": item["ia"]})
-    return {"tecnicos": tecnicos, "pendentes": pendentes}
+    return {"tecnicos": tecnicos, "pendentes": pendentes, "equipes": equipes}
 
 
 @app.get("/gestor/equipe", response_class=HTMLResponse)

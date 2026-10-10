@@ -25,6 +25,33 @@
 </section>
 {% endif %}
 
+<div class="df-equipe-cargas">
+<section class="df-card" aria-labelledby="carga-t">
+  <header><h2 id="carga-t">{{ ui.icon('users') }}Carga por técnico</h2><small>Chamados de cada técnico por etapa. Total inclui os aguardando confirmação do solicitante.</small></header>
+  <div class="df-table-scroll" role="region" aria-label="Carga por técnico" tabindex="0">
+    <table class="df-table">
+      <thead><tr><th scope="col">Técnico</th><th scope="col" class="num" title="Encaminhados, ainda não iniciados">Atrib.</th><th scope="col" class="num" title="A caminho ou em execução">Exec.</th><th scope="col" class="num" title="Impedidos">Bloq.</th><th scope="col" class="num" title="Executados, aguardando confirmação do solicitante">Conf.</th><th scope="col">Total</th></tr></thead>
+      <tbody>
+      {% for t in tecnicos|sort(attribute='carga', reverse=True) %}
+        <tr><th scope="row"><span class="df-pessoa"><span class="df-dot-disp {{ 'on' if t.disponivel else 'off' }}" role="img" aria-label="{{ 'Disponível' if t.disponivel else 'Inativo' }}"></span><span><b>{{ t.nome }}</b><br><small>{{ t.equipe }} · {{ 'Disponível' if t.disponivel else 'Inativo' }}</small></span></span></th>
+          <td class="num">{{ t.etapas.encaminhado }}</td><td class="num">{{ t.etapas.a_caminho + t.etapas.em_execucao }}</td><td class="num">{{ t.etapas.impedido }}</td><td class="num">{{ t.conf }}</td>
+          <td><span class="df-carga"><b>{{ t.carga }}</b><span class="df-bar" role="img" aria-label="Carga {{ t.carga }}"><span style="width:{{ t.pct_carga }}%"></span></span></span></td></tr>
+      {% else %}<tr><td colspan="6"><small>Nenhum técnico cadastrado.</small></td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+<section class="df-card" aria-labelledby="carga-eq-t">
+  <header><h2 id="carga-eq-t">{{ ui.icon('users') }}Carga por equipe</h2><small>Chamados em andamento ou aguardando confirmação, por equipe.</small></header>
+  <div class="df-stack-sm">
+    {% for e in equipes %}
+    <div><div class="df-row"><span>{{ e.nome }}</span><span><b>{{ e.chamados }}</b> chamado{{ 's' if e.chamados != 1 }} · {{ e.membros }} membro{{ 's' if e.membros != 1 }}</span></div>
+      <div class="df-bar df-bar-eq" role="img" aria-label="{{ e.chamados }} chamados"><span style="width:{{ e.pct }}%"></span></div></div>
+    {% else %}<p class="df-muted">Sem equipes.</p>{% endfor %}
+  </div>
+</section>
+</div>
+
 <section aria-labelledby="bk-t">
   <h2 id="bk-t">Backlog por técnico</h2>
   <div class="df-equipe-grid">

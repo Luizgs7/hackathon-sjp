@@ -875,3 +875,20 @@ class PessoasEHistoricoTests(UiFlowBase):
         self.assertIn("Rafael Costa", r.text)
         self.assertIn(f"#{tid}", r.text)
         self.assertEqual(self.client.get("/gestor/equipe/historico", cookies=self.atendente).status_code, 403)
+
+
+class CargaPorTecnicoTests(UiFlowBase):
+    def test_tabelas_de_carga_por_tecnico_e_equipe(self):
+        tid = self.registrar(self.solicitar())
+        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
+        with app.db() as c:
+            d = app.painel_equipe(c)
+        raf = next(t for t in d["tecnicos"] if t["nome"] == "Rafael Costa")
+        self.assertEqual(raf["etapas"]["encaminhado"], 1)
+        self.assertEqual(raf["carga"], raf["total"] + raf["conf"])
+        self.assertTrue(any(e["nome"] == "Telecom e Redes" and e["chamados"] >= 1 for e in d["equipes"]))
+        pagina = self.client.get("/gestor/equipe/painel", cookies=self.gestor).text
+        self.assertIn("Carga por técnico", pagina)
+        self.assertIn("Carga por equipe", pagina)
+        self.assertIn("Rafael Costa", pagina)

@@ -609,3 +609,12 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-notif-pagina li.nova .df-notif-ponto { background: #dc2626; }
 .df-notif-corpo { display: grid; gap: 2px; min-width: 0; }
 @media (max-width: 767px) { .df-sino-panel { position: fixed; left: 12px; right: 12px; top: 64px; width: auto; } }
+
+/* Carga por técnico e por equipe */
+.df-equipe-cargas { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) { .df-equipe-cargas { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; } }
+.df-dot-disp { width: 10px; height: 10px; border-radius: 999px; flex: none; margin-top: 6px; background: #16a34a; }
+.df-dot-disp.off { background: #9ca3af; }
+.df-carga { display: inline-flex; align-items: center; gap: 10px; min-width: 120px; }
+.df-carga .df-bar { flex: 1; margin: 0; }
+.df-bar-eq > span { background: #2f55a4; }
