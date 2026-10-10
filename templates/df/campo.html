@@ -10,6 +10,7 @@
   <small>{{ 'Você pode receber novas missões.' if u.disponivel else 'Você não recebe novas missões. As que já estão com você continuam.' }}</small>
   <form method="post" action="/campo/disponibilidade" data-df-form><input type="hidden" name="ativo" value="{{ 0 if u.disponivel else 1 }}">{{ ui.button('Ficar inativo' if u.disponivel else 'Ficar ativo', style='secondary' if u.disponivel else 'primary', glyph='prohibit' if u.disponivel else 'check-circle') }}</form>
 </section>
+<a class="df-button df-secondary df-wide" href="/campo/rota"><span class="df-button-content">{{ ui.icon('path') }}Ver rota otimizada das missões</span></a>
 <div id="banner" class="df-banner-new" role="alert" tabindex="0" hidden></div>
 <div id="push-box" class="df-stack-sm">
   <button id="btn-push" type="button" class="df-button df-secondary df-big-action"><span class="df-button-content">{{ ui.icon('bell') }}<span id="push-label">Ativar notificações de novas missões</span></span></button>

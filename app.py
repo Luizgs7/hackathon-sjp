@@ -32,7 +32,8 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadF
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from rastro import BASE as BASE_RASTRO, destino as rastro_destino, distancia_km, estado as rastro_estado, km_entre
+from rastro import (BASE as BASE_RASTRO, caminho_rua, destino as rastro_destino, distancia_km, estado as rastro_estado,
+                    km_entre, ordenar_rota)
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 BASE = Path(__file__).parent
@@ -1936,6 +1937,42 @@ def campo_lista(request: Request):
         meds = medalhas(c, u["id"])
     return render(request, "_campo_lista.html", u=u, tarefas=tarefas, feitas=feitas, pts=pts, nivel=nivel(total),
                   medalhas=meds, ultima=max([t["id"] for t in tarefas if t["status"] == "encaminhado"], default=0))
+
+
+# ---------------------------------------------------------------- rota otimizada do técnico
+def rota_do_tecnico(c, u):
+    ativas = c.execute("SELECT * FROM tarefas WHERE executor_id=? AND status IN ('encaminhado','a_caminho','em_execucao') ORDER BY id",
+                       (u["id"],)).fetchall()
+    origem, atual = _posicao_do_tecnico(c, ativas)
+    paradas = [{"id": t["id"], "ponto": rastro_destino(chave_local(t)), "prio": t["prioridade"], "titulo": t["titulo"],
+                "local": t["local"], "status": t["status"], "por": t["prioridade_por"] or t["prioridade_ajustada_por"]}
+               for t in ativas if t["status"] in ("encaminhado", "a_caminho")]
+    ordem = ordenar_rota(origem, paradas)
+    pontos, ant = [list(origem)], tuple(origem)
+    for p in ordem:
+        pontos += caminho_rua(ant, p["ponto"])[1:]
+        ant = tuple(p["ponto"])
+    return {"origem": list(origem), "atual": ({"id": atual["id"], "titulo": atual["titulo"], "local": atual["local"]} if atual else None),
+            "paradas": ordem, "caminho": pontos,
+            "total_km": round(ordem[-1]["acumulado_km"], 1) if ordem else 0,
+            "total_min": ordem[-1]["eta_min"] if ordem else 0}
+
+
+@app.get("/campo/rota", response_class=HTMLResponse)
+def campo_rota(request: Request):
+    u = exige_executor(request)
+    with db() as c:
+        rota = rota_do_tecnico(c, u)
+    return render(request, "rota.html", u=u, rota=rota)
+
+
+@app.get("/campo/rota/dados")
+def campo_rota_dados(request: Request):
+    u = exige_executor(request)
+    with db() as c:
+        rota = rota_do_tecnico(c, u)
+    return JSONResponse({**rota, "paradas": [{**p, "ponto": list(p["ponto"])} for p in rota["paradas"]]},
+                        headers={"Cache-Control": "no-store"})
 
 
 @app.get("/campo/{tid}", response_class=HTMLResponse)

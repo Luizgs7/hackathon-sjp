@@ -730,3 +730,37 @@ class BancoNovoComHistoricoTests(unittest.TestCase):
                 areas = {r["area_id"] for r in c.execute("SELECT area_id FROM usuarios WHERE papeis='gestor_tecnico'")}
                 self.assertEqual(areas, {2, 3, 4, 5, 6})
                 self.assertTrue(all(e["setor_id"] for e in app.carga_executores(c)))
+
+
+class RotaDoTecnicoTests(UiFlowBase):
+    def test_ordenacao_pondera_criticidade_e_distancia(self):
+        import rastro
+        origem = rastro.BASE
+        perto_p3 = {"id": 1, "ponto": (origem[0] + 0.003, origem[1]), "prio": "P3"}
+        longe_p1 = {"id": 2, "ponto": (origem[0] + 0.010, origem[1]), "prio": "P1"}
+        longe_p3 = {"id": 3, "ponto": (origem[0] + 0.011, origem[1]), "prio": "P3"}
+        ordem = rastro.ordenar_rota(origem, [perto_p3, longe_p3, longe_p1])
+        self.assertEqual(ordem[0]["id"], 2)  # o crítico vem antes, mesmo mais longe
+        self.assertTrue(all(b["acumulado_km"] >= a["acumulado_km"] for a, b in zip(ordem, ordem[1:])))
+        # sem criticidade diferente, vale a menor distância (vizinho mais próximo)
+        iguais = rastro.ordenar_rota(origem, [{**longe_p3, "prio": "P3"}, {**perto_p3}])
+        self.assertEqual(iguais[0]["id"], 1)
+        self.assertEqual(rastro.ordenar_rota(origem, []), [])
+
+    def test_pagina_e_dados_da_rota(self):
+        a = self.registrar(self.solicitar(local="UBS Centro"))
+        b = self.registrar(self.solicitar(local="Escola Municipal Sul"))
+        for tid, prio in ((a, "P3"), (b, "P1")):
+            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+                "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": prio})
+        self.assertEqual(self.client.get("/campo/rota", cookies=self.atendente).status_code, 303)  # só técnico
+        pag = self.client.get("/campo/rota", cookies=self.tecnico)
+        self.assertEqual(pag.status_code, 200)
+        self.assertIn("Ordem das paradas", pag.text)
+        dados = self.client.get("/campo/rota/dados", cookies=self.tecnico).json()
+        self.assertEqual([p["id"] for p in dados["paradas"]][0], b)  # crítico primeiro
+        self.assertEqual(len(dados["paradas"]), 2)
+        self.assertGreater(dados["total_km"], 0)
+        self.assertGreaterEqual(len(dados["caminho"]), 3)
+        vazio = self.client.get("/campo/rota", cookies={"sess_campo": app.assinar(self.users["Larissa Moura"])})  # sem missões
+        self.assertIn("Nenhuma missão aguardando", vazio.text)

@@ -70,3 +70,33 @@ def km_entre(a, b):
     dy = (b[0] - a[0]) * 111.0
     dx = (b[1] - a[1]) * 111.0 * math.cos(math.radians((a[0] + b[0]) / 2))
     return math.hypot(dx, dy)
+
+
+PESO_PRIO = {"P1": 0.2, "P2": 0.55, "P3": 1.0, "P4": 1.35}  # criticidade encurta a distância "percebida"
+VELOCIDADE_KMH = 25  # deslocamento urbano simulado
+
+
+def km_rua(a, b):
+    """Distância por ruas em 'L' (mesmo desenho do percurso simulado)."""
+    dy = abs(b[0] - a[0]) * 111.0
+    dx = abs(b[1] - a[1]) * 111.0 * math.cos(math.radians((a[0] + b[0]) / 2))
+    return dx + dy
+
+
+def caminho_rua(a, b):
+    return [list(a), [a[0], b[1]], list(b)]
+
+
+def ordenar_rota(origem, paradas):
+    """Vizinho mais próximo ponderado pela criticidade: críticos pesam mais, mas a distância também conta.
+    paradas: [{"id", "ponto": (lat, lng), "prio"}]. Retorna as paradas em ordem, com km do trecho e acumulado."""
+    restantes, atual, ordem, acum = list(paradas), tuple(origem), [], 0.0
+    while restantes:
+        melhor = min(restantes, key=lambda p: (km_rua(atual, p["ponto"]) * PESO_PRIO.get(p.get("prio") or "P3", 1.0), p["id"]))
+        trecho = km_rua(atual, melhor["ponto"])
+        acum += trecho
+        ordem.append({**melhor, "trecho_km": round(trecho, 1), "acumulado_km": round(acum, 1),
+                      "eta_min": max(1, round(acum / VELOCIDADE_KMH * 60))})
+        restantes.remove(melhor)
+        atual = tuple(melhor["ponto"])
+    return ordem

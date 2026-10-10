@@ -1,0 +1,44 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'campo' %}
+{% set ativo = 'missoes' %}
+{% block title %}Minha rota{% endblock %}
+{% block main %}
+<a href="/campo">{{ ui.icon('caret-left') }}Voltar às missões</a>
+<div class="df-page-head">
+  <div>
+    <h1>Minha rota</h1>
+    <p>Ordem sugerida para as missões ainda não iniciadas: os chamados críticos pesam mais e os mais próximos entram antes. Pontos e distâncias simulados.</p>
+  </div>
+</div>
+{% if rota.paradas %}
+<section class="df-kpis df-kpis-4" aria-label="Resumo da rota">
+  <div class="df-stat-tile"><small>Paradas</small><b>{{ rota.paradas|length }}</b></div>
+  <div class="df-stat-tile"><small>Distância total</small><b>{{ rota.total_km|dec }} km</b></div>
+  <div class="df-stat-tile"><small>Deslocamento estimado</small><b>{{ rota.total_min }} min</b></div>
+  <div class="df-stat-tile"><small>Saindo de</small><b style="font-size:16px">{{ rota.atual.local if rota.atual else 'Base' }}</b></div>
+</section>
+<section class="df-card" aria-labelledby="rota-mapa-t">
+  <h2 id="rota-mapa-t">{{ ui.icon('path') }}Percurso</h2>
+  <div id="rota-mapa" class="df-mapa-canvas df-mapa-equipe" role="img" aria-label="Mapa com a ordem das paradas da rota" data-url="/campo/rota/dados"></div>
+</section>
+<section class="df-stack" aria-labelledby="rota-lista-t">
+  <h2 id="rota-lista-t">Ordem das paradas</h2>
+  <ol class="df-rota-lista">
+    {% for p in rota.paradas %}
+    <li class="df-card">
+      <span class="df-rota-num" aria-hidden="true">{{ loop.index }}</span>
+      <div class="df-rota-corpo">
+        <div class="df-item-top">{{ ui.prio(p.prio, p.por) }}{% if p.status == 'a_caminho' %}<span class="df-st df-st-a_caminho">{{ ui.icon('navigation-arrow') }}a caminho</span>{% endif %}</div>
+        <h3><a href="/campo/{{ p.id }}">#{{ p.id }} · {{ p.titulo }}</a></h3>
+        <span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ p.local or 'Local não informado' }}</span><span class="df-nowrap">{{ p.trecho_km|dec }} km do ponto anterior</span><span class="df-nowrap">chega em ~{{ p.eta_min }} min</span></span>
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% else %}
+{{ ui.empty('Nenhuma missão aguardando para formar uma rota.', 'path') }}
+{% endif %}
+{% endblock %}
+{% block scripts %}<script src="/static/ui/rota.js?v=1" defer></script>{% endblock %}

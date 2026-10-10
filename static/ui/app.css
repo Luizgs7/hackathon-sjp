@@ -578,3 +578,10 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-prio-wrap { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
 .df-prio-por { color: var(--muted); }
 .df-badge[class*="df-priority-"] .df-icon { width: 14px; height: 14px; }
+
+/* Rota do técnico */
+.df-rota-lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.df-rota-lista > li { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 12px; align-items: start; }
+.df-rota-num, .df-rota-pino { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 999px; background: var(--primary); color: var(--surface); font-weight: 700; font-size: 14px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+.df-rota-corpo { display: grid; gap: 6px; min-width: 0; }
+.df-rota-corpo h3 { margin: 0; font-size: 16px; }
