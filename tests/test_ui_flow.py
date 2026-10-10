@@ -500,3 +500,35 @@ class ChatComAtendenteTests(UiFlowBase):
         self.client.post(f"/atendente/conversa/{tok}/encerrar", cookies=self.atendente)
         with app.db() as c:
             self.assertEqual(c.execute("SELECT resolvido FROM autoatendimento WHERE token=?", (tok,)).fetchone()["resolvido"], 1)
+
+
+class DisponibilidadeEKmTests(UiFlowBase):
+    def encaminhar(self, executor="Rafael Costa"):
+        tid = self.registrar(self.solicitar())
+        r = self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            "executor_id": self.users[executor], "tipo_id": 1, "prioridade": "P2"})
+        return tid, r
+
+    def test_tecnico_inativo_nao_recebe_missao(self):
+        self.client.post("/campo/disponibilidade", cookies=self.tecnico, data={"ativo": 0})
+        with app.db() as c:
+            ids = [e["id"] for e in app.carga_executores(c)]
+        self.assertNotIn(self.users["Rafael Costa"], ids)
+        tid, r = self.encaminhar()
+        self.assertEqual(r.status_code, 409)
+        self.assertIn("Inativo", self.client.get("/campo", cookies=self.tecnico).text)
+        self.client.post("/campo/disponibilidade", cookies=self.tecnico, data={"ativo": 1})
+        tid, r = self.encaminhar()
+        self.assertEqual(r.status_code, 303)
+
+    def test_km_contabilizado_e_visivel_ao_gestor(self):
+        tid, _ = self.encaminhar()
+        self.client.post(f"/campo/{tid}/avancar", cookies=self.tecnico, data={"para": "a_caminho"})
+        self.assertEqual(self.tarefa(tid)["km_percorrido"], 0)
+        self.client.post(f"/campo/{tid}/avancar", cookies=self.tecnico, data={"para": "em_execucao"})
+        km = self.tarefa(tid)["km_percorrido"]
+        self.assertGreater(km, 0.5)
+        self.assertIn("km até o local", self.client.get(f"/tarefa/{tid}", cookies=self.gestor).text)
+        pag = self.client.get("/gestor/metricas", cookies=self.gestor).text
+        self.assertIn("Km rodados", pag)
+        self.assertIn("Rafael Costa", pag)

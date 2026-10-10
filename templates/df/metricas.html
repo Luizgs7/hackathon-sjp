@@ -78,14 +78,14 @@
   </section>
 
   <section class="df-card" aria-labelledby="exe-t">
-    <header><h2 id="exe-t">Produtividade do time</h2><small>Missões resolvidas no período e qualidade da entrega</small></header>
+    <header><h2 id="exe-t">Produtividade do time</h2><small>Missões resolvidas no período, qualidade da entrega, km rodados (percurso simulado até o local) e disponibilidade para novas missões. Total no período: {{ mt.executores|sum(attribute='km')|dec }} km.</small></header>
     <div class="df-table-scroll" role="region" aria-label="Produtividade por executor" tabindex="0">
       <table class="df-table">
-        <thead><tr><th scope="col">Executor</th><th scope="col" class="num">Resolvidas</th><th scope="col" class="num">Tempo médio</th><th scope="col" class="num">Satisfação</th><th scope="col" class="num">Reaberturas</th><th scope="col" class="num">Ativas agora</th></tr></thead>
+        <thead><tr><th scope="col">Executor</th><th scope="col" class="num">Resolvidas</th><th scope="col" class="num">Tempo médio</th><th scope="col" class="num">Satisfação</th><th scope="col" class="num">Reaberturas</th><th scope="col" class="num">Ativas agora</th><th scope="col" class="num" title="Soma do percurso até o local, nas missões com execução iniciada no período">Km rodados</th><th scope="col">Disponibilidade</th></tr></thead>
         <tbody>{% for d in mt.executores %}
           <tr><th scope="row"><span class="df-pessoa">{{ ui.avatar(d.nome, 'sm') }}{{ d.nome }}</span></th>
-            <td class="num">{{ d.n }}</td><td class="num">{{ d.horas_media|duracao }}</td><td class="num">{{ d.csat|dec }}{{ '★' if d.csat }}</td><td class="num">{{ d.reab }}</td><td class="num">{{ d.ativos }}</td></tr>
-        {% else %}<tr><td colspan="6"><small>Nenhuma missão resolvida no período.</small></td></tr>{% endfor %}</tbody>
+            <td class="num">{{ d.n }}</td><td class="num">{{ d.horas_media|duracao }}</td><td class="num">{{ d.csat|dec }}{{ '★' if d.csat }}</td><td class="num">{{ d.reab }}</td><td class="num">{{ d.ativos }}</td><td class="num">{{ d.km|dec if d.km else '0' }} km</td><td>{% if d.disponivel %}<span class="df-badge">Ativo</span>{% else %}<span class="df-badge df-ia">Inativo</span>{% endif %}</td></tr>
+        {% else %}<tr><td colspan="8"><small>Nenhum técnico cadastrado.</small></td></tr>{% endfor %}</tbody>
       </table>
     </div>
   </section>

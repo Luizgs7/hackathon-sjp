@@ -6,6 +6,7 @@
 {% set has_context = true %}
 {% set na_fila = t.status in ('novo', 'reaberto', 'devolvido') %}
 {% set sug = ia if (ia and t.ia_status == 'sugerida') else {} %}
+{% set gestor_hd = eh_gestor and 'gestor_tecnico' not in u.papeis %}
 {% block title %}#{{ t.id }} {{ t.titulo }}{% endblock %}
 {% block list_label %}Fila de atendimento{% endblock %}
 {% block context_label %}Triagem da IA{% endblock %}
@@ -20,13 +21,13 @@
     <div class="df-row"><h2 id="ia-t" style="font-size:16px">Triagem da IA</h2>{{ ui.fonte(t.ia_fonte) }}</div>
     {% if t.ia_status == 'analisando' %}
       <div class="df-skeleton-group" aria-label="Analisando a demanda"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
-      <small role="status">Analisando tipo, criticidade, informações faltantes e executor mais adequado…</small>
+      <small role="status">Analisando tipo, criticidade e informações faltantes…</small>
     {% elif ia %}
       <div class="df-row"><small>Prioridade sugerida</small>{{ ui.prio(ia.prioridade) }}</div>
       <article class="df-card"><h3>{{ ia.categoria }}</h3><small>Complexidade {{ ia.complexidade }}/5. {{ ia.justificativa }}</small><small>{{ ia.resumo }}</small></article>
       {% if ia.informacoes_faltantes %}<article class="df-card"><h3>Informações que faltam</h3><ul class="df-stack-sm" style="margin:0;padding-left:18px">{% for f in ia.informacoes_faltantes %}<li><small>{{ f }}</small></li>{% endfor %}</ul></article>{% endif %}
       {% if ia.resolvivel_no_atendimento %}<article class="df-card"><h3><span class="df-badge df-n1">{{ ui.icon('chat-circle') }}Resolvível no atendimento</span></h3><small>{{ ia.orientacao_atendimento }}</small></article>{% endif %}
-      {% if ia.executor_id %}
+      {% if ia.executor_id and not gestor_hd %}
       <div class="df-stack-sm"><small>{{ 'Se precisar de técnico' if ia.resolvivel_no_atendimento else 'Executor sugerido' }}</small>
         {% for e in executores if e.id == ia.executor_id %}<article class="df-card"><div class="df-pessoa">{{ ui.avatar(e.nome) }}<div><b>{{ e.nome }}</b><br><small>{{ e.equipe }} · {{ e.carga }} ativa(s)</small></div></div></article>{% endfor %}
         <small>{{ ia.motivo_executor }}</small></div>
@@ -77,7 +78,7 @@
     <p><b>Descrição:</b> <span class="df-prewrap">{{ t.descricao }}</span></p>
     <p class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local or '—' }}</span></p>
     <p>{{ ui.solicitante(t) }}</p>
-    {% if executor %}<p class="df-pessoa">{{ ui.avatar(executor.nome, 'sm') }}<span>Executor: <b>{{ executor.nome }}</b></span></p>{% endif %}
+    {% if executor %}<p class="df-pessoa">{{ ui.avatar(executor.nome, 'sm') }}<span>Executor: <b>{{ executor.nome }}</b>{% if t.km_percorrido %} · {{ t.km_percorrido|dec }} km até o local{% endif %}</span></p>{% endif %}
     {% if t.relato %}<p><b>{{ 'Solução do atendimento (' ~ t.resolvido_atendimento_por ~ ')' if t.resolvido_atendimento_por else 'Relato do executor' }}:</b> <span class="df-prewrap">{{ t.relato }}</span></p>{% endif %}
     {% if t.resumo_ia %}<p><b>Resumo para a demandante</b> <span class="df-badge df-ia">{{ ui.icon('sparkle') }}IA</span>: {{ t.resumo_ia }}</p>{% endif %}
     {% if t.evidencia %}<img class="df-img" src="/uploads/{{ t.evidencia }}" alt="Evidência da conclusão">{% endif %}
@@ -93,7 +94,20 @@
 
 
 
-  {% if na_fila or t.status == 'encaminhado' %}
+  {% if gestor_hd and t.status in CANCELAVEIS %}
+  <section class="df-card" aria-labelledby="canc-t">
+    <header>
+      <h2 id="canc-t">Cancelar chamado</h2>
+      <small>Informe a justificativa. Ela fica registrada na linha do tempo e é enviada ao sistema de origem.</small>
+    </header>
+    <form class="df-form" method="post" action="/tarefa/{{ t.id }}/cancelar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Cancelar o chamado #{{ t.id }}? Esta ação encerra o atendimento." data-confirm-label="Cancelar chamado">
+      {{ ui.textarea('motivo', 'Justificativa do cancelamento', '', rows=3, required=True, placeholder='Ex.: chamado duplicado do #12; solicitante desistiu; aberto por engano.') }}
+      <div class="df-form-actions">{{ ui.button('Cancelar chamado', style='destructive', glyph='prohibit') }}</div>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if (na_fila or t.status == 'encaminhado') and not gestor_hd %}
   <section class="df-card" aria-labelledby="dec-t">
     <header>
       <h2 id="dec-t">{{ 'Avaliação do atendimento' if na_fila else 'Reencaminhar' }}</h2>
@@ -202,7 +216,7 @@
     </ol>
   </section>
 
-  {% if t.status in CANCELAVEIS %}
+  {% if t.status in CANCELAVEIS and not gestor_hd %}
   <details class="df-details">
     <summary><span>{{ ui.icon('prohibit') }} Cancelar chamado</span></summary>
     <div class="df-details-body">

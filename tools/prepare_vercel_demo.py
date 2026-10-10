@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEST = ROOT / ".tools" / "vercel-demo"
 DEST.mkdir(parents=True, exist_ok=True)
-for name in ("app.py", "legado.py", "jev.py", "haiku.py", "requirements.txt"):
+for name in ("app.py", "legado.py", "jev.py", "haiku.py", "rastro.py", "requirements.txt"):
     target = "produto.py" if name == "app.py" else name
     shutil.copy2(ROOT / name, DEST / target)
 for name in ("templates", "static"):

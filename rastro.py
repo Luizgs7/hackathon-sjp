@@ -52,3 +52,14 @@ def estado(tarefa_id, status, inicio, agora=None):
             "eta_min": restante, "posicao": [round(lat, 6), round(lng, 6)],
             "caminho": [[round(a, 6), round(b, 6)] for a, b in pts], "origem": list(BASE),
             "destino": [round(pts[-1][0], 6), round(pts[-1][1], 6)]}
+
+
+def distancia_km(tarefa_id):
+    """Extensão do percurso simulado (ida), em km."""
+    pts = caminho(tarefa_id)
+    total = 0.0
+    for (la1, lo1), (la2, lo2) in zip(pts, pts[1:]):
+        dy = (la2 - la1) * 111.0
+        dx = (lo2 - lo1) * 111.0 * math.cos(math.radians((la1 + la2) / 2))
+        total += math.hypot(dx, dy)
+    return round(total, 2)

@@ -32,7 +32,7 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadF
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from rastro import estado as rastro_estado
+from rastro import distancia_km, estado as rastro_estado
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 BASE = Path(__file__).parent
@@ -279,6 +279,8 @@ def temporada_atual(c):
 # Colunas incluídas depois da primeira versão: bancos já existentes recebem um ALTER TABLE na inicialização.
 MIGRACOES = [
     ("autoatendimento", "jev_json", "TEXT"),
+    ("usuarios", "disponivel", "INTEGER NOT NULL DEFAULT 1"),
+    ("tarefas", "km_percorrido", "REAL NOT NULL DEFAULT 0"),
     ("autoatendimento", "modo", "TEXT NOT NULL DEFAULT 'ia'"),
     ("autoatendimento", "atendente_id", "INTEGER"),
     ("autoatendimento", "modo_desde", "TEXT"),
@@ -548,11 +550,13 @@ def extrair_json(texto):
     return json.loads(m.group(0))
 
 
-def carga_executores(c, setor_id=None):
+def carga_executores(c, setor_id=None, todos=False):
     sql = ("SELECT u.*, e.nome equipe, e.setor_id, (SELECT count(*) FROM tarefas t WHERE t.executor_id=u.id AND "
            f"t.status IN ({','.join('?' * len(ATIVOS))})) carga, "
            "(SELECT count(*) FROM tarefas t WHERE t.executor_id=u.id AND t.status='concluido') resolvidas "
            "FROM usuarios u JOIN equipes e ON e.id=u.equipe_id WHERE u.papeis LIKE '%executor%'")
+    if not todos:
+        sql += " AND u.disponivel=1"
     params = list(ATIVOS)
     if setor_id:
         sql += " AND e.setor_id=?"
@@ -989,6 +993,10 @@ def metricas(c, dias, setor_id=None):
 
     # produtividade por executor (resolvidas no período)
     exe = {}
+    km_por = {}
+    for t in tarefas:
+        if t["executor_id"] and t["km_percorrido"]:
+            km_por[t["executor_id"]] = km_por.get(t["executor_id"], 0) + t["km_percorrido"]
     for t, h in resolvidas:
         if not t["executor_id"]:
             continue
@@ -999,9 +1007,14 @@ def metricas(c, dias, setor_id=None):
         d["reab"] += t["reaberturas"]
         if t["nota"]:
             d["notas"].append(t["nota"])
-    ativos = {r["id"]: r["carga"] for r in carga_executores(c, setor_id)}
+    todos_exec = carga_executores(c, setor_id, todos=True)
+    ativos = {r["id"]: r["carga"] for r in todos_exec}
+    for r in todos_exec:  # técnicos sem resolução no período também aparecem (km e disponibilidade)
+        exe.setdefault(r["id"], {"nome": r["nome"], "avatar": r["avatar"], "n": 0, "horas": [], "notas": [], "reab": 0})
+    disp = {r["id"]: r["disponivel"] for r in todos_exec}
     executores = sorted(({**d, "id": k, "horas_media": media(d["horas"]), "csat": media(d["notas"]),
-                          "ativos": ativos.get(k, 0)} for k, d in exe.items()), key=lambda d: -d["n"])
+                          "ativos": ativos.get(k, 0), "km": round(km_por.get(k, 0), 1), "disponivel": disp.get(k, 1)}
+                         for k, d in exe.items()), key=lambda d: -d["n"])
     max_exec = max([d["n"] for d in executores] + [1])
 
     notas = [t["nota"] for t, _ in resolvidas if t["nota"]]
@@ -1616,6 +1629,8 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
             ia_status = "aceita" if iguais else "editada"
         tipo = c.execute("SELECT * FROM tipos WHERE id=?", (tipo_id,)).fetchone()
         ex = c.execute("SELECT * FROM usuarios WHERE id=?", (executor_id,)).fetchone()
+        if not ex or not ex["disponivel"]:
+            raise HTTPException(409, "Este técnico está inativo e não recebe novas missões.")
         ajustada_por = t["prioridade_ajustada_por"]
         if prioridade != t["prioridade"] and ia.get("prioridade") and prioridade != ia["prioridade"]:
             ajustada_por = u["nome"]
@@ -1730,6 +1745,15 @@ def campo(request: Request):
     return render(request, "campo.html", u=u)
 
 
+@app.post("/campo/disponibilidade")
+def campo_disponibilidade(request: Request, ativo: int = Form(...)):
+    """O técnico escolhe se recebe novas missões. Missões em andamento continuam com ele."""
+    u = exige_executor(request)
+    with db() as c:
+        c.execute("UPDATE usuarios SET disponivel=? WHERE id=?", (1 if ativo else 0, u["id"]))
+    return redirect("/campo?msg=" + ("Você está ativo e pode receber novas missões" if ativo else "Você está inativo: não receberá novas missões"))
+
+
 @app.get("/campo/lista", response_class=HTMLResponse)
 def campo_lista(request: Request):
     u = exige_executor(request)
@@ -1804,6 +1828,8 @@ def campo_avancar(request: Request, tid: int, para: str = Form(...), observacao:
         textos = {"a_caminho": "Missão aceita – executor a caminho do local",
                   "em_execucao": "Executor chegou ao local e iniciou o atendimento"}
         mudar_status(c, t, para, u, "executor", textos[para] + (f" · {observacao}" if observacao else ""))
+        if para == "em_execucao":
+            c.execute("UPDATE tarefas SET km_percorrido=? WHERE id=?", (distancia_km(tid), tid))
     em_segundo_plano(processar_outbox)
     msg = "Atendimento iniciado no local" if para == "em_execucao" else "Status atualizado: a caminho"
     return redirect(f"/campo/{tid}?msg={msg}")

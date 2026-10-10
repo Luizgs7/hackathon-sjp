@@ -8,6 +8,11 @@
 {% block context_col %}<section class="df-ctx" aria-labelledby="prog-t"><h2 id="prog-t" style="font-size:16px">Seu progresso</h2><div id="ctx-progresso"></div></section>{% endblock %}
 {% block main %}
 <div class="df-page-head"><div><h1>Minhas missões</h1><p>Olá, {{ u.nome.split()[0] }}. Aqui ficam as missões atribuídas a você.</p></div></div>
+<section class="df-card" aria-labelledby="disp-t">
+  <div class="df-row"><h2 id="disp-t" style="font-size:16px">Disponibilidade</h2><span class="df-badge{{ '' if u.disponivel else ' df-ia' }}" role="status">{{ 'Ativo' if u.disponivel else 'Inativo' }}</span></div>
+  <small>{{ 'Você pode receber novas missões.' if u.disponivel else 'Você não recebe novas missões. As que já estão com você continuam.' }}</small>
+  <form method="post" action="/campo/disponibilidade" data-df-form><input type="hidden" name="ativo" value="{{ 0 if u.disponivel else 1 }}">{{ ui.button('Ficar inativo' if u.disponivel else 'Ficar ativo', style='secondary' if u.disponivel else 'primary', glyph='prohibit' if u.disponivel else 'check-circle') }}</form>
+</section>
 <div id="banner" class="df-banner-new" role="alert" tabindex="0" hidden></div>
 <div id="push-box" class="df-stack-sm">
   <button id="btn-push" type="button" class="df-button df-secondary df-big-action"><span class="df-button-content">{{ ui.icon('bell') }}<span id="push-label">Ativar notificações de novas missões</span></span></button>
