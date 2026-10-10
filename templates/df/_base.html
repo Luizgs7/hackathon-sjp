@@ -6,17 +6,17 @@
 {% set gestor_tecnico = 'gestor_tecnico' in papeis %}
 {% set nav = [] %}
 {% if nav_perfil == 'painel' %}
-  {% if not gestor_tecnico %}{% set _ = nav.append(('atendimento', '/atendente', 'Atendimento', 'tray')) %}{% endif %}
+  {% if not gestor_tecnico %}{% set _ = nav.append(('atendimento', '/atendente', 'Fila', 'tray')) %}{% endif %}
   {% if 'gestor' in papeis or gestor_tecnico %}
     {% set _ = nav.append(('painel', '/gestor', 'Equipes técnicas' if gestor_tecnico else 'Painel', 'squares-four')) %}
     {% set _ = nav.append(('equipe', '/gestor/equipe', 'Equipe', 'users')) %}
     {% set _ = nav.append(('metricas', '/gestor/metricas', 'Métricas', 'chart-bar')) %}
   {% endif %}
-  {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy-fill')) %}
+  {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy')) %}
   {% if 'gestor' in papeis %}{% set _ = nav.append(('config', '/config', 'Configurar', 'gear')) %}{% endif %}
 {% elif nav_perfil == 'campo' %}
   {% set _ = nav.append(('missoes', '/campo', 'Missões', 'list-checks')) %}
-  {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy-fill')) %}
+  {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy')) %}
 {% else %}
   {% set _ = nav.append(('dashboard', '/servidor/dashboard', 'Dashboard', 'squares-four')) %}
   {% set _ = nav.append(('assistente', '/servidor', 'Assistente', 'chat-circle')) %}
@@ -48,7 +48,7 @@
     <a class="df-brand" href="/" aria-label="Help Desk SJP: início"><span class="df-brand-mark">{{ ui.icon('headset') }}</span><b>Help Desk SJP</b></a>
     <div class="df-nav-list">
       {% for key, href, label, glyph in nav %}
-      <a class="df-nav-item" href="{{ href }}" title="{{ label }}"{% if ativo == key %} aria-current="page"{% endif %}>{{ ui.icon(glyph) }}<span>{{ label }}</span></a>
+      <a class="df-nav-item" href="{{ href }}" title="{{ label }}"{% if ativo == key %} aria-current="page"{% endif %}>{{ ui.icon(glyph ~ '-fill' if (ativo == key and glyph == 'trophy') else glyph) }}<span>{{ label }}</span></a>
       {% endfor %}
     </div>
   </nav>

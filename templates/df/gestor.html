@@ -11,7 +11,7 @@
     <p>Chamados registrados pelo atendimento · atualiza a cada 3 s; passe o mouse nos indicadores para ver o cálculo. <small id="ind" class="htmx-indicator" role="status">atualizando…</small></p>
   </div>
   <form class="df-filters" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change, input delay:300ms, submit" role="search">
-    <div class="df-field df-search df-search-quadro">{{ ui.icon('magnifying-glass') }}<label class="df-sr" for="busca-quadro">Buscar chamados em aberto</label><input id="busca-quadro" type="search" name="q" placeholder="Buscar chamados em aberto por ID, descrição, local, solicitante…" autocomplete="off"></div>
+    <div class="df-field df-search df-search-quadro">{{ ui.icon('magnifying-glass') }}<label class="df-sr" for="busca-quadro">Buscar chamados em aberto</label><input id="busca-quadro" type="search" name="q" placeholder="Buscar por ID, descrição, local…" autocomplete="off"></div>
     {% set opts = [] %}{% for s in setores %}{% set _ = opts.append((s.id, s.nome)) %}{% endfor %}
     {{ ui.select('setor_id', 'Filtrar por área', opts, 0, empty='Todas as áreas', empty_value=0, id='filtro-area') }}
     {{ ui.button('Métricas e capacitação', href='/gestor/metricas', style='secondary') }}{% if 'gestor_tecnico' not in u.papeis %}{{ ui.button('Novo chamado', href='/atendente', style='secondary') }}{% endif %}

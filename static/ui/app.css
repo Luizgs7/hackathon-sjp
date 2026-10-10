@@ -553,3 +553,17 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 
 /* Quadro: colunas mais largas evitam quebras como "Wi-/fi" nos cartões */
 @media (max-width: 1399px) { .df-board { grid-auto-columns: minmax(250px, 1fr); } }
+
+/* Quadro kanban: colunas de largura fixa e confortável; o restante rola na horizontal (botões Anterior/Próxima) */
+.df-board, .df-board { grid-auto-columns: 300px; }
+@media (min-width: 1400px) { .df-board { grid-auto-columns: 300px; } }
+@media (max-width: 520px) { .df-board { grid-auto-columns: min(82vw, 300px); } }
+
+.df-search-quadro { min-width: min(100%, 340px); }
+
+/* Barra de abas no celular: até 6 itens cabem sem cortar os rótulos */
+@media (max-width: 767px) {
+  .df-nav { gap: 2px; padding-inline: 4px; }
+  .df-nav-item { flex: 1 1 0; min-width: 0; padding: 6px 2px; font-size: 10.5px; }
+  .df-nav-item span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
