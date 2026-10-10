@@ -11,7 +11,7 @@ class SolicitanteDemoTests(UiFlowBase):
         self.client.post('/login/solicitante')
         with app.db() as c:
             c.execute('DELETE FROM acessos_solicitante')
-        self.assertIn('value="Ana Souza"',self.client.get('/servidor/solicitar').text)
+        self.assertIn('Ana Souza',self.client.get('/servidor').text)
         self.assertEqual(self.client.get('/meus-chamados').status_code,303)
         signed = self.client.cookies.get('solicitante_demo')
         self.client.cookies.set('solicitante_demo',signed[:-1]+'x')
@@ -33,7 +33,7 @@ class SolicitanteDemoTests(UiFlowBase):
     def test_linked_conversation_keeps_history_and_reports_live_status(self):
         self.client.post('/login/solicitante')
         self.client.post('/servidor/chat',data={'pergunta':'Impressora de teste sem conexão'})
-        s = self.solicitar(email=app.SOLICITANTE_DEMO['email'],via_ia=1)
+        s = self.solicitar(preparar=False,email=app.SOLICITANTE_DEMO['email'],via_ia=1)
         home = self.client.get('/servidor')
         self.assertIn('Impressora de teste sem conexão',home.text)
         self.assertIn(s['protocolo'],home.text)
@@ -47,9 +47,9 @@ class SolicitanteDemoTests(UiFlowBase):
         self.assertIn(app.STATUS['executado'][1],answer.text)
         self.assertIn('Impressora de teste sem conexão',answer.text)
         self.assertIn(app.STATUS['executado'][1],self.client.get('/servidor/status').text)
-        dashboard=self.client.get('/servidor/dashboard')
+        dashboard=self.client.get('/servidor/dashboard',follow_redirects=True)  # unificado em Chamados
         self.assertEqual(dashboard.status_code,200)
-        self.assertIn(s['protocolo'],dashboard.text)
+        self.assertIn('Impressora de teste sem conexão',dashboard.text)
         with app.db() as c:
             token=c.execute('SELECT token FROM autoatendimento WHERE solicitacao_id=?',(s['id'],)).fetchone()[0]
             self.assertEqual(c.execute('SELECT count(*) FROM solicitacoes').fetchone()[0],1)
@@ -60,18 +60,15 @@ class SolicitanteDemoTests(UiFlowBase):
         self.assertEqual(self.client.get('/servidor/conversas/'+token).status_code,404)
         self.assertEqual(self.client.get('/servidor/dashboard').status_code,303)
 
-    def test_no_ai_form_starts_tracking_conversation_and_preserves_identity(self):
+    def test_manual_creation_is_not_available_to_requester(self):
         self.client.post('/login/solicitante')
-        response=self.client.post('/servidor/solicitar',data={'nome':'Ana Souza','email':app.SOLICITANTE_DEMO['email'],
-            'secretaria':'Saúde','local':'Sala fictícia','titulo':'Ramal de teste','descricao':'Ramal sem linha',
-            'setor_id':self.setor,'continuar_chat':1})
-        self.assertTrue(response.headers['location'].startswith('/servidor?'))
-        chat=self.client.get('/servidor')
-        self.assertIn('Ramal sem linha',chat.text)
-        self.assertIn('Ana Souza',chat.text)
-        self.assertIn('SOL-0001',chat.text)
-        dashboard=self.client.get('/servidor/dashboard')
-        self.assertIn('Ramal sem linha',dashboard.text)
+        dados = {'nome': 'Ana Souza', 'email': app.SOLICITANTE_DEMO['email'], 'secretaria': 'Saúde',
+                 'local': 'Sala fictícia', 'titulo': 'Ramal de teste', 'descricao': 'Ramal sem linha', 'setor_id': self.setor}
+        self.assertEqual(self.client.post('/servidor/solicitar', data=dados | {'continuar_chat': 1}).status_code, 403)
+        self.assertEqual(self.client.post('/servidor/solicitar', data=dados).status_code, 403)
+        with app.db() as c:
+            self.assertEqual(c.execute('SELECT count(*) FROM solicitacoes').fetchone()[0], 0)
+        self.assertEqual(self.client.get('/servidor/dashboard').status_code, 303)
 
     def test_resolved_chat_is_readable_without_ticket_and_counted_once(self):
         with app.db() as c:
@@ -157,9 +154,7 @@ class SolicitanteDemoTests(UiFlowBase):
         home = self.client.get('/servidor')
         self.assertIn('Ana Souza', home.text)
         self.assertIn('Solicitante fictício', home.text)
-        form = self.client.get('/servidor/solicitar')
-        self.assertIn('value="Ana Souza"', form.text)
-        self.assertIn('value="ana.souza.demo@example.com"', form.text)
+        self.assertEqual(self.client.get('/servidor/solicitar').status_code, 303)  # sem criação manual de chamados
         mine = self.client.get('/meus-chamados')
         self.assertEqual(mine.status_code, 303)
         self.assertIn('ana.souza.demo@example.com', self.client.get(mine.headers['location']).text)

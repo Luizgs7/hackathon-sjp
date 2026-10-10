@@ -18,10 +18,8 @@
   {% set _ = nav.append(('missoes', '/campo', 'Missões', 'list-checks')) %}
   {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy')) %}
 {% else %}
-  {% set _ = nav.append(('dashboard', '/servidor/dashboard', 'Dashboard', 'squares-four')) %}
   {% set _ = nav.append(('assistente', '/servidor', 'Assistente', 'chat-circle')) %}
-  {% set _ = nav.append(('solicitar', '/servidor/solicitar', 'Solicitar', 'note-pencil')) %}
-  {% set _ = nav.append(('chamados', '/meus-chamados', 'Acompanhar', 'list-checks')) %}
+  {% set _ = nav.append(('chamados', '/meus-chamados', 'Chamados', 'list-checks')) %}
 {% endif %}
 <!doctype html>
 <html lang="pt-BR" data-theme="light">

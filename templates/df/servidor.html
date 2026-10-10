@@ -33,7 +33,6 @@
     {% if not conversa %}
     <div id="acoes-vazio" class="df-chat-actions" role="group" aria-label="Outras formas de atendimento">
       <button type="button" class="df-button df-secondary df-size-small" data-falar hx-post="/servidor/atendente" hx-include="#estado-chat" hx-target="#conversa"><span class="df-button-content">{{ ui.icon('headset') }}Falar com atendente</span></button>
-      {{ ui.button('Abrir chamado', href='/servidor/solicitar', size='small', style='secondary', glyph='note-pencil') }}
     </div>
     {% endif %}
     <form id="form-chat" class="df-composer-card" hx-post="/servidor/chat" hx-target="#conversa" hx-include="#estado-chat" hx-indicator="#digitando" autocomplete="off">
@@ -54,12 +53,11 @@
   <ol class="df-stack-sm" style="margin:0;padding-left:20px;font-size:14px">
     <li>Converse com o assistente e tente as orientações.</li>
     <li>Resolveu? Clique em <b>Resolvido</b>. Nenhum chamado é necessário.</li>
-    <li>Não resolveu? Escolha <b>Falar com atendente</b> para continuar a conversa com uma pessoa, ou <b>Abrir chamado</b> para gerar o pedido com o resumo.</li>
+    <li>Não resolveu? Escolha <b>Falar com atendente</b> para continuar a conversa com uma pessoa, ou <b>Abrir chamado</b> (disponível depois de conversar) para gerar o pedido com o resumo.</li>
     <li>Um atendente confere e registra o chamado, e você acompanha pelo protocolo.</li>
   </ol>
   <small>Urgências também pelo telefone do Help Desk: (41) 3381-0000.</small>
   {% if not conversa_resolvida %}<button type="button" class="df-button df-secondary df-size-md" hx-post="/servidor/atendente" hx-include="#estado-chat" hx-target="#conversa"><span class="df-button-content">{{ ui.icon('headset') }}Falar com atendente</span></button>{% endif %}
-  {{ ui.button('Abrir chamado sem o assistente', href='/servidor/solicitar', style='secondary', glyph='note-pencil') }}
 </section>
 {% endblock %}
 

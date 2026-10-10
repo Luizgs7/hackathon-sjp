@@ -2,10 +2,7 @@
 {% import "df/_ui.html" as ui %}
 {% set nav_perfil = 'campo' %}
 {% set ativo = 'missoes' %}
-{% set has_context = true %}
 {% block title %}Minhas missões{% endblock %}
-{% block context_label %}Seu progresso{% endblock %}
-{% block context_col %}<section class="df-ctx df-wide-only" aria-labelledby="prog-t"><h2 id="prog-t" style="font-size:16px">Seu progresso</h2><div id="ctx-progresso"></div></section>{% endblock %}
 {% block main %}
 <div class="df-page-head"><div><h1>Minhas missões</h1><p>Olá, {{ u.nome.split()[0] }}. Aqui ficam as missões atribuídas a você.</p></div></div>
 <section class="df-card" aria-labelledby="disp-t">

@@ -2600,15 +2600,9 @@ def conversa_abrir_chamado(request: Request, token: str):
 
 
 @app.get('/servidor/dashboard', response_class=HTMLResponse)
-def servidor_dashboard(request: Request):
-    with db() as c:
-        email = email_solicitante_atual(request,c)
-        if not email:
-            return redirect('/login?msg=Entre para consultar seu dashboard.')
-        solicitacoes = c.execute('SELECT s.*,t.status tarefa_status FROM solicitacoes s LEFT JOIN tarefas t ON t.id=s.tarefa_id WHERE lower(s.email)=? ORDER BY s.id DESC', (email,)).fetchall()
-        chamados = c.execute('SELECT * FROM tarefas WHERE lower(email)=? ORDER BY id DESC',(email,)).fetchall()
-        conversas = c.execute("SELECT a.*,s.protocolo,s.token solicitacao_token, (SELECT texto FROM auto_msgs m WHERE m.token=a.token AND autor='servidor' ORDER BY id LIMIT 1) titulo FROM autoatendimento a JOIN conversa_acessos ca ON ca.token=a.token LEFT JOIN solicitacoes s ON s.id=a.solicitacao_id WHERE ca.email=? ORDER BY a.criado_em DESC", (email,)).fetchall()
-    return render(request,'servidor_dashboard.html',solicitacoes=solicitacoes,conversas=conversas,chamados=chamados)
+def servidor_dashboard():
+    """Antiga aba de atendimentos: tudo foi unificado em Chamados."""
+    return redirect('/meus-chamados')
 
 
 @app.get('/servidor/conversas/{token}')
@@ -2631,6 +2625,8 @@ def abrir_conversa(request: Request, token: str):
 
 @app.get("/servidor/solicitar", response_class=HTMLResponse)
 def servidor_solicitar_form(request: Request, via: str = ""):
+    if via != "ia":
+        return redirect("/servidor?msg=O chamado é aberto a partir da conversa com o assistente ou com um atendente.")
     with db() as c:
         setores = c.execute("SELECT * FROM setores").fetchall()
         token = _sessao_auto(request, c) if via == "ia" else None
@@ -2652,6 +2648,8 @@ def servidor_solicitar(request: Request, nome: str = Form(...), email: str = For
     nome, email, secretaria = validar_solicitante(nome, email, secretaria)
     with db() as c:
         token_auto = _sessao_auto(request, c) if via_ia else None
+        if not token_auto:
+            raise HTTPException(403, "A criação manual de chamados não está disponível: use o assistente ou fale com um atendente.")
         if token_auto and chamado_da_conversa(c, token_auto):
             raise HTTPException(409, 'Esta conversa já possui uma solicitação.')
         last = c.execute('SELECT fonte FROM auto_msgs WHERE token=? ORDER BY id DESC LIMIT 1',(token_auto,)).fetchone() if token_auto else None
@@ -2741,11 +2739,14 @@ def meus_chamados(request: Request, token: str):
             "LEFT JOIN usuarios u ON u.id=t.executor_id WHERE lower(t.email)=? ORDER BY t.criado_em DESC", (email,)).fetchall()
         solicitacoes = c.execute("SELECT * FROM solicitacoes WHERE lower(email)=? AND status<>'registrada' "
                                  "ORDER BY criado_em DESC", (email,)).fetchall()
+        conversas = c.execute("SELECT a.*, s.protocolo, (SELECT texto FROM auto_msgs m WHERE m.token=a.token AND autor='servidor' "
+                              "ORDER BY id LIMIT 1) titulo FROM autoatendimento a JOIN conversa_acessos ca ON ca.token=a.token "
+                              "LEFT JOIN solicitacoes s ON s.id=a.solicitacao_id WHERE ca.email=? ORDER BY a.criado_em DESC", (email,)).fetchall()
     abertos = [t for t in tarefas if t["status"] not in FINAIS]
     historico = [t for t in tarefas if t["status"] in FINAIS]
     perfil = tarefas[0] if tarefas else (solicitacoes[0] if solicitacoes else None)
     resp = render(request, "meus_chamados.html", email=email, perfil=perfil, abertos=abertos, historico=historico,
-                  solicitacoes=solicitacoes, token=token, passos=PASSOS_SOLICITANTE, passo_do_status=PASSO_DO_STATUS,
+                  solicitacoes=solicitacoes, conversas=conversas, token=token, passos=PASSOS_SOLICITANTE, passo_do_status=PASSO_DO_STATUS,
                   aguardando=[t for t in abertos if t["status"] == "executado"])
     resp.set_cookie("acesso_solicitante", token, httponly=True, samesite="lax", max_age=ACESSO_DIAS * 86400)
     return resp

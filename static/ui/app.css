@@ -569,3 +569,7 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 }
 
 .df-filters .df-search-quadro { min-width: min(100%, 340px); flex: 1 1 340px; }
+
+/* Progresso do técnico: faixa no topo da lista, em todos os tamanhos de tela */
+.df-stats.df-stats-topo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 1100px) { .df-stats.df-stats-topo { display: grid; max-width: 720px; } }

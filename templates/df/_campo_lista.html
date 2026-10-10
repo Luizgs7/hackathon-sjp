@@ -3,12 +3,7 @@
 {% set andamento = tarefas|rejectattr('status', 'equalto', 'encaminhado')|list %}
 <div data-ultima="{{ ultima }}"></div>
 <div class="df-stack">
-  <div id="ctx-progresso" hx-swap-oob="true" class="df-cols-3 df-wide-only">
-    <div class="df-score df-score-pts"><small>PONTOS</small><b>{{ ui.icon('lightning-fill') }}{{ pts.d }}</b></div>
-    <div class="df-score df-score-pos"><small>NÍVEL</small><b>{{ nivel }}</b></div>
-    <div class="df-score df-score-med"><small>MEDALHAS</small><b>{{ ui.icon('medal-fill') }}{{ medalhas|length }}</b></div>
-  </div>
-  <section class="df-stats df-narrow-only" aria-label="Seu progresso">
+  <section class="df-stats df-stats-topo" aria-label="Seu progresso">
     <div class="df-stat-tile"><small>Pontos na temporada</small><b>{{ pts.d }}</b>{% if pts.p %}<small>+{{ pts.p }} a confirmar</small>{% endif %}</div>
     <div class="df-stat-tile"><small>Nível</small><b>{{ nivel }}</b></div>
     <div class="df-stat-tile"><small>Medalhas</small><b>{{ medalhas|length }}</b></div>

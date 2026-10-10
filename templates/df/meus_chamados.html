@@ -2,17 +2,17 @@
 {% import "df/_ui.html" as ui %}
 {% set nav_perfil = 'publico' %}
 {% set ativo = 'chamados' %}
-{% block title %}Meus chamados{% endblock %}
+{% block title %}Chamados{% endblock %}
 {% block main %}
 <div hx-get="/meus-chamados/{{ token }}" hx-trigger="every 10s" hx-select="#meus" hx-target="#meus" hx-swap="outerHTML"></div>
 <div id="meus" class="df-stack">
   <div class="df-page-head">
     <div>
-      <h1>Meus chamados</h1>
+      <h1>Chamados</h1>
       <p><b style="color:var(--text)">{% if perfil %}{{ perfil.solicitante or perfil.nome }}{{ ' · ' ~ perfil.secretaria if perfil.secretaria }}{% endif %}</b> · {{ email }}</p>
     </div>
     <div class="df-actions">
-      {{ ui.button('Novo chamado', href='/servidor', style='secondary', size='small') }}
+      {{ ui.button('Falar com o assistente', href='/servidor', style='secondary', size='small', glyph='chat-circle') }}
       {{ ui.button('Sair', href='/meus-chamados-sair', style='ghost', size='small') }}
     </div>
   </div>
@@ -88,6 +88,18 @@
     {% else %}
     {{ ui.empty('Nenhum chamado encerrado ainda.', 'tray') }}
     {% endif %}
+  </section>
+
+  <section class="df-stack" aria-labelledby="cv-h">
+    <h2 id="cv-h">Conversas</h2>
+    {% if conversas %}<div class="df-list">
+    {% for c in conversas %}
+      <a class="df-item-card" href="/servidor/conversas/{{ c.token }}">
+        <h3>{{ c.titulo or 'Conversa com o assistente' }}</h3>
+        <span class="df-item-meta"><span>{{ c.protocolo if c.protocolo else ('Resolvida sem chamado' if c.resolvido else 'Conversa em andamento') }}</span><span>{{ c.criado_em|datahora }}</span></span>
+      </a>
+    {% endfor %}</div>
+    {% else %}{{ ui.empty('Suas conversas com o assistente aparecem aqui.', 'chat-circle') }}{% endif %}
   </section>
 </div>
 {% endblock %}

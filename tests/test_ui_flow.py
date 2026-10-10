@@ -67,11 +67,14 @@ class UiFlowBase(unittest.TestCase):
         self.tecnico = {"sess_campo": app.assinar(self.users["Rafael Costa"])}
         self.outro = {"sess_campo": app.assinar(self.users["Diego Santos"])}
 
-    def solicitar(self, **extra):
+    def solicitar(self, preparar=True, **extra):
         dados = {"nome": "Ana Souza", "email": "ana.souza@exemplo.gov.br", "secretaria": app.SECRETARIAS[0],
                  "local": "UBS Vila Nova – Sala de vacinação", "contato": "2231", "titulo": "Sem internet",
                  "descricao": "Sem internet na sala de vacinação.", "tentativas": "reiniciei", "setor_id": self.setor,
-                 "via_ia": 0} | extra
+                 "via_ia": 1} | extra
+        if dados["via_ia"] and preparar:  # o chamado nasce da conversa com o assistente (não há criação manual)
+            self.client.post("/servidor/nova")
+            self.client.post("/servidor/chat", data={"pergunta": dados["descricao"]})
         r = self.client.post("/servidor/solicitar", data=dados)
         self.assertEqual(r.status_code, 303)
         token = r.headers["location"].split("/servidor/acompanhar/")[1].split("?")[0]
@@ -98,7 +101,7 @@ class PaginasTests(UiFlowBase):
         with app.db() as c:
             ex = c.execute("SELECT id FROM usuarios WHERE nome='Rafael Costa'").fetchone()["id"]
             c.execute("UPDATE tarefas SET executor_id=?, tipo_id=(SELECT id FROM tipos LIMIT 1) WHERE id=?", (ex, tid))
-        return [("/login", None), ("/servidor", None), ("/servidor/solicitar", None), ("/meus-chamados", None),
+        return [("/login", None), ("/servidor", None), ("/meus-chamados", None),
                 (f"/servidor/acompanhar/{sol['token']}", None), (f"/validar/{t['token']}", None),
                 ("/atendente", self.atendente), (f"/tarefa/{tid}", self.atendente), ("/gestor", self.gestor),
                 ("/gestor/metricas", self.gestor), ("/ranking", self.gestor), ("/config", self.gestor),
@@ -169,6 +172,7 @@ class FragmentosTests(UiFlowBase):
         self.assertEqual(r.status_code, 200)
         self.assertNotIn("<html", r.text)
         self.assertIn("df-item-card", r.text)
+        self.client.post("/servidor/nova")
         r = self.client.post("/servidor/chat", data={"pergunta": "Estou sem internet"})
         self.assertEqual(r.status_code, 200)
         self.assertNotIn("<html", r.text)
@@ -202,8 +206,8 @@ class FragmentosTests(UiFlowBase):
 
 class CaminhosTests(UiFlowBase):
     def test_helpdesk_resolve_e_servidor_valida(self):
-        sol = self.solicitar(via_ia=0)
-        self.assertEqual(sol["via_ia"], 0)
+        sol = self.solicitar()
+        self.assertEqual(sol["via_ia"], 1)
         self.assertTrue(sol["protocolo"].startswith("SOL-"))
         acomp = self.client.get(f"/servidor/acompanhar/{sol['token']}")
         self.assertIn("Aguardando atendente", acomp.text)
