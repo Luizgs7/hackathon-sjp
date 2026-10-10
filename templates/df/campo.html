@@ -47,6 +47,9 @@
   const say = (texto, estado) => { label.textContent = texto; if (estado !== undefined) status.textContent = estado; };
   const b64ToUint8 = s => { const p = '='.repeat((4 - s.length % 4) % 4); const r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
   async function ativarPush() {
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent), instalado = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    if (ios && !instalado) { say('Instale o app para receber avisos', 'No iPhone: toque em Compartilhar, depois em Adicionar à Tela de Início, abra o app e ative as notificações.'); return; }
+    if (!window.isSecureContext) { say('Notificações exigem conexão segura (https)', 'Abra o endereço https do sistema.'); return; }
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) { say('Push indisponível neste navegador', 'Use o aviso na tela: novas missões aparecem aqui automaticamente.'); return; }
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') { say('Notificações bloqueadas', 'Libere as notificações do site nas configurações do navegador. Os avisos na tela continuam funcionando.'); return; }

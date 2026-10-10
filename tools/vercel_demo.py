@@ -38,7 +38,6 @@ async def demo_lifespan(_app):
 app.router.lifespan_context = demo_lifespan
 produto.init_db()
 produto.em_segundo_plano = lambda fn, *args: fn(*args)
-produto.enviar_push = lambda *args: None
 
 class LocalIntegration:
     """Keep both simulated applications and their API contracts in one function."""
@@ -84,9 +83,6 @@ async def prototype_controls(request, call_next):
             return JSONResponse({"detail": "Muitas tentativas. Aguarde um minuto e tente novamente."},
                                 status_code=429, headers={"Retry-After": "60"})
         recent.append(now)
-    # No push delivery or subscriptions to third-party endpoints in a public demo.
-    if request.url.path.startswith("/api/push/"):
-        return HTMLResponse("Notificações externas indisponíveis nesta demonstração.", status_code=503)
     response = await call_next(request)
     response.headers["X-Robots-Tag"] = "noindex, nofollow"
     if "text/html" in response.headers.get("content-type", ""):

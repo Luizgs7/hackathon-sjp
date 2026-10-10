@@ -590,3 +590,42 @@ class PainelEquipeTests(UiFlowBase):
         self.assertEqual(len(j["pendentes"]), 1)
         self.assertTrue(j["tecnicos"] and len(j["tecnicos"][0]["posicao"]) == 2)
         self.assertEqual(self.client.get("/gestor/equipe/dados", cookies=self.atendente).status_code, 403)
+
+
+class BuscaPushEManifestTests(UiFlowBase):
+    def test_busca_no_quadro_somente_em_aberto(self):
+        a = self.registrar(self.solicitar(titulo="Impressora quebrada", descricao="Papel preso na bandeja"))
+        b = self.registrar(self.solicitar(titulo="Sem internet", descricao="Rede caiu na recepção"))
+        self.client.post(f"/tarefa/{b}/cancelar", cookies=self.atendente, data={"motivo": "duplicado"})
+        quadro = lambda q: self.client.get("/gestor/quadro", params={"q": q}, cookies=self.gestor).text
+        self.assertIn("Impressora quebrada", quadro("impressora"))
+        self.assertNotIn("Sem internet", quadro("impressora"))
+        self.assertIn("Impressora quebrada", quadro(f"#{a}"))
+        self.assertIn("Impressora quebrada", quadro("bandeja papel"))  # vários termos
+        self.assertIn("Impressora quebrada", quadro("IMPRESSORA"))      # sem diferenciar maiúsculas
+        self.assertIn("0 chamado(s) em aberto", quadro("rede caiu"))      # cancelado não entra
+        self.assertIn("Sem internet", self.client.get("/gestor/quadro", cookies=self.gestor).text)
+
+    def test_manifest_e_push_do_tecnico(self):
+        m = self.client.get("/manifest.webmanifest")
+        self.assertEqual(m.status_code, 200)
+        self.assertTrue(any(i["sizes"] == "192x192" for i in m.json()["icons"]))
+        self.assertIn('rel="manifest"', self.client.get("/login").text)
+        self.assertEqual(self.client.get("/static/ui/pwa/icone-192.png").status_code, 200)
+        self.assertEqual(self.client.get("/sw.js").status_code, 200)
+        chave = self.client.get("/api/push/chave").json()["chave"]
+        self.assertGreater(len(chave), 80)
+        sub = {"endpoint": "https://push.example/abc", "keys": {"p256dh": "x", "auth": "y"}}
+        self.assertEqual(self.client.post("/api/push/inscrever", json=sub).status_code, 303)  # exige sessão do técnico
+        self.assertEqual(self.client.post("/api/push/inscrever", json=sub, cookies=self.tecnico).status_code, 200)
+
+    def test_push_enviado_ao_encaminhar(self):
+        enviados = []
+        with patch.object(app, "enviar_push", lambda *a: enviados.append(a)), \
+                patch.object(app, "em_segundo_plano", lambda fn, *a: fn(*a)):
+            tid = self.registrar(self.solicitar())
+            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+                "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
+        pushes = [e for e in enviados if e[0] == self.users["Rafael Costa"]]
+        self.assertTrue(pushes)
+        self.assertEqual(pushes[0][3], f"/campo/{tid}")

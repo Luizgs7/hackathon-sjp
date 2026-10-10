@@ -27,7 +27,7 @@
   <h2 id="reg-t" style="font-size:16px">{{ ui.icon('file-text') }} Regras de pontuação (configuráveis)</h2>
   <ul class="df-stack-sm" style="margin:0;padding-left:18px;font-size:14px">
     <li><b>Entrega:</b> {{ rg.pontos_por_complexidade }} pts × complexidade (1–5), <i>provisórios</i> ao concluir.</li>
-    <li><b>Qualidade:</b> ao confirmar, multiplica pela nota da demandante ({% for k, v in rg.multiplicador_nota.items() %}{{ k }}★×{{ v }}{{ ', ' if not loop.last }}{% endfor %}).</li>
+    <li><b>Qualidade:</b> ao confirmar, multiplica pela nota da demandante ({% for k, v in rg.multiplicador_nota.items() %}<span class="df-nowrap">{{ k }}★×{{ v }}</span>{{ ", " if not loop.last }}{% endfor %}).</li>
     <li><b>Prazo:</b> +{{ rg.bonus_sla }} se dentro do SLA da criticidade. Impedimentos externos pausam o relógio e não penalizam.</li>
     <li><b>Sem reabertura:</b> +{{ rg.bonus_sem_reabertura }}. Com pendência, os pontos ficam suspensos até a resolução.</li>
     <li><b>Colaboração:</b> +{{ rg.bonus_apoio_colega }} para quem apoia a missão de um colega; +{{ rg.bonus_desbloqueio_gestor }} para o gestor que remove um impedimento.</li>

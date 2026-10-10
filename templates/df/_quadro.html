@@ -1,4 +1,5 @@
 {% import "df/_ui.html" as ui %}
+{% if busca %}<p role="status" class="df-muted">{{ n_busca }} chamado(s) em aberto para “{{ busca }}”. Encerrados não entram na busca.</p>{% endif %}
 <section class="df-kpis df-kpis-wide" aria-label="Indicadores">
   {{ ui.kpi(ind.recebidas, 'registrados', titulo='Total de chamados registrados (tabela tarefas)') }}
   {{ ui.kpi(ind.novos, 'na fila do atendimento', titulo='Novos, devolvidos ou reabertos: na fila de avaliação do atendimento') }}

@@ -1123,10 +1123,25 @@ def gerar_analise_capacitacao(dias):
 
 # ---------------------------------------------------------------- push (Web Push / VAPID auto-hospedado)
 
+def _vapid_derivada():
+    """Demo pública: a chave VAPID deriva do segredo da sessão, igual em todas as instâncias."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    ordem = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551
+    d = int.from_bytes(hashlib.sha256(("vapid:" + SECRET).encode()).digest(), "big") % (ordem - 1) + 1
+    pem = ec.derive_private_key(d, ec.SECP256R1()).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    if not VAPID_PEM.exists() or VAPID_PEM.read_bytes() != pem:
+        VAPID_PEM.parent.mkdir(parents=True, exist_ok=True)
+        VAPID_PEM.write_bytes(pem)
+
+
 def chave_publica_vapid():
     from cryptography.hazmat.primitives import serialization
     from py_vapid import Vapid
-    if not VAPID_PEM.exists():
+    if os.getenv("DEMO_DATA_DIR"):
+        _vapid_derivada()
+    elif not VAPID_PEM.exists():
         v = Vapid()
         v.generate_keys()
         v.save_key(str(VAPID_PEM))
@@ -1509,8 +1524,20 @@ def gestor(request: Request):
     return render(request, "gestor.html", u=u, setores=setores)
 
 
+def _sem_acento(txt):
+    return "".join(ch for ch in unicodedata.normalize("NFD", str(txt or "").lower()) if unicodedata.category(ch) != "Mn")
+
+
+def _casa_busca(t, q):
+    """Todos os termos devem aparecer em ID, título, descrição, local, solicitante, secretaria, e-mail, executor ou tipo."""
+    campos = [f"#{t['id']}", str(t["id"]), t["external_id"], t["titulo"], t["descricao"], t["local"], t["solicitante"],
+              t["secretaria"], t["email"], t["executor"], t["tipo"], t["prioridade"]]
+    alvo = _sem_acento(" ".join(str(x) for x in campos if x))
+    return all(_sem_acento(p.lstrip("#")) in alvo for p in q.split())
+
+
 @app.get("/gestor/quadro", response_class=HTMLResponse)
-def gestor_quadro(request: Request, setor_id: int | None = None):
+def gestor_quadro(request: Request, setor_id: int | None = None, q: str = ""):
     exige_painel(request, "gestor", "gestor_tecnico")
     with db() as c:
         sql = ("SELECT t.*, u.nome executor, u.avatar, tp.nome tipo FROM tarefas t LEFT JOIN usuarios u ON u.id=t.executor_id "
@@ -1518,13 +1545,17 @@ def gestor_quadro(request: Request, setor_id: int | None = None):
         tarefas = c.execute(sql + (" WHERE t.setor_id=?" if setor_id else "") + " ORDER BY coalesce(t.prioridade,'P9'), t.id",
                             (setor_id,) if setor_id else ()).fetchall()
         ind = indicadores(c)
+    q = q.strip()
+    if q:  # busca somente entre os chamados em aberto
+        tarefas = [t for t in tarefas if t["status"] not in FINAIS and _casa_busca(t, q)]
     colunas = {s: [t for t in tarefas if STATUS_OFICIAL[t["status"]] == s] for s in STATUS_OFICIAIS}
     totais = {s: len(ts) for s, ts in colunas.items()}
     # o histórico de encerrados cresce sem parar: o quadro mostra só os mais recentes (o resto está nas métricas)
     for s in FINAIS:
         colunas[s] = sorted(colunas[s], key=lambda t: t["atualizado_em"], reverse=True)[:10]
     impedidos = [t for t in tarefas if t["status"] == "impedido"]
-    return render(request, "_quadro.html", colunas=colunas, totais=totais, impedidos=impedidos, ind=ind)
+    return render(request, "_quadro.html", colunas=colunas, totais=totais, impedidos=impedidos, ind=ind,
+                  busca=q, n_busca=len(tarefas))
 
 
 PERIODOS = {30: "Últimos 30 dias", 60: "Últimos 60 dias", 90: "Últimos 90 dias"}
@@ -1981,6 +2012,19 @@ def campo_chat(request: Request, tid: int, pergunta: str = Form(...)):
 
 
 # ---------------------------------------------------------------- push
+
+@app.get("/manifest.webmanifest", include_in_schema=False)
+def manifest():
+    """Permite instalar o app na tela inicial: no iPhone, é o que habilita o push."""
+    return JSONResponse({
+        "name": "Help Desk SJP", "short_name": "Help Desk", "lang": "pt-BR", "start_url": "/login", "scope": "/",
+        "display": "standalone", "background_color": "#ffffff", "theme_color": "#1e4560",
+        "icons": [
+            {"src": "/static/ui/pwa/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": "/static/ui/pwa/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/static/ui/pwa/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}],
+    }, media_type="application/manifest+json")
+
 
 @app.get("/sw.js", include_in_schema=False)
 def service_worker():

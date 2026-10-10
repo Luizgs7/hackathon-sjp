@@ -535,3 +535,21 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-equipe-grid .df-card { display: grid; gap: 10px; align-content: start; }
 .df-bar { height: 8px; border-radius: 999px; background: var(--df-brand-semantic-surface-hover); overflow: hidden; margin: 6px 0; }
 .df-bar > span { display: block; height: 100%; background: var(--df-brand-semantic-primary, #1e4560); border-radius: 999px; }
+
+
+/* Quebras de linha: títulos equilibrados, textos sem órfãs, valores e ícones que não se separam */
+.df-ui h1, .df-ui h2, .df-ui h3 { text-wrap: balance; }
+.df-ui p, .df-ui small, .df-ui li { text-wrap: pretty; }
+.df-rank-name b { overflow-wrap: break-word; }
+.df-rank-list li > :last-child, .df-score b, .df-rank-compact li > :last-child { white-space: nowrap; }
+.df-rank-compact .df-rank-name small { display: none; }
+#reg-t, #eq-t, #pos-t { display: flex; gap: 8px; align-items: flex-start; }
+#reg-t .df-icon { flex: none; margin-top: 3px; }
+.df-nowrap { white-space: nowrap; }
+@media (max-width: 520px) {
+  .df-filters-eq { grid-template-columns: minmax(0, 1fr); }
+  .df-filters .df-field { min-width: 0; width: 100%; }
+}
+
+/* Quadro: colunas mais largas evitam quebras como "Wi-/fi" nos cartões */
+@media (max-width: 1399px) { .df-board { grid-auto-columns: minmax(250px, 1fr); } }

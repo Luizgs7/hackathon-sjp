@@ -10,13 +10,14 @@
     <h1>{{ 'Gestão das equipes técnicas' if 'gestor_tecnico' in u.papeis else 'Painel de missões' }}</h1>
     <p>Chamados registrados pelo atendimento · atualiza a cada 3 s; passe o mouse nos indicadores para ver o cálculo. <small id="ind" class="htmx-indicator" role="status">atualizando…</small></p>
   </div>
-  <form class="df-filters" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change">
+  <form class="df-filters" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change, input delay:300ms, submit" role="search">
+    <div class="df-field df-search df-search-quadro">{{ ui.icon('magnifying-glass') }}<label class="df-sr" for="busca-quadro">Buscar chamados em aberto</label><input id="busca-quadro" type="search" name="q" placeholder="Buscar chamados em aberto por ID, descrição, local, solicitante…" autocomplete="off"></div>
     {% set opts = [] %}{% for s in setores %}{% set _ = opts.append((s.id, s.nome)) %}{% endfor %}
     {{ ui.select('setor_id', 'Filtrar por área', opts, 0, empty='Todas as áreas', empty_value=0, id='filtro-area') }}
     {{ ui.button('Métricas e capacitação', href='/gestor/metricas', style='secondary') }}{% if 'gestor_tecnico' not in u.papeis %}{{ ui.button('Novo chamado', href='/atendente', style='secondary') }}{% endif %}
   </form>
 </div>
-<div id="quadro" class="df-stack" aria-live="polite" hx-get="/gestor/quadro" hx-trigger="load, every 3s" hx-include="[name=setor_id]" hx-indicator="#ind">
+<div id="quadro" class="df-stack" aria-live="polite" hx-get="/gestor/quadro" hx-trigger="load, every 3s" hx-include="[name=setor_id],[name=q]" hx-indicator="#ind">
   <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando o quadro"><div class="df-skeleton"></div><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
 </div>
 {% endblock %}
