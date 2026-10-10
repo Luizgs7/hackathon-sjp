@@ -290,10 +290,11 @@
 
 /* Quadro kanban: botões Anterior/Próxima levam de coluna em coluna; a posição sobrevive às atualizações do htmx. */
 (() => {
+  const quadroDe = nav => { let x = nav.nextElementSibling; while (x && !x.classList.contains('df-board')) x = x.nextElementSibling; return x; };  // a barra superior fica entre o nav e o quadro
   const cols = b => [...b.querySelectorAll('.df-board-col')];
   const atual = b => { const x = b.scrollLeft + 4; let i = 0; cols(b).forEach((c, k) => { if (c.offsetLeft - b.offsetLeft <= x) i = k; }); return i; };
   const sincronizar = () => document.querySelectorAll('[data-board-nav]').forEach(nav => {
-    const b = nav.nextElementSibling; if (!b || !b.classList.contains('df-board')) return;
+    const b = quadroDe(nav); if (!b) return;
     const n = cols(b).length, i = atual(b), fim = b.scrollLeft + b.clientWidth >= b.scrollWidth - 4;
     nav.querySelector('[data-board-dir="-1"]').disabled = b.scrollLeft <= 0;
     nav.querySelector('[data-board-dir="1"]').disabled = fim;
@@ -303,7 +304,8 @@
   });
   document.addEventListener('click', e => {
     const bt = e.target.closest && e.target.closest('[data-board-dir]'); if (!bt) return;
-    const b = bt.closest('[data-board-nav]').nextElementSibling, cs = cols(b);
+    const b = quadroDe(bt.closest('[data-board-nav]')); if (!b) return;
+    const cs = cols(b);
     const alvo = Math.min(Math.max(atual(b) + Number(bt.dataset.boardDir), 0), cs.length - 1);
     b.scrollTo({ left: cs[alvo].offsetLeft - b.offsetLeft, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   });

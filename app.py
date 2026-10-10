@@ -963,7 +963,7 @@ def ranking(c, temporada, setor_id=None):
         "coalesce(sum(CASE WHEN p.tipo='provisorio' THEN p.pontos END),0) provisorios "
         "FROM usuarios u LEFT JOIN equipes e ON e.id=u.equipe_id "
         "LEFT JOIN pontos p ON p.usuario_id=u.id AND p.temporada=? "
-        f"WHERE (u.papeis LIKE '%executor%' OR u.papeis LIKE '%gestor%'){filtro} "
+        f"WHERE (u.papeis LIKE '%executor%' OR u.papeis LIKE '%gestor_tecnico%'){filtro} "
         "GROUP BY u.id ORDER BY pontos DESC, u.nome", params).fetchall()
     equipes = c.execute(
         "SELECT e.id, e.nome, s.nome setor, coalesce(sum(CASE WHEN p.tipo IN ('definitivo','bonus') THEN p.pontos END),0) pontos "
@@ -988,10 +988,10 @@ def medalhas(c, uid):
 
 
 def nivel(pontos_totais):
-    for limite, nome in ((600, "Lenda de SJP"), (300, "Guardião"), (100, "Explorador")):
+    for limite, nome in ((600, "Especialista"), (300, "Avançado"), (100, "Intermediário")):
         if pontos_totais >= limite:
             return nome
-    return "Recruta"
+    return "Iniciante"
 
 
 # ---------------------------------------------------------------- indicadores

@@ -29,6 +29,8 @@
         L.circleMarker(d.destino, { radius: 8, color: '#dc2626', fillOpacity: .9 }).addTo(map).bindTooltip('Local do atendimento');
         marker = L.circleMarker(d.posicao, { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map);
         map.fitBounds(L.polyline(d.caminho).getBounds(), { padding: [30, 30] });
+        var ruas = L.polyline([], { color: '#2563eb', weight: 4, opacity: .85 }).addTo(map);
+        if (window.rotaPelasRuas) window.rotaPelasRuas([d.caminho[0], d.destino], function (linha) { ruas.setLatLngs(linha); });
       } else { marker.setLatLng(d.posicao); }
     }).catch(function () {});
   }

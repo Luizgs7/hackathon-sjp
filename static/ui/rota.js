@@ -15,13 +15,17 @@
       return load().then(function () {
         var map = L.map('rota-mapa', { scrollWheelZoom: false });
         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
-        L.polyline(d.caminho, { color: '#2563eb', weight: 5, opacity: 0.7 }).addTo(map);
+        var base = L.polyline(d.caminho, { color: '#2563eb', weight: 5, opacity: 0.5, dashArray: '2 8' }).addTo(map);
         L.circleMarker(d.origem, { radius: 9, color: '#fff', weight: 3, fillColor: '#16a34a', fillOpacity: 1 }).addTo(map).bindTooltip('Você está aqui');
         d.paradas.forEach(function (p, i) {
           var icone = L.divIcon({ className: '', html: '<span class="df-rota-pino">' + (i + 1) + '</span>', iconSize: [30, 30], iconAnchor: [15, 15] });
           L.marker(p.ponto, { icon: icone }).addTo(map).bindTooltip('<b>#' + p.id + ' · ' + esc(p.titulo) + '</b><br>' + esc(p.local));
         });
         map.fitBounds(L.latLngBounds(d.caminho), { padding: [30, 30] });
+        var ruas = L.polyline([], { color: '#2563eb', weight: 5, opacity: 0.85 }).addTo(map);
+        window.rotaPelasRuas([d.origem].concat(d.paradas.map(function (p) { return p.ponto; })), function (linha) {
+          ruas.setLatLngs(linha); map.removeLayer(base); map.fitBounds(ruas.getBounds(), { padding: [30, 30] });
+        });
       });
     })
     .catch(function () {});

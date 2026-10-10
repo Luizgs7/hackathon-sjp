@@ -65,7 +65,7 @@
         <span class="df-rank-pos">{% if loop.index <= 3 %}<span class="df-medal" aria-label="{{ loop.index }}º lugar">{{ ui.icon('medal-fill') }}</span>{% else %}{{ loop.index }}{% endif %}</span>
         {{ ui.avatar(r.nome, 'sm') }}
         <span class="df-rank-name"><b>{{ r.nome }}</b><small>{{ r.equipe or 'Gestão' }}{% set ms = medalhas[r.id] %}{% if ms %} · {{ ms|length }} medalha{{ 's' if ms|length > 1 }}{% endif %}</small></span>
-        <span class="df-rank-pts df-mono">{{ r.pontos }}{% if r.provisorios %} · +{{ r.provisorios }} a confirmar{% endif %}</span>
+        <span class="df-rank-pts df-mono"><b>{{ r.pontos }}</b>{% if r.provisorios %}<small>+{{ r.provisorios }} a confirmar</small>{% endif %}</span>
       </li>
     {% else %}<li><small>Sem pontuação nesta temporada.</small></li>{% endfor %}
     </ol>

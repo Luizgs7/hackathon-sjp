@@ -757,3 +757,14 @@ body.df-arrastando .df-item-card { user-select: none; }
 }
 /* durante o arrasto as colunas ocupam a altura toda do quadro: a área de soltar fica grande, mesmo vazia */
 body.df-arrastando .df-board { align-items: stretch; }
+
+/* Mapa não passa por cima do sino/menus: o Leaflet usa z-index alto dentro do próprio contêiner */
+.leaflet-container { isolation: isolate; z-index: 0; }
+.df-topbar { z-index: 1100; }
+.df-sino-panel { z-index: 1200; }
+
+/* Ranking: pontos em coluna, com "a confirmar" em segunda linha (não amassa no mobile) */
+.df-rank-pts { display: grid; justify-items: end; line-height: 1.2; white-space: nowrap; }
+.df-rank-pts small { font-size: 12px; color: var(--muted); font-weight: 400; }
+.df-rank-name b { overflow-wrap: anywhere; }
+@media (max-width: 520px) { .df-rank-list li { gap: 8px; padding: 10px; grid-template-columns: 28px auto minmax(0, 1fr) auto; } }
