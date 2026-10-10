@@ -18,6 +18,7 @@
       {% set candidatos = usuarios|selectattr('papeis', 'equalto', papel)|list %}
       {% if papel == 'gestor' %}{% set candidatos = usuarios|selectattr('papeis', 'equalto', 'gestor,atendente')|list %}{% endif %}
       {% if papel == 'gestor_tecnico' %}{% for g in candidatos %}{% set _ = opts.append((g.id, 'Gestor ' ~ areas.get(g.area_id, '') ~ ' · ' ~ g.nome)) %}{% endfor %}
+      {% elif papel == 'executor' %}{% for g in candidatos %}{% set _ = opts.append((g.id, 'Técnico ' ~ areas.get(g.equipe_setor, '') ~ ' · ' ~ g.nome)) %}{% endfor %}
       {% elif candidatos %}{% set _ = opts.append((candidatos[0].id, rotulo ~ ' · ' ~ candidatos[0].nome)) %}{% endif %}
     {% endfor %}
     {{ ui.select('uid', 'Tipo de usuário', opts, 0, required=True, id='login-uid') }}

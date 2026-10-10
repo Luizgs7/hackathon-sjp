@@ -46,3 +46,31 @@ class GestorTecnicoTests(UiFlowBase):
                 app.garantir_gestor_tecnico(c)
             self.assertEqual(c.execute("SELECT count(*) FROM usuarios WHERE papeis='gestor_tecnico'").fetchone()[0],3)  # três gestores técnicos
             self.assertEqual(c.execute("SELECT papeis FROM usuarios WHERE nome='Paula Mendes'").fetchone()[0],'gestor,atendente')
+
+
+class LoginDosTecnicosTests(UiFlowBase):
+    def test_cada_tecnico_tem_perfil_na_area_do_seu_gestor(self):
+        login = self.client.get('/login').text
+        pares = {'Diego Santos': 'Suporte Técnico', 'Rafael Costa': 'Telecom', 'Marcos Vieira': 'Telefonia'}
+        for tecnico, area in pares.items():
+            self.assertIn(f'Técnico {area} · {tecnico}', login)
+            with app.db() as c:
+                area_id = c.execute("SELECT e.setor_id FROM usuarios u JOIN equipes e ON e.id=u.equipe_id WHERE u.nome=?", (tecnico,)).fetchone()[0]
+                gestor = c.execute("SELECT nome FROM usuarios WHERE papeis='gestor_tecnico' AND area_id=?", (area_id,)).fetchone()
+            self.assertIsNotNone(gestor, f'{area} sem gestor técnico')
+            r = self.client.post('/login', data={'uid': self.users[tecnico]})
+            self.assertEqual(r.status_code, 303)
+            self.assertEqual(r.headers['location'], '/campo')
+            self.assertEqual(self.client.get('/campo').status_code, 200)
+
+    def test_missoes_de_exemplo_para_cada_tecnico_sem_orfas(self):
+        with app.db() as c:
+            app.semear_missoes_dos_tecnicos(c)
+            app.semear_missoes_dos_tecnicos(c)  # idempotente
+            orfas = c.execute("SELECT count(*) FROM tarefas WHERE executor_id IS NOT NULL AND executor_id NOT IN (SELECT id FROM usuarios)").fetchone()[0]
+            self.assertEqual(orfas, 0)
+            for nome in ('Diego Santos', 'Rafael Costa', 'Marcos Vieira'):
+                estados = {r[0] for r in c.execute("SELECT t.status FROM tarefas t JOIN usuarios u ON u.id=t.executor_id WHERE u.nome=?", (nome,))}
+                self.assertTrue({'encaminhado', 'a_caminho', 'executado'} <= estados, (nome, estados))
+            for area in (2, 3, 5):
+                self.assertEqual(c.execute("SELECT count(*) FROM tarefas WHERE status='devolvido' AND setor_id=?", (area,)).fetchone()[0], 1)

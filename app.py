@@ -330,6 +330,7 @@ def init_db():
             seed_historico(c)
         organizar_demo(c)
         if SEED_HISTORICO:
+            semear_missoes_dos_tecnicos(c)
             semear_notificacoes(c)
 
 
@@ -375,6 +376,47 @@ def semear_notificacoes(c):
                   (f"s:{SOLICITANTE_DEMO['email'].lower()}", titulo, texto, url, lida,
                    (datetime.now() - timedelta(hours=1 + 4 * i)).strftime("%Y-%m-%d %H:%M:%S")))
     set_cfg(c, "notif_demo_v1", True)
+
+
+def semear_missoes_dos_tecnicos(c):
+    """Cada técnico fica com missões em vários estágios (para testar o fluxo de campo) e cada área ganha um chamado
+    devolvido para o gestor técnico reavaliar. Só nos dados de exemplo; roda uma vez."""
+    if cfg(c, "missoes_tecnicos_v1"):
+        return
+    locais = {2: ["Prefeitura – Sala de TI", "CMEI Jardim Ipê", "Escola Municipal Sul"],
+              3: ["UBS Centro", "Paço Municipal – Protocolo", "CRAS Centro – Recepção"],
+              5: ["Paço Municipal – Protocolo", "UBS Centro", "Escola Municipal Afonso Pena"]}
+    tecnicos = c.execute("SELECT u.id, u.nome, e.setor_id area FROM usuarios u JOIN equipes e ON e.id=u.equipe_id "
+                         "WHERE u.papeis LIKE '%executor%' ORDER BY u.id").fetchall()
+    for tec in tecnicos:
+        tipo = c.execute("SELECT id FROM tipos WHERE setor_id=? ORDER BY id LIMIT 1", (tec["area"],)).fetchone()
+        if not tipo:
+            continue
+        locs = locais.get(tec["area"], ["Paço Municipal"])
+        planos = [("Chamado aguardando início", "P1", "encaminhado", 0), ("Atendimento agendado", "P2", "encaminhado", 1),
+                  ("Deslocamento em andamento", "P3", "a_caminho", 2), ("Serviço feito, aguardando confirmação", "P3", "executado", 0)]
+        for tit, prio, st, i in planos:
+            ts = agora()
+            sol = "Ana Souza"
+            cur = c.execute(
+                "INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,email,secretaria,setor_id,tipo_id,prioridade,status,"
+                "executor_id,criado_por,token,ia_status,ia_fonte,criado_em,atualizado_em) "
+                "VALUES('web',?,?,?,?,?,?,?,?,?,?,?,2,?,'aceita','regras',?,?)",
+                (f"{tit} · {tec['nome'].split()[0]}", "Missão de exemplo para testar o fluxo do técnico (dados fictícios).",
+                 locs[i % len(locs)], sol, SOLICITANTE_DEMO["email"], "Saúde", tec["area"], tipo["id"], prio, st, tec["id"],
+                 secrets.token_urlsafe(16), ts, ts))
+            registrar_evento(c, cur.lastrowid, "Paula Mendes", "gestor", "Encaminhado (dados de exemplo)", "novo", "encaminhado")
+            if st != "encaminhado":
+                registrar_evento(c, cur.lastrowid, tec["nome"], "executor", "Andamento de exemplo", "encaminhado", st)
+        ts = agora()
+        cur = c.execute(
+            "INSERT INTO tarefas(origem,titulo,descricao,local,solicitante,email,secretaria,setor_id,tipo_id,prioridade,status,"
+            "criado_por,token,ia_status,ia_fonte,criado_em,atualizado_em) "
+            "VALUES('web',?,?,?,?,?,?,?,?,'P3','devolvido',2,?,'aceita','regras',?,?)",
+            (f"Devolvido para reavaliação · área {tec['area']}", "Técnico devolveu: falta informação do solicitante (exemplo).",
+             locs[0], "Ana Souza", SOLICITANTE_DEMO["email"], "Saúde", tec["area"], tipo["id"], secrets.token_urlsafe(16), ts, ts))
+        registrar_evento(c, cur.lastrowid, tec["nome"], "executor", "Devolvido: falta informação (exemplo)", "encaminhado", "devolvido")
+    set_cfg(c, "missoes_tecnicos_v1", True)
 
 
 def organizar_demo(c):
@@ -1492,7 +1534,7 @@ def inicio(request: Request):
 def login_form(request: Request):
     with db() as c:
         garantir_gestor_tecnico(c)
-        usuarios = c.execute("SELECT u.*, e.nome equipe FROM usuarios u LEFT JOIN equipes e ON e.id=u.equipe_id ORDER BY u.id").fetchall()
+        usuarios = c.execute("SELECT u.*, e.nome equipe, e.setor_id equipe_setor FROM usuarios u LEFT JOIN equipes e ON e.id=u.equipe_id ORDER BY u.id").fetchall()
         areas = {r["id"]: r["nome"] for r in c.execute("SELECT id, nome FROM setores")}
     return render(request, "login.html", usuarios=usuarios, areas=areas,
                   painel=usuario_do_cookie(request, "sess_painel"), campo=usuario_do_cookie(request, "sess_campo"))
@@ -1900,7 +1942,7 @@ def _notificar_status(c, t_antigo, novo, usuario, texto):
         notificar(c, [f"u:{t['executor_id']}"], titulo, resumo, f"/campo/{t['id']}", ator)
     if novo in ("devolvido", "impedido", "cancelado", "reaberto", "concluido"):
         notificar(c, _usuarios_com_papel(c, "gestor_hd"), f"Chamado #{t['id']}: {rotulo}", resumo, f"/tarefa/{t['id']}", ator)
-    if novo in ("devolvido", "impedido", "reaberto") and t["setor_id"]:
+    if novo in ("encaminhado", "devolvido", "impedido", "reaberto", "executado", "concluido", "cancelado") and t["setor_id"]:
         notificar(c, _usuarios_com_papel(c, "gestor_tecnico", t["setor_id"]), f"Chamado #{t['id']}: {rotulo}", resumo,
                   f"/tarefa/{t['id']}", ator)
     if novo == "reaberto":
