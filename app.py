@@ -32,8 +32,8 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadF
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from rastro import (BASE as BASE_RASTRO, caminho_rua, destino as rastro_destino, distancia_km, estado as rastro_estado,
-                    km_entre, ordenar_rota)
+from rastro import (BASE as BASE_RASTRO, CRITERIOS, caminho_rua, calcular_trechos, destino as rastro_destino, distancia_km,
+                    estado as rastro_estado, km_entre, ordenar_rota)
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 BASE = Path(__file__).parent
@@ -236,6 +236,9 @@ CREATE TABLE IF NOT EXISTS solicitacoes(id INTEGER PRIMARY KEY, protocolo TEXT U
   conversa TEXT, status TEXT NOT NULL DEFAULT 'aguardando', motivo_descarte TEXT, tarefa_id INTEGER REFERENCES tarefas(id),
   registrada_por TEXT, criado_em TEXT NOT NULL, registrada_em TEXT);
 CREATE TABLE IF NOT EXISTS acessos_solicitante(token TEXT PRIMARY KEY, email TEXT NOT NULL, criado_em TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS rota_ordem(executor_id INTEGER NOT NULL, tarefa_id INTEGER NOT NULL, pos INTEGER NOT NULL, PRIMARY KEY(executor_id, tarefa_id));
+CREATE TABLE IF NOT EXISTS rota_prefs(executor_id INTEGER PRIMARY KEY, criterio TEXT NOT NULL DEFAULT 'misto');
+CREATE TABLE IF NOT EXISTS rota_log(id INTEGER PRIMARY KEY, executor_id INTEGER NOT NULL, texto TEXT NOT NULL, criado_em TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS notificacoes(id INTEGER PRIMARY KEY, dest TEXT NOT NULL, titulo TEXT NOT NULL, texto TEXT NOT NULL DEFAULT '',
   url TEXT NOT NULL DEFAULT '', lida INTEGER NOT NULL DEFAULT 0, criada_em TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS idx_notificacoes_dest ON notificacoes(dest, lida, id);
@@ -2085,6 +2088,10 @@ def campo_lista(request: Request):
 
 
 # ---------------------------------------------------------------- rota otimizada do técnico
+def _log_rota(c, executor_id, texto):
+    c.execute("INSERT INTO rota_log(executor_id,texto,criado_em) VALUES(?,?,?)", (executor_id, texto, agora()))
+
+
 def rota_do_tecnico(c, u):
     ativas = c.execute("SELECT * FROM tarefas WHERE executor_id=? AND status IN ('encaminhado','a_caminho','em_execucao') ORDER BY id",
                        (u["id"],)).fetchall()
@@ -2092,15 +2099,61 @@ def rota_do_tecnico(c, u):
     paradas = [{"id": t["id"], "ponto": rastro_destino(chave_local(t)), "prio": t["prioridade"], "titulo": t["titulo"],
                 "local": t["local"], "status": t["status"], "por": t["prioridade_por"] or t["prioridade_ajustada_por"]}
                for t in ativas if t["status"] in ("encaminhado", "a_caminho")]
-    ordem = ordenar_rota(origem, paradas)
+    pref = c.execute("SELECT criterio FROM rota_prefs WHERE executor_id=?", (u["id"],)).fetchone()
+    criterio = pref["criterio"] if pref and pref["criterio"] in CRITERIOS else "misto"
+    salvo = {r["tarefa_id"]: r["pos"] for r in c.execute("SELECT tarefa_id, pos FROM rota_ordem WHERE executor_id=?", (u["id"],))}
+    if salvo and any(p["id"] in salvo for p in paradas):
+        # ordem manual do técnico; paradas novas entram no fim, pelo critério escolhido
+        fixas = sorted((p for p in paradas if p["id"] in salvo), key=lambda p: salvo[p["id"]])
+        novas = [p for p in ordenar_rota(origem, [p for p in paradas if p["id"] not in salvo], criterio)]
+        ordem = calcular_trechos(origem, fixas + [{k: v for k, v in p.items() if k not in ("trecho_km", "acumulado_km", "eta_min")} for p in novas])
+        manual = True
+    else:
+        ordem, manual = ordenar_rota(origem, paradas, criterio), False
     pontos, ant = [list(origem)], tuple(origem)
     for p in ordem:
         pontos += caminho_rua(ant, p["ponto"])[1:]
         ant = tuple(p["ponto"])
+    historico = c.execute("SELECT * FROM rota_log WHERE executor_id=? ORDER BY id DESC LIMIT 15", (u["id"],)).fetchall()
     return {"origem": list(origem), "atual": ({"id": atual["id"], "titulo": atual["titulo"], "local": atual["local"]} if atual else None),
-            "paradas": ordem, "caminho": pontos,
+            "paradas": ordem, "caminho": pontos, "criterio": criterio, "criterios": CRITERIOS, "manual": manual,
+            "historico": [dict(h) for h in historico],
             "total_km": round(ordem[-1]["acumulado_km"], 1) if ordem else 0,
             "total_min": ordem[-1]["eta_min"] if ordem else 0}
+
+
+@app.post("/campo/rota/mover")
+def campo_rota_mover(request: Request, tarefa_id: int = Form(...), direcao: str = Form(...)):
+    u = exige_executor(request)
+    if direcao not in ("cima", "baixo"):
+        raise HTTPException(422, "Direção inválida")
+    with db() as c:
+        rota = rota_do_tecnico(c, u)
+        ids = [p["id"] for p in rota["paradas"]]
+        if tarefa_id not in ids:
+            raise HTTPException(404, "Parada não encontrada")
+        i = ids.index(tarefa_id)
+        j = i - 1 if direcao == "cima" else i + 1
+        if 0 <= j < len(ids):
+            ids[i], ids[j] = ids[j], ids[i]
+            c.execute("DELETE FROM rota_ordem WHERE executor_id=?", (u["id"],))
+            c.executemany("INSERT INTO rota_ordem(executor_id,tarefa_id,pos) VALUES(?,?,?)", [(u["id"], t, n) for n, t in enumerate(ids)])
+            _log_rota(c, u["id"], f"Parada #{tarefa_id} movida para a posição {j + 1} (ordem manual)")
+    return redirect("/campo/rota")
+
+
+@app.post("/campo/rota/reotimizar")
+def campo_rota_reotimizar(request: Request, criterio: str = Form("misto")):
+    u = exige_executor(request)
+    if criterio not in CRITERIOS:
+        raise HTTPException(422, "Critério inválido")
+    with db() as c:
+        c.execute("DELETE FROM rota_ordem WHERE executor_id=?", (u["id"],))
+        c.execute("INSERT INTO rota_prefs(executor_id,criterio) VALUES(?,?) ON CONFLICT(executor_id) DO UPDATE SET criterio=excluded.criterio",
+                  (u["id"], criterio))
+        rota = rota_do_tecnico(c, u)
+        _log_rota(c, u["id"], f"Rota reotimizada pelo critério \"{CRITERIOS[criterio]}\": {len(rota['paradas'])} paradas, {rota['total_km']} km")
+    return redirect("/campo/rota")
 
 
 @app.get("/campo/rota", response_class=HTMLResponse)
@@ -2963,7 +3016,7 @@ def meus_chamados(request: Request, token: str):
 
 @app.get("/meus-chamados-sair")
 def meus_chamados_sair():
-    resp = redirect("/meus-chamados")
+    resp = redirect("/login")  # sair leva à tela de entrar
     resp.delete_cookie("acesso_solicitante")
     resp.delete_cookie("solicitante_demo")
     return resp

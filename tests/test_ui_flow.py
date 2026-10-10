@@ -892,3 +892,59 @@ class CargaPorTecnicoTests(UiFlowBase):
         self.assertIn("Carga por técnico", pagina)
         self.assertIn("Carga por equipe", pagina)
         self.assertIn("Rafael Costa", pagina)
+
+
+class RoteiroDoTecnicoTests(UiFlowBase):
+    def preparar(self):
+        ids = []
+        for local, prio in (("UBS Centro", "P3"), ("Escola Municipal Sul", "P1"), ("Paço Municipal", "P3")):
+            tid = self.registrar(self.solicitar(local=local))
+            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+                "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": prio})
+            ids.append(tid)
+        with app.db() as c:  # a seed já deixou missões de Rafael em andamento: só as novas importam
+            pass
+        return ids
+
+    def ordem(self):
+        return [p["id"] for p in self.client.get("/campo/rota/dados", cookies=self.tecnico).json()["paradas"]]
+
+    def test_reordenar_reotimizar_e_historico(self):
+        a, b, c3 = self.preparar()
+        base = [i for i in self.ordem() if i in (a, b, c3)]
+        self.assertEqual(base[0], b)  # crítico primeiro (critério misto)
+        # mover a segunda parada para cima troca as posições e vira ordem manual
+        segunda = base[1]
+        r = self.client.post("/campo/rota/mover", cookies=self.tecnico, data={"tarefa_id": segunda, "direcao": "cima"})
+        self.assertEqual(r.status_code, 303)
+        nova = [i for i in self.ordem() if i in (a, b, c3)]
+        self.assertEqual(nova[0], segunda)
+        pag = self.client.get("/campo/rota", cookies=self.tecnico).text
+        self.assertIn("Ordem ajustada por você", pag)
+        self.assertIn("movida para a posição 1", pag)
+        # critério criticidade: reotimizar descarta o ajuste manual
+        r = self.client.post("/campo/rota/reotimizar", cookies=self.tecnico, data={"criterio": "criticidade"})
+        self.assertEqual(r.status_code, 303)
+        pag = self.client.get("/campo/rota", cookies=self.tecnico).text
+        self.assertIn("Rota reotimizada", pag)
+        self.assertNotIn("Ordem ajustada por você", pag)
+        self.assertEqual([i for i in self.ordem() if i in (a, b, c3)][0], b)
+        self.assertEqual(self.client.post("/campo/rota/reotimizar", cookies=self.tecnico, data={"criterio": "x"}).status_code, 422)
+        self.assertEqual(self.client.post("/campo/rota/mover", cookies=self.atendente, data={"tarefa_id": a, "direcao": "cima"}).status_code, 303)
+
+    def test_criterios_de_ordenacao(self):
+        import rastro
+        o = rastro.BASE
+        pontos = [{"id": 1, "ponto": (o[0] + 0.001, o[1]), "prio": "P3"}, {"id": 2, "ponto": (o[0] + 0.020, o[1]), "prio": "P1"},
+                  {"id": 3, "ponto": (o[0] + 0.002, o[1]), "prio": "P3"}]
+        self.assertEqual([p["id"] for p in rastro.ordenar_rota(o, pontos, "distancia")], [1, 3, 2])
+        self.assertEqual([p["id"] for p in rastro.ordenar_rota(o, pontos, "criticidade")][0], 2)
+
+
+class SairDaContaTests(UiFlowBase):
+    def test_sair_do_solicitante_vai_para_a_tela_de_entrar(self):
+        r = self.client.get("/meus-chamados-sair")
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/login")
+        # sem sessão, o assistente também leva ao login
+        self.assertTrue(self.client.get("/servidor").headers["location"].startswith("/login"))

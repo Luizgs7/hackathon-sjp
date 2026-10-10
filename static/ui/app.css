@@ -618,3 +618,8 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-carga { display: inline-flex; align-items: center; gap: 10px; min-width: 120px; }
 .df-carga .df-bar { flex: 1; margin: 0; }
 .df-bar-eq > span { background: #2f55a4; }
+
+.df-rota-lista > li { grid-template-columns: 36px minmax(0, 1fr) auto; }
+.df-rota-mover { display: grid; gap: 4px; }
+.df-rota-mover form { margin: 0; }
+@media (max-width: 520px) { .df-rota-lista > li { grid-template-columns: 36px minmax(0, 1fr); } .df-rota-mover { grid-column: 2; display: flex; } }

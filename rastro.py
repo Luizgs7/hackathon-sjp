@@ -87,16 +87,36 @@ def caminho_rua(a, b):
     return [list(a), [a[0], b[1]], list(b)]
 
 
-def ordenar_rota(origem, paradas):
-    """Vizinho mais próximo ponderado pela criticidade: críticos pesam mais, mas a distância também conta.
-    paradas: [{"id", "ponto": (lat, lng), "prio"}]. Retorna as paradas em ordem, com km do trecho e acumulado."""
-    restantes, atual, ordem, acum = list(paradas), tuple(origem), [], 0.0
-    while restantes:
-        melhor = min(restantes, key=lambda p: (km_rua(atual, p["ponto"]) * PESO_PRIO.get(p.get("prio") or "P3", 1.0), p["id"]))
-        trecho = km_rua(atual, melhor["ponto"])
+CRITERIOS = {"misto": "Misto (criticidade e distância)", "distancia": "Menor distância", "criticidade": "Criticidade primeiro"}
+
+
+def calcular_trechos(origem, ordem):
+    """Distância por trecho, acumulada e tempo de chegada para uma sequência de paradas já definida."""
+    atual, acum, saida = tuple(origem), 0.0, []
+    for p in ordem:
+        trecho = km_rua(atual, p["ponto"])
         acum += trecho
-        ordem.append({**melhor, "trecho_km": round(trecho, 1), "acumulado_km": round(acum, 1),
+        saida.append({**p, "trecho_km": round(trecho, 1), "acumulado_km": round(acum, 1),
                       "eta_min": max(1, round(acum / VELOCIDADE_KMH * 60))})
+        atual = tuple(p["ponto"])
+    return saida
+
+
+def ordenar_rota(origem, paradas, criterio="misto"):
+    """Escolhe a próxima parada a cada passo. misto: vizinho mais próximo ponderado pela criticidade;
+    distancia: só a distância; criticidade: P1 antes de P2..., e dentro do mesmo nível o mais próximo."""
+    def custo(atual, p):
+        d = km_rua(atual, p["ponto"])
+        prio = p.get("prio") or "P3"
+        if criterio == "distancia":
+            return (d, p["id"])
+        if criterio == "criticidade":
+            return (prio, d, p["id"])
+        return (d * PESO_PRIO.get(prio, 1.0), p["id"])
+    restantes, atual, ordem = list(paradas), tuple(origem), []
+    while restantes:
+        melhor = min(restantes, key=lambda p: custo(atual, p))
+        ordem.append(melhor)
         restantes.remove(melhor)
         atual = tuple(melhor["ponto"])
-    return ordem
+    return calcular_trechos(origem, ordem)

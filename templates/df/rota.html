@@ -29,13 +29,31 @@
     <li class="df-card">
       <span class="df-rota-num" aria-hidden="true">{{ loop.index }}</span>
       <div class="df-rota-corpo">
-        <div class="df-item-top">{{ ui.prio(p.prio, p.por) }}{% if p.status == 'a_caminho' %}<span class="df-st df-st-a_caminho">{{ ui.icon('navigation-arrow') }}a caminho</span>{% endif %}</div>
+        <div class="df-item-top">{{ ui.prio(p.prio, p.por) }}<span class="df-st df-st-{{ p.status }}">{{ ui.icon('navigation-arrow' if p.status == 'a_caminho' else 'clock') }}{{ 'A caminho' if p.status == 'a_caminho' else 'Pendente' }}</span></div>
         <h3><a href="/campo/{{ p.id }}">#{{ p.id }} · {{ p.titulo }}</a></h3>
         <span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ p.local or 'Local não informado' }}</span><span class="df-nowrap">{{ p.trecho_km|dec }} km do ponto anterior</span><span class="df-nowrap">chega em ~{{ p.eta_min }} min</span></span>
+      </div>
+      <div class="df-rota-mover" role="group" aria-label="Mover parada {{ loop.index }}">
+        <form method="post" action="/campo/rota/mover" data-df-form><input type="hidden" name="tarefa_id" value="{{ p.id }}"><input type="hidden" name="direcao" value="cima">
+          <button type="submit" class="df-button df-ghost df-icon-button" aria-label="Subir parada #{{ p.id }}"{% if loop.first %} disabled{% endif %}><span class="df-button-content">{{ ui.icon('arrow-up') }}</span></button></form>
+        <form method="post" action="/campo/rota/mover" data-df-form><input type="hidden" name="tarefa_id" value="{{ p.id }}"><input type="hidden" name="direcao" value="baixo">
+          <button type="submit" class="df-button df-ghost df-icon-button" aria-label="Descer parada #{{ p.id }}"{% if loop.last %} disabled{% endif %}><span class="df-button-content">{{ ui.icon('arrow-down') }}</span></button></form>
       </div>
     </li>
     {% endfor %}
   </ol>
+</section>
+<section class="df-card" aria-labelledby="reot-t">
+  <h2 id="reot-t">{{ ui.icon('path') }}Reotimizar</h2>
+  <form class="df-form" method="post" action="/campo/rota/reotimizar" data-df-form>
+    <div class="df-form-row">{{ ui.select('criterio', 'Critério', rota.criterios.items()|list, rota.criterio, id='rota-criterio') }}<div class="df-form-actions" style="align-self:end">{{ ui.button('Reotimizar', glyph='path') }}</div></div>
+    <small>{{ 'Ordem ajustada por você.' if rota.manual else 'Ordem calculada pelo critério acima.' }} Reotimizar descarta ajustes manuais.</small>
+  </form>
+</section>
+<section class="df-card" aria-labelledby="rota-hist-t">
+  <h2 id="rota-hist-t">{{ ui.icon('clock') }}Histórico da rota</h2>
+  {% if rota.historico %}<ul class="df-stack-sm" style="margin:0;padding-left:18px">{% for h in rota.historico %}<li><small>{{ h.texto }} · <span class="df-muted">{{ h.criado_em|datahora }}</span></small></li>{% endfor %}</ul>
+  {% else %}<p class="df-muted">Sem alterações ainda.</p>{% endif %}
 </section>
 {% else %}
 {{ ui.empty('Nenhuma missão aguardando para formar uma rota.', 'path') }}
