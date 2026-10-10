@@ -764,3 +764,68 @@ class RotaDoTecnicoTests(UiFlowBase):
         self.assertGreaterEqual(len(dados["caminho"]), 3)
         vazio = self.client.get("/campo/rota", cookies={"sess_campo": app.assinar(self.users["Larissa Moura"])})  # sem missões
         self.assertIn("Nenhuma missão aguardando", vazio.text)
+
+
+class SinoDeNotificacoesTests(UiFlowBase):
+    def sino(self, ck, perfil):
+        return self.client.get(f"/notificacoes/sino?perfil={perfil}", cookies=ck).text
+
+    def test_fluxo_gera_avisos_para_cada_perfil(self):
+        sol = self.solicitar(email="ana.souza@exemplo.gov.br")
+        tid = self.registrar(sol)
+        # atendente recebeu aviso da nova solicitação
+        self.assertIn("Nova solicitação", self.sino(self.atendente, "painel"))
+        # encaminhar -> técnico recebe nova missão; solicitante recebe andamento
+        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
+        tecnico = self.sino(self.tecnico, "campo")
+        self.assertIn(f"Nova missão #{tid}", tecnico)
+        self.assertIn("df-sino-badge", tecnico)  # bolinha vermelha de não lidas
+        # a pessoa que fez a ação não recebe o próprio aviso
+        self.assertNotIn(f"Nova missão #{tid}", self.sino(self.atendente, "painel"))
+        # técnico devolve -> gestor do Help Desk e gestor técnico da área são avisados
+        with app.db() as c:
+            tipo3 = c.execute("SELECT id FROM tipos WHERE setor_id=3").fetchone()["id"]
+            c.execute("UPDATE tarefas SET setor_id=3, tipo_id=? WHERE id=?", (tipo3, tid))
+        self.client.post(f"/campo/{tid}/devolver", cookies=self.tecnico, data={"motivo": app.MOTIVOS_DEVOLUCAO[1], "detalhe": ""})
+        self.assertIn(f"Chamado #{tid}: Devolvido", self.sino(self.gestor, "painel"))
+        helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}
+        self.assertIn(f"Chamado #{tid}: Devolvido", self.sino(helena, "painel"))
+        roberto = {"sess_painel": app.assinar(self.users["Roberto Nunes"])}
+        self.assertNotIn(f"Chamado #{tid}: Devolvido", self.sino(roberto, "painel"))  # outra área
+
+    def test_ler_marca_como_lida_e_pagina_de_listagem(self):
+        tid = self.registrar(self.solicitar())
+        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P3"})
+        pag = self.client.get("/notificacoes?perfil=campo", cookies=self.tecnico)
+        self.assertEqual(pag.status_code, 200)
+        self.assertIn("Nova missão", pag.text)
+        with app.db() as c:
+            nid = c.execute("SELECT id FROM notificacoes WHERE dest=? ORDER BY id DESC",
+                            (f"u:{self.users['Rafael Costa']}",)).fetchone()["id"]
+        # só o dono abre; abrir marca como lida e leva ao destino
+        self.assertEqual(self.client.get(f"/notificacoes/{nid}/ir?perfil=campo", cookies=self.outro).status_code, 404)
+        r = self.client.get(f"/notificacoes/{nid}/ir?perfil=campo", cookies=self.tecnico)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], f"/campo/{tid}")
+        self.assertNotIn("df-sino-badge", self.sino(self.tecnico, "campo"))
+        # marcar todas como lidas
+        self.client.post("/campo/disponibilidade", cookies=self.tecnico, data={"ativo": 1})
+        self.client.post("/notificacoes/lidas", cookies=self.tecnico, data={"perfil": "campo"})
+        self.assertIn("Nenhuma notificação", self.client.get("/notificacoes?perfil=campo&so_novas=1", cookies=self.tecnico).text)
+
+    def test_solicitante_recebe_resposta_do_atendente(self):
+        self.client.post("/login/solicitante")
+        self.client.post("/servidor/chat", data={"pergunta": "Meu computador não liga"})
+        self.client.post("/servidor/atendente", data={"estado_chat": ""})
+        tok = self.client.cookies.get("auto_token")
+        self.assertIn("Conversa aguardando atendente", self.sino(self.atendente, "painel"))
+        self.client.post(f"/atendente/conversa/{tok}/assumir", cookies=self.atendente)
+        self.client.post(f"/atendente/conversa/{tok}/responder", data={"texto": "Vou verificar agora."}, cookies=self.atendente)
+        sol = self.sino({}, "publico")
+        self.assertIn("respondeu na conversa", sol)
+        self.assertIn("Vou verificar agora.", sol)
+        # a pessoa sem identidade não vê sino
+        self.client.cookies.clear()
+        self.assertNotIn("df-sino-btn", self.client.get("/notificacoes/sino?perfil=publico").text)

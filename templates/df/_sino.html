@@ -1,0 +1,23 @@
+{% import "df/_ui.html" as ui %}
+{% if dest %}
+<details id="sino" class="df-sino" data-menu hx-get="/notificacoes/sino?perfil={{ perfil }}" hx-trigger="every 15s [!document.querySelector('.df-sino[open]')]" hx-swap="outerHTML">
+  <summary class="df-sino-btn" aria-label="Notificações{{ ': ' ~ nao_lidas ~ ' não lida' ~ ('s' if nao_lidas != 1) if nao_lidas }}">
+    {{ ui.icon('bell-simple-fill' if nao_lidas else 'bell-simple') }}
+    {% if nao_lidas %}<span class="df-sino-badge" aria-hidden="true">{{ '9+' if nao_lidas > 9 else nao_lidas }}</span>{% endif %}
+  </summary>
+  <div class="df-sino-panel">
+    <div class="df-row"><b>Notificações</b>
+      {% if nao_lidas %}<form method="post" action="/notificacoes/lidas" hx-post="/notificacoes/lidas" hx-target="#sino" hx-swap="outerHTML"><input type="hidden" name="perfil" value="{{ perfil }}"><button type="submit" class="df-link">Marcar todas como lidas</button></form>{% endif %}
+    </div>
+    {% if itens %}
+    <ul class="df-sino-lista">
+      {% for n in itens %}
+      <li class="{{ 'nova' if not n.lida }}"><a href="/notificacoes/{{ n.id }}/ir?perfil={{ perfil }}">
+        <b>{{ n.titulo }}</b>{% if n.texto %}<span>{{ n.texto }}</span>{% endif %}<small>{{ n.criada_em|datahora }}</small></a></li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="df-muted">Nenhuma notificação por enquanto.</p>{% endif %}
+    <a class="df-link" href="/notificacoes?perfil={{ perfil }}">Ver todas</a>
+  </div>
+</details>
+{% else %}<span id="sino"></span>{% endif %}

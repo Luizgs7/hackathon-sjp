@@ -17,6 +17,7 @@
 {% elif nav_perfil == 'campo' %}
   {% set _ = nav.append(('missoes', '/campo', 'Missões', 'list-checks')) %}
   {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy')) %}
+  {% set _ = nav.append(('avisos', '/notificacoes?perfil=campo', 'Avisos', 'bell-simple')) %}
 {% else %}
   {% set _ = nav.append(('assistente', '/servidor', 'Assistente', 'chat-circle')) %}
   {% set _ = nav.append(('chamados', '/meus-chamados', 'Chamados', 'list-checks')) %}
@@ -62,6 +63,8 @@
         {% if has_list %}<button type="button" class="df-button df-ghost df-icon-button" data-list-toggle aria-controls="df-list" aria-expanded="false" aria-label="{{ self.list_label() }}"><span class="df-button-content">{{ ui.icon('list') }}</span></button>{% endif %}
         <a class="df-brand-mobile" href="/" aria-label="Help Desk SJP: início"><span class="df-brand-name">Help Desk SJP</span><span class="df-page-name">{% block page_name %}{{ self.title() }}{% endblock %}</span></a>
       </div>
+      <div class="df-topbar-end">
+      {% if (u or solicitante_demo) and not bare %}<div id="sino" class="df-sino-slot" hx-get="/notificacoes/sino?perfil={{ nav_perfil }}" hx-trigger="load, every 15s [!document.querySelector('.df-sino[open]')]" hx-swap="outerHTML"></div>{% endif %}
       <details class="df-usermenu" data-menu>
         <summary aria-label="Menu do usuário">{% if u %}{{ ui.avatar(u.nome, 'sm') }}<b>{{ u.nome.split()[0] }}</b>{% elif solicitante_demo %}{{ ui.avatar(solicitante_demo.nome, 'sm') }}<b>{{ solicitante_demo.nome }}</b>{% else %}{{ ui.avatar('Visitante', 'sm') }}<b>Visitante</b>{% endif %}</summary>
         <div class="df-menu-panel">
@@ -83,6 +86,7 @@
           {% endif %}
         </div>
       </details>
+      </div>
     </header>
     <main id="conteudo" class="df-main{{ ' df-main-wide' if wide }}{{ ' df-main-flush' if flush }}" tabindex="-1">
       {% if msg %}<div class="df-notice df-notice-info" role="status">{{ ui.icon('info') }}<div>{{ msg }}</div></div>{% endif %}

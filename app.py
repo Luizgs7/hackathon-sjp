@@ -236,6 +236,9 @@ CREATE TABLE IF NOT EXISTS solicitacoes(id INTEGER PRIMARY KEY, protocolo TEXT U
   conversa TEXT, status TEXT NOT NULL DEFAULT 'aguardando', motivo_descarte TEXT, tarefa_id INTEGER REFERENCES tarefas(id),
   registrada_por TEXT, criado_em TEXT NOT NULL, registrada_em TEXT);
 CREATE TABLE IF NOT EXISTS acessos_solicitante(token TEXT PRIMARY KEY, email TEXT NOT NULL, criado_em TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS notificacoes(id INTEGER PRIMARY KEY, dest TEXT NOT NULL, titulo TEXT NOT NULL, texto TEXT NOT NULL DEFAULT '',
+  url TEXT NOT NULL DEFAULT '', lida INTEGER NOT NULL DEFAULT 0, criada_em TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_notificacoes_dest ON notificacoes(dest, lida, id);
 """
 
 
@@ -507,6 +510,7 @@ def mudar_status(c, t, novo, usuario, papel, texto=""):
     c.execute("UPDATE tarefas SET status=?, atualizado_em=? WHERE id=?", (novo, agora(), t["id"]))
     registrar_evento(c, t["id"], usuario["nome"] if usuario else "Demandante", papel, texto, t["status"], novo)
     enfileirar_outbox(c, t, novo, texto, usuario["nome"] if usuario else t["solicitante"])
+    _notificar_status(c, t, novo, usuario, texto)
 
 
 _outbox_lock = threading.Lock()
@@ -1674,6 +1678,103 @@ def equipe_dados(request: Request):
     }, headers={"Cache-Control": "no-store"})
 
 
+# ---------------------------------------------------------------- sino de notificações (todos os perfis)
+def notificar(c, destinos, titulo, texto, url, excluir=None):
+    """Grava um aviso para cada destino ('u:<id>' para usuários, 's:<e-mail>' para o solicitante)."""
+    for d in {x for x in destinos if x and x != excluir}:
+        c.execute("INSERT INTO notificacoes(dest,titulo,texto,url,criada_em) VALUES(?,?,?,?,?)",
+                  (d, titulo[:120], (texto or "")[:240], url, agora()))
+
+
+def _usuarios_com_papel(c, papel, area=None):
+    if papel == "gestor_hd":
+        sql, params = "SELECT id FROM usuarios WHERE papeis LIKE '%gestor%' AND papeis NOT LIKE '%gestor_tecnico%'", ()
+    elif papel == "gestor_tecnico":
+        sql, params = "SELECT id FROM usuarios WHERE papeis LIKE '%gestor_tecnico%' AND area_id=?", (area,)
+    else:
+        sql, params = "SELECT id FROM usuarios WHERE papeis LIKE ?", (f"%{papel}%",)
+    return [f"u:{r['id']}" for r in c.execute(sql, params)]
+
+
+def _notificar_status(c, t_antigo, novo, usuario, texto):
+    t = c.execute("SELECT * FROM tarefas WHERE id=?", (t_antigo["id"],)).fetchone()
+    ator = f"u:{usuario['id']}" if usuario else None
+    rotulo = STATUS[novo][1]
+    resumo = f"{t['titulo']} · {texto}" if texto else t["titulo"]
+    if t["email"]:
+        notificar(c, [f"s:{t['email'].lower()}"], f"Chamado #{t['id']}: {rotulo}", resumo, f"/validar/{t['token']}", ator)
+    if t["executor_id"] and novo in ("encaminhado", "cancelado", "reaberto"):
+        titulo = f"Nova missão #{t['id']}" if novo == "encaminhado" else f"Missão #{t['id']}: {rotulo}"
+        notificar(c, [f"u:{t['executor_id']}"], titulo, resumo, f"/campo/{t['id']}", ator)
+    if novo in ("devolvido", "impedido", "cancelado", "reaberto", "concluido"):
+        notificar(c, _usuarios_com_papel(c, "gestor_hd"), f"Chamado #{t['id']}: {rotulo}", resumo, f"/tarefa/{t['id']}", ator)
+    if novo in ("devolvido", "impedido", "reaberto") and t["setor_id"]:
+        notificar(c, _usuarios_com_papel(c, "gestor_tecnico", t["setor_id"]), f"Chamado #{t['id']}: {rotulo}", resumo,
+                  f"/tarefa/{t['id']}", ator)
+    if novo == "reaberto":
+        notificar(c, _usuarios_com_papel(c, "atendente"), f"Chamado #{t['id']} reaberto", resumo, f"/tarefa/{t['id']}", ator)
+
+
+def dest_do_perfil(request, c, perfil):
+    if perfil == "campo":
+        u = usuario_do_cookie(request, "sess_campo")
+        return f"u:{u['id']}" if u else None
+    if perfil == "painel":
+        u = usuario_do_cookie(request, "sess_painel")
+        return f"u:{u['id']}" if u else None
+    email = email_solicitante_atual(request, c)
+    return f"s:{email}" if email else None
+
+
+def _fragmento_sino(request, perfil):
+    with db() as c:
+        dest = dest_do_perfil(request, c, perfil)
+        itens = c.execute("SELECT * FROM notificacoes WHERE dest=? ORDER BY id DESC LIMIT 12", (dest,)).fetchall() if dest else []
+        nao_lidas = c.execute("SELECT count(*) n FROM notificacoes WHERE dest=? AND lida=0", (dest,)).fetchone()["n"] if dest else 0
+    return render(request, "_sino.html", itens=itens, nao_lidas=nao_lidas, perfil=perfil, dest=dest)
+
+
+@app.get("/notificacoes/sino", response_class=HTMLResponse)
+def sino(request: Request, perfil: str = "publico"):
+    return _fragmento_sino(request, perfil if perfil in ("campo", "painel", "publico") else "publico")
+
+
+@app.post("/notificacoes/lidas", response_class=HTMLResponse)
+def sino_marcar_lidas(request: Request, perfil: str = Form("publico")):
+    with db() as c:
+        dest = dest_do_perfil(request, c, perfil)
+        if dest:
+            c.execute("UPDATE notificacoes SET lida=1 WHERE dest=?", (dest,))
+    return _fragmento_sino(request, perfil if perfil in ("campo", "painel", "publico") else "publico")
+
+
+@app.get("/notificacoes/{nid}/ir")
+def sino_abrir(request: Request, nid: int, perfil: str = "publico"):
+    with db() as c:
+        dest = dest_do_perfil(request, c, perfil)
+        n = c.execute("SELECT * FROM notificacoes WHERE id=? AND dest=?", (nid, dest)).fetchone() if dest else None
+        if not n:
+            raise HTTPException(404, "Notificação não encontrada")
+        c.execute("UPDATE notificacoes SET lida=1 WHERE id=?", (nid,))
+    return redirect(n["url"] or "/")
+
+
+@app.get("/notificacoes", response_class=HTMLResponse)
+def notificacoes_pagina(request: Request, perfil: str = "", so_novas: int = 0):
+    if perfil not in ("campo", "painel", "publico"):
+        perfil = "campo" if request.cookies.get("sess_campo") and not request.cookies.get("sess_painel") else (
+            "painel" if request.cookies.get("sess_painel") else "publico")
+    with db() as c:
+        dest = dest_do_perfil(request, c, perfil)
+        if not dest:
+            return redirect("/login?msg=Entre para ver suas notificações.")
+        itens = c.execute("SELECT * FROM notificacoes WHERE dest=?" + (" AND lida=0" if so_novas else "") + " ORDER BY id DESC LIMIT 200",
+                          (dest,)).fetchall()
+        nao_lidas = c.execute("SELECT count(*) n FROM notificacoes WHERE dest=? AND lida=0", (dest,)).fetchone()["n"]
+        u = usuario_do_cookie(request, "sess_campo" if perfil == "campo" else "sess_painel") if perfil != "publico" else None
+    return render(request, "notificacoes.html", itens=itens, nao_lidas=nao_lidas, perfil=perfil, so_novas=so_novas, u=u)
+
+
 @app.get("/gestor/metricas", response_class=HTMLResponse)
 def gestor_metricas(request: Request, dias: int = 90, setor_id: int | None = None):
     u = exige_painel(request, "gestor", "gestor_tecnico")
@@ -2401,6 +2502,10 @@ def servidor_chat(request: Request, pergunta: str = Form(...), estado_chat: str 
         c.execute("INSERT INTO auto_msgs(token,autor,texto,criado_em) VALUES(?,?,?,?)", (token, "servidor", pergunta, agora()))
     with db() as c:
         humano = _contexto_humano(c, token)
+        if humano["modo"] == "humano" and not chamado_da_conversa(c, token):
+            ag = c.execute("SELECT atendente_id FROM autoatendimento WHERE token=?", (token,)).fetchone()
+            if ag and ag["atendente_id"]:
+                notificar(c, [f"u:{ag['atendente_id']}"], "Nova mensagem do servidor", pergunta, f"/atendente/conversa/{token}")
         if humano["modo"] == "ia" or chamado_da_conversa(c, token):
             resposta, fonte = responder_autoatendimento(c, token, pergunta)
             c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
@@ -2505,6 +2610,8 @@ def servidor_falar_com_atendente(request: Request, estado_chat: str = Form("")):
             c.execute("UPDATE autoatendimento SET modo='aguardando', modo_desde=? WHERE token=?", (agora(), token))
             _msg_sistema(c, token, "Pedido enviado ao Helpdesk. Um atendente vai assumir a conversa; você pode "
                                    "continuar escrevendo e ele verá todo o histórico.")
+            notificar(c, _usuarios_com_papel(c, "atendente"), "Conversa aguardando atendente", "Um servidor pediu para falar com uma pessoa.",
+                      f"/atendente/conversa/{token}")
         resp = _chat_fragmento(request, c, token)
     resp.set_cookie("auto_token", token, httponly=True, samesite="lax", secure=request.url.scheme == "https")
     return resp
@@ -2585,6 +2692,9 @@ def conversa_responder(request: Request, token: str, texto: str = Form(...)):
         if texto.strip():
             c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
                       (token, "atendente", texto.strip(), "atendente", agora()))
+            em = c.execute("SELECT email FROM conversa_acessos WHERE token=?", (token,)).fetchone()
+            if em:
+                notificar(c, [f"s:{em['email'].lower()}"], f"{u['nome']} respondeu na conversa", texto.strip(), "/servidor")
     return redirect(f"/atendente/conversa/{token}")
 
 
@@ -2704,6 +2814,7 @@ def servidor_solicitar(request: Request, nome: str = Form(...), email: str = For
                         (token, nome, email, secretaria, local, contato, titulo, descricao, tentativas, setor_id,
                          int(bool(token_auto)), conversa, agora()))
         c.execute("UPDATE solicitacoes SET protocolo=? WHERE id=?", (f"SOL-{cur.lastrowid:04d}", cur.lastrowid))
+        notificar(c, _usuarios_com_papel(c, "atendente"), f"Nova solicitação SOL-{cur.lastrowid:04d}", titulo, f"/atendente?sol={cur.lastrowid}")
         if token_auto:
             c.execute("UPDATE autoatendimento SET solicitacao_id=? WHERE token=?", (cur.lastrowid, token_auto))
         elif continuar_chat:

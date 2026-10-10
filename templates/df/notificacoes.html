@@ -1,0 +1,29 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = perfil %}
+{% set ativo = 'avisos' %}
+{% block title %}Notificações{% endblock %}
+{% block main %}
+<div class="df-page-head">
+  <div>
+    <h1>Notificações</h1>
+    <p>{{ nao_lidas }} não lida{{ 's' if nao_lidas != 1 }}. Todas as atualizações dos seus chamados e missões chegam aqui.</p>
+  </div>
+  <div class="df-actions">
+    {{ ui.button('Somente não lidas' if not so_novas else 'Mostrar todas', href='/notificacoes?perfil=' ~ perfil ~ ('&so_novas=1' if not so_novas else ''), style='secondary', size='small') }}
+    {% if nao_lidas %}<form method="post" action="/notificacoes/lidas" data-df-form><input type="hidden" name="perfil" value="{{ perfil }}">{{ ui.button('Marcar todas como lidas', style='ghost', size='small', glyph='check') }}</form>{% endif %}
+  </div>
+</div>
+{% if itens %}
+<ul class="df-notif-pagina">
+  {% for n in itens %}
+  <li class="df-card {{ 'nova' if not n.lida }}"><a href="/notificacoes/{{ n.id }}/ir?perfil={{ perfil }}">
+    <span class="df-notif-ponto" aria-hidden="true"></span>
+    <span class="df-notif-corpo"><b>{{ n.titulo }}</b>{% if n.texto %}<span>{{ n.texto }}</span>{% endif %}<small>{{ n.criada_em|datahora }}{{ ' · nova' if not n.lida }}</small></span>
+  </a></li>
+  {% endfor %}
+</ul>
+{% else %}
+{{ ui.empty('Nenhuma notificação por enquanto.', 'bell-simple') }}
+{% endif %}
+{% endblock %}
