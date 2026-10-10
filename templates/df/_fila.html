@@ -1,0 +1,32 @@
+{% import "df/_ui.html" as ui %}
+{% if fila and compacta %}
+<nav class="df-stack-sm" id="lista-fila" aria-label="Chamados na fila de atendimento">
+{% for x in fila %}{% set t = x.t %}
+  <a class="df-list-item" href="/tarefa/{{ t.id }}"{% if atual == t.id %} aria-current="page"{% endif %} data-filter-text="{{ t.external_id or t.id }} {{ t.titulo }}"><b>{{ t.external_id or ('#' ~ t.id) }} · {{ t.titulo }}</b><small>{{ STATUS[t.status][1] }} · {{ t.criado_em|datahora }}</small></a>
+{% endfor %}
+</nav>
+{% elif fila %}
+<div class="df-list">
+{% for x in fila %}{% set t = x.t %}{% set ia = x.ia %}
+  <a class="df-item-card df-fila-item" href="/tarefa/{{ t.id }}">
+    <div class="df-stack-sm">{{ ui.prio(x.prio) }}<small title="Tempo aguardando na fila">{{ ui.icon('timer') }}{{ x.minutos|espera }}</small></div>
+    <div class="df-stack-sm">
+      <div class="df-item-top"><span class="df-code">{{ t.external_id or ('#' ~ t.id) }}</span>{{ ui.status(t.status) }}
+        {% if t.origem != 'web' %}<span class="df-badge">{{ SISTEMAS[t.origem].nome }}</span>{% endif %}</div>
+      <h3>{{ t.titulo }}</h3>
+      <span class="df-item-meta"><span>{{ ui.icon('user') }}{{ t.solicitante or '—' }}{% if t.secretaria %} · {{ t.secretaria }}{% endif %}</span><span>{{ ui.icon('map-pin') }}{{ t.local or '—' }}</span></span>
+    </div>
+    <div class="df-stack-sm">
+      {% if t.ia_status == 'analisando' %}<span class="df-badge df-ia" aria-busy="true">{{ ui.icon('sparkle') }}IA analisando…</span>
+      {% elif ia %}
+        {% if ia.resolvivel_no_atendimento %}<span class="df-badge df-n1">{{ ui.icon('chat-circle') }}Resolver no atendimento</span>
+        {% else %}<span class="df-badge">{{ ui.icon('paper-plane-right') }}Encaminhar: {{ tipos[ia.tipo_id].area if ia.tipo_id in tipos else '—' }}</span>{% endif %}
+        <small>{{ ia.categoria }}{% if not ia.resolvivel_no_atendimento and ia.executor_id in execs %} · {{ execs[ia.executor_id] }}{% endif %}</small>
+      {% endif %}
+    </div>
+  </a>
+{% endfor %}
+</div>
+{% else %}
+{{ ui.empty('Fila vazia: nenhum chamado aguardando avaliação.', 'thumbs-up') }}
+{% endif %}

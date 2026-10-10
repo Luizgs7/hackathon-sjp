@@ -1,0 +1,90 @@
+{% import "df/_ui.html" as ui %}
+{# nav_perfil: publico (servidor/demandante) | painel (atendente/gestor) | campo (executor). ativo: item da navegação.
+   has_list / has_context: colunas opcionais (lista à esquerda, contexto à direita), como nos quadros do Figma. #}
+{% set nav_perfil = nav_perfil|default('publico') %}
+{% set papeis = (u.papeis.split(',') if u else []) %}
+{% set nav = [] %}
+{% if nav_perfil == 'painel' %}
+  {% set _ = nav.append(('atendimento', '/atendente', 'Atendimento', 'tray')) %}
+  {% if 'gestor' in papeis %}
+    {% set _ = nav.append(('painel', '/gestor', 'Painel', 'squares-four')) %}
+    {% set _ = nav.append(('metricas', '/gestor/metricas', 'Métricas', 'chart-bar')) %}
+  {% endif %}
+  {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy-fill')) %}
+  {% if 'gestor' in papeis %}{% set _ = nav.append(('config', '/config', 'Configurar', 'gear')) %}{% endif %}
+{% elif nav_perfil == 'campo' %}
+  {% set _ = nav.append(('missoes', '/campo', 'Missões', 'list-checks')) %}
+  {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy-fill')) %}
+{% else %}
+  {% set _ = nav.append(('assistente', '/servidor', 'Assistente', 'chat-circle')) %}
+  {% set _ = nav.append(('solicitar', '/servidor/solicitar', 'Solicitar', 'note-pencil')) %}
+  {% set _ = nav.append(('chamados', '/meus-chamados', 'Acompanhar', 'list-checks')) %}
+{% endif %}
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}Help Desk SJP{% endblock %} · DataForge</title>
+  <script>try{var c=localStorage.getItem('dataforge.theme')||'system';var d=c==='dark'||(c==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}</script>
+  <link rel="stylesheet" href="/static/ui/library.css">
+  <link rel="stylesheet" href="/static/ui/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body class="df-ui df-app{{ ' df-bare' if bare }}" data-theme="light">
+<script>document.body.dataset.theme=document.documentElement.dataset.theme;</script>
+<a class="df-skip" href="#conteudo">Ir para o conteúdo</a>
+<div class="df-shell{{ ' has-list' if has_list }}{{ ' has-context' if has_context }}">
+  <nav class="df-nav" aria-label="Navegação principal">
+    <a class="df-brand" href="/" aria-label="Help Desk SJP: início"><span class="df-brand-mark">{{ ui.icon('headset') }}</span><b>Help Desk SJP</b></a>
+    <div class="df-nav-list">
+      {% for key, href, label, glyph in nav %}
+      <a class="df-nav-item" href="{{ href }}" title="{{ label }}"{% if ativo == key %} aria-current="page"{% endif %}>{{ ui.icon(glyph) }}<span>{{ label }}</span></a>
+      {% endfor %}
+    </div>
+  </nav>
+
+  {% if has_list %}
+  <aside id="df-list" class="df-list-col" aria-label="{% block list_label %}Lista{% endblock %}">{% block list_col %}{% endblock %}</aside>
+  <div class="df-scrim" data-list-scrim hidden></div>
+  {% endif %}
+
+  <div class="df-main-wrap">
+    <header class="df-topbar">
+      <div class="df-actions">
+        {% if has_list %}<button type="button" class="df-button df-ghost df-icon-button" data-list-toggle aria-controls="df-list" aria-expanded="false" aria-label="{{ self.list_label() }}"><span class="df-button-content">{{ ui.icon('list') }}</span></button>{% endif %}
+        <a class="df-brand-mobile" href="/" aria-label="Help Desk SJP: início"><span class="df-brand-name">Help Desk SJP</span><span class="df-page-name">{% block page_name %}{{ self.title() }}{% endblock %}</span></a>
+      </div>
+      <details class="df-usermenu" data-menu>
+        <summary aria-label="Menu do usuário">{% if u %}{{ ui.avatar(u.nome, 'sm') }}<b>{{ u.nome.split()[0] }}</b>{% else %}{{ ui.avatar('Visitante', 'sm') }}<b>Visitante</b>{% endif %}</summary>
+        <div class="df-menu-panel">
+          <div class="df-stack-sm"><small>Tema da interface</small>
+            <div class="df-strip" role="group" aria-label="Tema da interface">
+              <button type="button" class="df-chip" data-theme-choice="light" aria-pressed="false">{{ ui.icon('sun') }}Claro</button>
+              <button type="button" class="df-chip" data-theme-choice="dark" aria-pressed="false">{{ ui.icon('moon') }}Escuro</button>
+              <button type="button" class="df-chip" data-theme-choice="system" aria-pressed="true">Auto</button>
+            </div>
+          </div>
+          {% if u %}
+          <a class="df-button df-secondary" href="/sair?area={{ 'campo' if nav_perfil == 'campo' else 'painel' }}"><span class="df-button-content">Sair</span></a>
+          {% else %}
+          <a class="df-button df-primary" href="/login"><span class="df-button-content">Entrar</span></a>
+          {% endif %}
+        </div>
+      </details>
+    </header>
+    <main id="conteudo" class="df-main{{ ' df-main-wide' if wide }}{{ ' df-main-flush' if flush }}" tabindex="-1">
+      {% if msg %}<div class="df-notice df-notice-info" role="status">{{ ui.icon('info') }}<div>{{ msg }}</div></div>{% endif %}
+      {% block main %}{% endblock %}
+    </main>
+  </div>
+
+  {% if has_context %}<aside class="df-context-col" aria-label="{% block context_label %}Contexto{% endblock %}">{% block context_col %}{% endblock %}</aside>{% endif %}
+</div>
+<div class="df-toasts" aria-live="polite"></div>
+<script src="/static/ui/library.js"></script>
+<script src="/static/ui/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

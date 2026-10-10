@@ -1,0 +1,11 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro side_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Side Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro sidebar_navigation(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Sidebar Navigation', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro page_header(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Page Header', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

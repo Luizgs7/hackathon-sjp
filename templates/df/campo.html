@@ -1,0 +1,61 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'campo' %}
+{% set ativo = 'missoes' %}
+{% set has_context = true %}
+{% block title %}Minhas missões{% endblock %}
+{% block context_label %}Seu progresso{% endblock %}
+{% block context_col %}<section class="df-ctx" aria-labelledby="prog-t"><h2 id="prog-t" style="font-size:16px">Seu progresso</h2><div id="ctx-progresso"></div></section>{% endblock %}
+{% block main %}
+<div class="df-page-head"><div><h1>Minhas missões</h1><p>Olá, {{ u.nome.split()[0] }}. Aqui ficam as missões atribuídas a você.</p></div></div>
+<div id="banner" class="df-banner-new" role="alert" tabindex="0" hidden></div>
+<div id="push-box" class="df-stack-sm">
+  <button id="btn-push" type="button" class="df-button df-secondary df-big-action"><span class="df-button-content">{{ ui.icon('bell') }}<span id="push-label">Ativar notificações de novas missões</span></span></button>
+  <small id="push-status" role="status"></small>
+</div>
+<div id="lista" aria-live="polite" hx-get="/campo/lista" hx-trigger="load, every 3s">
+  <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando missões"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  let ultima = null;
+  document.body.addEventListener('htmx:afterSwap', () => {
+    const el = document.querySelector('[data-ultima]');
+    if (!el) return;
+    const v = Number(el.dataset.ultima);
+    if (ultima !== null && v > ultima) {
+      const b = document.getElementById('banner');
+      b.textContent = 'Nova missão recebida! Toque para abrir.';
+      b.hidden = false; b.onclick = () => { location.href = '/campo/' + v; };
+      b.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') location.href = '/campo/' + v; };
+      if (navigator.vibrate) navigator.vibrate(200);
+    }
+    ultima = v;
+  });
+
+  const btn = document.getElementById('btn-push');
+  const label = document.getElementById('push-label');
+  const status = document.getElementById('push-status');
+  const say = (texto, estado) => { label.textContent = texto; if (estado !== undefined) status.textContent = estado; };
+  const b64ToUint8 = s => { const p = '='.repeat((4 - s.length % 4) % 4); const r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from([...r].map(c => c.charCodeAt(0))); };
+  async function ativarPush() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) { say('Push indisponível neste navegador', 'Use o aviso na tela: novas missões aparecem aqui automaticamente.'); return; }
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { say('Notificações bloqueadas', 'Libere as notificações do site nas configurações do navegador. Os avisos na tela continuam funcionando.'); return; }
+    const reg = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+    await navigator.serviceWorker.ready;
+    const { chave } = await (await fetch('/api/push/chave')).json();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToUint8(chave) });
+    await fetch('/api/push/inscrever', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub) });
+    say('Notificações ativas · enviar teste', 'Você receberá novas missões como notificação.');
+    btn.onclick = () => fetch('/api/push/teste', { method: 'POST' });
+  }
+  btn.onclick = () => ativarPush().catch(err => say('Não foi possível ativar. Tentar de novo', 'Falha ao ativar push: ' + err.message));
+  if ('Notification' in window && Notification.permission === 'granted') ativarPush().catch(() => {});
+})();
+</script>
+{% endblock %}

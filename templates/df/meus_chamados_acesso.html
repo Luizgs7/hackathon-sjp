@@ -1,0 +1,25 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'publico' %}
+{% set ativo = 'chamados' %}
+{% block title %}Meus chamados{% endblock %}
+{% block main %}
+<div class="df-center">
+<section class="df-card df-center-card" aria-labelledby="acesso-t">
+  <h1 id="acesso-t" style="font-size:22px">Meus chamados</h1>
+  <p class="df-muted">Acompanhe o andamento dos chamados em aberto e consulte o seu histórico de atendimentos.</p>
+  {% if link %}
+    <p>Enviamos um link de acesso para <b>{{ email }}</b>. Ele vale por 7 dias.</p>
+    {% call ui.notice('', 'info', 'info') %}E-mail simulado (protótipo): no sistema real, o link chega na sua caixa de entrada.{% endcall %}
+    {{ ui.button('Abrir meus chamados', href=link, cls='df-wide') }}
+    <small>Se este e-mail não tiver chamados, a página aparecerá vazia.</small>
+  {% else %}
+    <form class="df-form" method="post" action="/meus-chamados" data-df-form>
+      {{ ui.field('email', 'E-mail usado ao abrir os chamados', '', type='email', required=True, autocomplete='email', placeholder='nome.sobrenome@sjp.pr.gov.br', autofocus=True, error=msg if msg and 'e-mail' in msg|lower else '') }}
+      {{ ui.button('Receber link de acesso', cls='df-wide') }}
+    </form>
+    <small>Por segurança, mostramos os chamados só por meio de um link enviado ao seu e-mail.</small>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% import "df/_ui.html" as ui %}
+<section class="df-kpis df-kpis-wide" aria-label="Indicadores">
+  {{ ui.kpi(ind.recebidas, 'registrados', titulo='Total de chamados registrados (tabela tarefas)') }}
+  {{ ui.kpi(ind.novos, 'na fila do atendimento', titulo='Novos, devolvidos ou reabertos: na fila de avaliação do atendimento') }}
+  {{ ui.kpi(ind.em_execucao, 'em andamento', titulo='Encaminhados ao técnico (aguardando, a caminho ou em execução)') }}
+  {{ ui.kpi(ind.impedidas, 'impedidos', ind.impedidas, 'Encaminhados com impedimento aberto') }}
+  {{ ui.kpi(ind.devolvidos, 'devolvidos', titulo='Devolvidos pelo técnico à triagem (falta informação, outra área…)') }}
+  {{ ui.kpi(ind.aguardando, 'executados', titulo='Executados pelo técnico e ainda não confirmados pela demandante') }}
+  {{ ui.kpi(ind.resolvidas, 'concluídos', titulo='Resolução confirmada pela demandante') }}
+  {{ ui.kpi(ind.cancelados, 'cancelados', titulo='Cancelados por atendente ou gestor') }}
+  {{ ui.kpi(ind.tempo_inicio, 'até iniciar', titulo="Média entre o evento 'Encaminhado' e o primeiro 'Em execução'") }}
+  {{ ui.kpi(ind.tempo_confirmacao, 'até confirmar', titulo="Média entre 'Executado' (técnico) e 'Concluído' (confirmação da demandante)") }}
+  {{ ui.kpi(ind.csat, 'satisfação', titulo='Média das notas 1–5 dadas pelos demandantes (quantidade entre parênteses)') }}
+  {{ ui.kpi(ind.reaberturas, 'reaberturas', titulo='Soma de reaberturas por pendência indicada pela demandante') }}
+  {{ ui.kpi(ind.auto_resolvidos, 'resolvidos pelo assistente', titulo="Conversas do autoatendimento em que o servidor marcou 'Resolvido' (chamados evitados)") }}
+  {{ ui.kpi(ind.solicitacoes_aguardando, 'solicitações a registrar', titulo='Solicitações de servidores aguardando conferência e registro pelo atendente') }}
+  {{ ui.kpi(ind.outbox_pendente, 'sincronização pendente', ind.outbox_pendente, 'Atualizações aguardando entrega ao sistema de origem (outbox)') }}
+</section>
+{% if ind.motivos %}<p class="df-muted"><b>Principais motivos de impedimento:</b>
+  {% for r in ind.motivos %}{{ r.motivo }} ({{ r.n }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+
+{% macro cartao(t) -%}
+<a class="df-item-card" href="/tarefa/{{ t.id }}">
+  <div class="df-item-top">{{ ui.prio(t.prioridade) }}
+    {% if t.status != STATUS_OFICIAL[t.status] %}{{ ui.status(t.status) }}{% endif %}
+    {% if t.ia_status == 'analisando' %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}triando…</span>
+    {% elif t.ia_status == 'sugerida' and t.status in ('novo', 'devolvido', 'reaberto') %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}sugestão p/ conferir</span>{% endif %}</div>
+  <h3><span class="df-code">#{{ t.id }}</span> {{ t.titulo }}</h3>
+  <span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local or '—' }}</span>{% if t.secretaria %}<span>{{ t.secretaria }}</span>{% endif %}</span>
+  <span class="df-item-meta"><span>{% if t.executor %}{{ ui.avatar(t.executor, 'sm') }} {{ t.executor }}{% else %}sem executor{% endif %}</span><span>{{ t.atualizado_em|hora }}</span>
+    {% if t.origem != 'web' %}<span>{{ SISTEMAS[t.origem].nome }} {{ t.external_id }}</span>{% endif %}</span>
+</a>
+{%- endmacro %}
+
+<section class="df-blocked-strip{{ ' df-calm' if not impedidos }}" aria-labelledby="imp-t">
+  <h2 id="imp-t" style="font-size:16px">{{ ui.icon('warning') }} Impedidos: precisam de ação da gestão ({{ impedidos|length }})</h2>
+  {% if impedidos %}<div class="df-list" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">{% for t in impedidos %}{{ cartao(t) }}{% endfor %}</div>
+  {% else %}<small>Nenhum chamado impedido.</small>{% endif %}
+</section>
+
+<div class="df-board" role="region" aria-label="Quadro de chamados por estado" tabindex="0">
+  {% for s in STATUS_OFICIAIS %}
+  <section class="df-board-col" aria-labelledby="col-{{ s }}">
+    <header><span id="col-{{ s }}">{{ ui.icon('tray') if s == 'novo' else '' }}{{ STATUS[s][1] }}</span><span class="df-badge">{{ totais[s] }}</span></header>
+    {% if totais[s] > colunas[s]|length %}<small>Mostrando os {{ colunas[s]|length }} mais recentes · histórico em <a href="/gestor/metricas">Métricas</a></small>{% endif %}
+    {% for t in colunas[s] %}{{ cartao(t) }}{% else %}<small class="df-muted">Nenhuma tarefa neste estado.</small>{% endfor %}
+  </section>
+  {% endfor %}
+</div>

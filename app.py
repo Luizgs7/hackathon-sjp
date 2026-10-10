@@ -24,11 +24,14 @@ from pathlib import Path
 from urllib.parse import quote
 
 import httpx
+from jev import JevError, classify_task, route_conversation
+from haiku import generate as generate_haiku
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 BASE = Path(__file__).parent
 load_dotenv(BASE / ".env")
@@ -39,11 +42,7 @@ UPLOADS.mkdir(exist_ok=True)
 LEGADO_URL = os.getenv("LEGADO_URL", "http://localhost:8001")
 API_KEY_LEGADO = os.getenv("API_KEY_LEGADO", "chave-demo-legado")
 SECRET = os.getenv("SESSION_SECRET", "troque-este-segredo-em-producao")
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://integrate.api.nvidia.com/v1")
-LLM_MODEL = os.getenv("LLM_MODEL", "nvidia/nemotron-3-super-120b-a12b")
-LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "45"))
-LLM_SEM_RACIOCINIO = os.getenv("LLM_SEM_RACIOCINIO", "true").lower() == "true"
+LLM_MODEL = os.getenv("HAIKU_MODEL", "claude-haiku-5-5")
 VAPID_PEM = BASE / "vapid_private.pem"
 VAPID_SUB = os.getenv("VAPID_SUB", "mailto:simot@exemplo.sjp.pr.gov.br")
 SEED_HISTORICO = os.getenv("SEED_HISTORICO", "true").lower() == "true"
@@ -276,6 +275,7 @@ def temporada_atual(c):
 
 # Colunas incluídas depois da primeira versão: bancos já existentes recebem um ALTER TABLE na inicialização.
 MIGRACOES = [
+    ("autoatendimento", "jev_json", "TEXT"),
     ("tarefas", "email", "TEXT NOT NULL DEFAULT ''"),
     ("tarefas", "secretaria", "TEXT NOT NULL DEFAULT ''"),
     ("tarefas", "prioridade_ajustada_por", "TEXT"),
@@ -523,20 +523,9 @@ def em_segundo_plano(fn, *args):
 
 # ---------------------------------------------------------------- IA
 
-def llm(messages, max_tokens=1200, temperature=0.2):
-    if not LLM_API_KEY:
-        raise RuntimeError("LLM_API_KEY não configurada")
-    from openai import OpenAI
-    client = OpenAI(base_url=LLM_BASE_URL, api_key=LLM_API_KEY, timeout=LLM_TIMEOUT, max_retries=0)
-    # Modelos de raciocínio (ex.: Nemotron, Qwen3) gastam tokens "pensando"; desligar deixa a resposta rápida e direta.
-    extra = {"chat_template_kwargs": {"enable_thinking": False}} if LLM_SEM_RACIOCINIO else None
-    r = client.chat.completions.create(model=LLM_MODEL, messages=messages, temperature=temperature,
-                                       max_tokens=max_tokens, extra_body=extra)
-    texto = (r.choices[0].message.content or "").strip()
-    texto = re.sub(r"<think>.*?</think>", "", texto, flags=re.S).strip()
-    if not texto:
-        raise RuntimeError("LLM retornou vazio")
-    return texto
+def llm(messages, max_tokens=1200, temperature=0.2, effort=None):
+    # temperature mantido na assinatura para os chamadores existentes; não enviado ao Haiku.
+    return generate_haiku(messages, max_tokens, effort=effort)
 
 
 def extrair_json(texto):
@@ -601,56 +590,73 @@ def triagem_por_regras(c, t):
 
 
 def triar(tarefa_id):
-    """Triagem assíncrona: tipo, criticidade, informações faltantes e executor sugerido (conferidos pelo gestor)."""
+    """JEV sugere classificação; regras calculam elegibilidade; humano decide."""
     with db() as c:
         t = c.execute("SELECT * FROM tarefas WHERE id=?", (tarefa_id,)).fetchone()
-        tipos = c.execute("SELECT t.id, t.nome, t.complexidade, s.nome setor, s.id setor_id FROM tipos t "
-                          "JOIN setores s ON s.id=t.setor_id").fetchall()
-        execs = carga_executores(c)
-        historico = c.execute("SELECT count(*) n FROM tarefas WHERE local=? AND id<>?", (t["local"], t["id"])).fetchone()["n"]
-    fonte = "llm"
+        if not t or t["ia_status"] != "analisando":
+            return
+        # Token exclusivo: uma retriagem invalida retornos anteriores, mesmo no mesmo segundo.
+        request_id = secrets.token_hex(16)
+        c.execute("UPDATE tarefas SET ia_json=? WHERE id=?",
+                  (json.dumps({"request_id": request_id}), tarefa_id))
+        tipos = c.execute("SELECT t.*, s.nome setor FROM tipos t JOIN setores s ON s.id=t.setor_id").fetchall()
+        r = triagem_por_regras(c, t)
+    fonte = "regras"
     try:
-        prompt = (
-            "Você faz a triagem de chamados de uma prefeitura. Responda SOMENTE com um objeto JSON com as chaves: "
-            '"tipo_id" (int), "prioridade" ("P1" crítica|"P2" alta|"P3" média|"P4" baixa), "justificativa" (1 frase), '
-            '"categoria" (texto curto), "complexidade" (1-5), "resumo" (1 frase objetiva), '
-            '"informacoes_faltantes" (lista de perguntas que o atendente deveria ter feito; vazia se nada faltar), '
-            '"executor_id" (int, da mesma área do tipo; cada tipo pertence a uma área de TI), "motivo_executor" (1 frase citando competência e carga), '
-            '"resolvivel_no_atendimento" (bool: true se o próprio atendente consegue resolver por telefone/orientação, sem '
-            'técnico — ex.: dúvida de uso, desbloqueio de senha), "orientacao_atendimento" (1-2 frases do que o atendente deve '
-            'orientar; "" se não for resolvível no atendimento).\n'
-            "Critérios de criticidade: serviço essencial parado ou risco à segurança = P1; unidade de atendimento ao "
-            "público (saúde, educação, assistência) afetada = P2; impacto localizado = P3; melhoria = P4.\n\n"
-            f"TIPOS: {json.dumps([dict(x) for x in tipos], ensure_ascii=False)}\n"
-            f"EXECUTORES: {json.dumps([{k: e[k] for k in ('id', 'nome', 'equipe', 'setor_id', 'competencias', 'carga', 'resolvidas')} for e in execs], ensure_ascii=False)}\n"
-            f"CHAMADO: título={t['titulo']!r}; descrição={t['descricao']!r}; local={t['local']!r}; "
-            f"solicitante={t['solicitante']!r}; secretaria={t['secretaria'] or 'não informada'!r}; "
-            f"contato={t['contato'] or 'não informado'!r}; "
-            f"chamados anteriores no mesmo local={historico}"
-        )
-        r = extrair_json(llm([{"role": "system", "content": "Você é um assistente de triagem. Responda apenas JSON válido."},
-                              {"role": "user", "content": prompt}]))
-        ids_tipo = {x["id"]: x for x in tipos}
-        if r.get("tipo_id") not in ids_tipo or r.get("prioridade") not in PRIORIDADES:
-            raise ValueError("JSON fora do esperado")
-        setor_tipo = ids_tipo[r["tipo_id"]]["setor_id"]
-        if r.get("executor_id") not in {e["id"] for e in execs if e["setor_id"] == setor_tipo}:
-            r["executor_id"] = None
-        r["informacoes_faltantes"] = [str(x) for x in (r.get("informacoes_faltantes") or [])][:5]
-        r["complexidade"] = max(1, min(5, int(r.get("complexidade") or 2)))
-        r["resolvivel_no_atendimento"] = bool(r.get("resolvivel_no_atendimento"))
-        r["orientacao_atendimento"] = str(r.get("orientacao_atendimento") or "") if r["resolvivel_no_atendimento"] else ""
-    except Exception as e:  # noqa: BLE001 — fallback garante a demo sem IA externa
-        log.warning("triagem LLM falhou (%s); usando regras", e)
-        with db() as c:
-            r = triagem_por_regras(c, t)
-        fonte = "regras"
+        decision = classify_task(t, tipos)
+        tipo = decision["answers"]["tipo"]["choice"]
+        prioridade = decision["answers"]["prioridade"]["choice"]
+        if tipo != "revisar":
+            selected = next(x for x in tipos if str(x["id"]) == tipo)
+            # Reaproveitar regras de completude e competência para a categoria escolhida.
+            with db() as c:
+                candidates = carga_executores(c, selected["setor_id"])
+            keyword = selected["base_conhecimento"].lower() or selected["nome"].lower()
+            compatible = [e for e in candidates if any(w in e["competencias"].lower() for w in keyword.split("/"))
+                          or keyword[:4] in e["competencias"].lower()]
+            executor = (compatible or candidates)[0] if candidates else None
+            missing = []
+            if not t["contato"]:
+                missing.append("Telefone ou ramal de contato do solicitante")
+            if len(t["local"]) < 8:
+                missing.append("Local exato (sala/andar)")
+            if selected["base_conhecimento"] == "Rede" and not re.search(r"\d", t["descricao"]):
+                missing.append("Número/identificação do ponto de rede")
+            r.update(tipo_id=selected["id"], categoria=selected["nome"], complexidade=selected["complexidade"],
+                     executor_id=executor["id"] if executor else None, informacoes_faltantes=missing,
+                     motivo_executor=(f"Competência e carga atual: {executor['carga']} tarefas ativas."
+                                      if executor else "Nenhum executor disponível no setor."))
+        if prioridade != "revisar":
+            r["prioridade"] = prioridade
+        r["revisao_necessaria"] = tipo == "revisar" or prioridade == "revisar"
+        r["resolvivel_no_atendimento"] = (tipo != "revisar" and selected["setor_id"] == AREA_NIVEL1
+                                          and r["prioridade"] != "P1" and not r["revisao_necessaria"])
+        r["orientacao_atendimento"] = (BASE_AUTOATENDIMENTO.get(selected["base_conhecimento"], "")
+                                       if r["resolvivel_no_atendimento"] else "")
+        r["justificativa"] = ("Informação insuficiente ou fora do catálogo; conferir os valores provisórios por regras."
+                              if r["revisao_necessaria"] else
+                              "Classificação sugerida pela IA a partir do relato e dos critérios de impacto; requer conferência.")
+        r["jev"] = decision
+        fonte = "jev"
+    except JevError as exc:
+        log.warning("triagem indisponível: %s; usando regras", exc)
     with db() as c:
-        c.execute("UPDATE tarefas SET ia_status='sugerida', ia_fonte=?, ia_json=?, atualizado_em=? WHERE id=?",
-                  (fonte, json.dumps(r, ensure_ascii=False), agora(), tarefa_id))
+        atual = c.execute("SELECT * FROM tarefas WHERE id=?", (tarefa_id,)).fetchone()
+        if (not atual or atual["ia_status"] != "analisando"
+                or json.loads(atual["ia_json"] or "{}").get("request_id") != request_id
+                or any(atual[k] != t[k] for k in ("titulo", "descricao", "local", "secretaria", "setor_id", "status"))):
+            return
+        saved = c.execute("UPDATE tarefas SET ia_status='sugerida', ia_fonte=?, ia_json=?, atualizado_em=? "
+                          "WHERE id=? AND ia_status='analisando' AND ia_json=? "
+                          "AND titulo IS ? AND descricao IS ? AND local IS ? AND secretaria IS ? "
+                          "AND setor_id IS ? AND status IS ?",
+                          (fonte, json.dumps(r, ensure_ascii=False), agora(), tarefa_id, atual["ia_json"],
+                           t["titulo"], t["descricao"], t["local"], t["secretaria"], t["setor_id"], t["status"]))
+        if not saved.rowcount:
+            return
         registrar_evento(c, tarefa_id, "Assistente IA", "ia",
-                         f"Sugestão de triagem: {r.get('categoria')} · {r['prioridade']} – {r.get('justificativa')} "
-                         f"(fonte: {'LLM' if fonte == 'llm' else 'regras'}; aguardando avaliação do atendimento)")
+                         f"Sugestão de triagem: {r.get('categoria')} · {r['prioridade']} – {r['justificativa']} "
+                         f"(fonte: {'IA' if fonte == 'jev' else 'regras'}; aguardando avaliação do atendimento)")
 
 
 def sugerir_apoio(impedimento_id):
@@ -712,7 +718,7 @@ def responder_chat(c, t, pergunta):
         msgs.append({"role": "user" if h["autor"] == "executor" else "assistant", "content": h["texto"]})
     msgs.append({"role": "user", "content": pergunta})
     try:
-        resposta = llm(msgs, max_tokens=1500, temperature=0.3)
+        resposta = llm(msgs, max_tokens=1500, effort=os.getenv("HAIKU_CHAT_EFFORT", "low"))
         return re.sub(r"\*\*|^#+\s*", "", resposta, flags=re.M), "llm"
     except Exception as e:  # noqa: BLE001
         log.warning("chat LLM falhou (%s)", e)
@@ -1156,8 +1162,14 @@ templates.env.filters["espera"] = lambda m: (f"{m:.0f} min" if m < 60 else f"{m 
 templates.env.filters["duracao"] = lambda h: "–" if h is None else (f"{h:.1f} h" if h < 48 else f"{h / 24:.1f} dias").replace(".", ",")
 
 
+# Páginas já migradas para a interface DataForge (templates/df/). As demais continuam em Pico até migrarem.
+DF_PAGINAS = {p.name for p in (BASE / "templates" / "df").glob("*.html")} - {"_base.html", "_ui.html", "erro.html"}
+
+
 def render(request, nome, **ctx):
     ctx.setdefault("msg", request.query_params.get("msg"))
+    if nome in DF_PAGINAS:
+        nome = f"df/{nome}"
     return templates.TemplateResponse(request, nome, ctx)
 
 
@@ -1174,10 +1186,16 @@ def usuario_do_cookie(request, nome):
                          "WHERE u.id=?", (v.split(".", 1)[0],)).fetchone()
 
 
+def para_login(request, cookie):
+    """Sessão ausente: vai ao login; se havia cookie inválido ou expirado, avisa."""
+    aviso = "?msg=" + quote("Sua sessão expirou. Entre novamente.") if request.cookies.get(cookie) else ""
+    return HTTPException(303, headers={"Location": "/login" + aviso})
+
+
 def exige_painel(request, *papeis):
     u = usuario_do_cookie(request, "sess_painel")
     if not u:
-        raise HTTPException(303, headers={"Location": "/login"})
+        raise para_login(request, "sess_painel")
     if papeis and not set(papeis) & set(u["papeis"].split(",")):
         raise HTTPException(403, f"Acesso restrito ao(s) papel(is): {', '.join(papeis)}")
     return u
@@ -1186,7 +1204,7 @@ def exige_painel(request, *papeis):
 def exige_executor(request):
     u = usuario_do_cookie(request, "sess_campo")
     if not u:
-        raise HTTPException(303, headers={"Location": "/login"})
+        raise para_login(request, "sess_campo")
     return u
 
 
@@ -1213,16 +1231,34 @@ def recarregar_se_mudou(c, tid, versao):
     return Response(status_code=204)
 
 
-@app.exception_handler(HTTPException)
-async def erro_http(request: Request, exc: HTTPException):
+ERROS_UI = {403: ("prohibit", "Acesso restrito", "/login", "Trocar de usuário"),
+            404: ("magnifying-glass", "Página não encontrada", "/", "Ir ao início"),
+            409: ("warning", "Ação não permitida agora", "/", "Ir ao início"),
+            422: ("warning", "Revise os dados enviados", "/", "Ir ao início")}
+
+
+def pagina_de_erro(request, codigo, detalhe):
+    icone, titulo, destino, rotulo = ERROS_UI.get(codigo, ("warning", "Não foi possível concluir", "/", "Ir ao início"))
+    if codigo >= 500:
+        detalhe = "Algo falhou no servidor. Tente novamente em instantes."
+    u = usuario_do_cookie(request, "sess_painel")
+    perfil = "painel"
+    if not u:
+        u = usuario_do_cookie(request, "sess_campo")
+        perfil = "campo" if u else "publico"
+    return templates.TemplateResponse(request, "df/erro.html",
+                                      dict(codigo=codigo, icone=icone, titulo=titulo, detalhe=detalhe, destino=destino,
+                                           destino_rotulo=rotulo, u=u, perfil=perfil, ativo="", msg=None),
+                                      status_code=codigo)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def erro_http(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 303:
         return RedirectResponse(exc.headers["Location"], status_code=303)
     if request.url.path.startswith("/api/"):
         return JSONResponse({"erro": exc.detail}, status_code=exc.status_code)
-    return HTMLResponse(f"<!doctype html><meta charset=utf-8><link rel=stylesheet href=/static/pico.min.css>"
-                        f"<main class=container><h2>Erro {exc.status_code}</h2><p>{exc.detail}</p>"
-                        f"<a href='javascript:history.back()'>← Voltar</a> · <a href=/login>Trocar usuário</a></main>",
-                        status_code=exc.status_code)
+    return pagina_de_erro(request, exc.status_code, str(exc.detail))
 
 
 # ---------------------------------------------------------------- login
@@ -1308,14 +1344,15 @@ def reprocessar(request: Request):
 # ---------------------------------------------------------------- atendente e gestor (web)
 
 @app.get("/atendente", response_class=HTMLResponse)
-def atendente(request: Request):
+def atendente(request: Request, sol: int = 0):
     u = exige_painel(request, "atendente", "gestor")
     with db() as c:
         setores = c.execute("SELECT * FROM setores").fetchall()
         minhas = c.execute("SELECT * FROM tarefas ORDER BY criado_em DESC, id DESC LIMIT 15").fetchall()
         solicitacoes = c.execute("SELECT * FROM solicitacoes WHERE status='aguardando' ORDER BY id").fetchall()
+    sel = next((s for s in solicitacoes if s["id"] == sol), None)
     return render(request, "atendente.html", u=u, setores=setores, tarefas=minhas, solicitacoes=solicitacoes,
-                  secretarias=SECRETARIAS)
+                  sel=sel, secretarias=SECRETARIAS)
 
 
 def fila_atendimento(c):
@@ -1334,13 +1371,13 @@ def fila_atendimento(c):
 
 
 @app.get("/atendente/fila", response_class=HTMLResponse)
-def atendente_fila(request: Request):
+def atendente_fila(request: Request, compacta: int = 0, atual: int = 0):
     exige_painel(request, "atendente", "gestor")
     with db() as c:
         fila = fila_atendimento(c)
         tipos = {r["id"]: r for r in c.execute("SELECT t.*, s.nome area FROM tipos t JOIN setores s ON s.id=t.setor_id")}
         execs = {r["id"]: r["nome"] for r in c.execute("SELECT id, nome FROM usuarios")}
-    return render(request, "_fila.html", fila=fila, tipos=tipos, execs=execs)
+    return render(request, "_fila.html", fila=fila, tipos=tipos, execs=execs, compacta=compacta, atual=atual)
 
 
 def validar_solicitante(nome, email, secretaria):
@@ -1796,7 +1833,8 @@ def validar_form(request: Request, token: str):
         executor = c.execute("SELECT nome, avatar FROM usuarios WHERE id=?", (t["executor_id"],)).fetchone()
         linha = c.execute("SELECT para, criado_em FROM eventos WHERE tarefa_id=? AND para IS NOT NULL ORDER BY id",
                           (t["id"],)).fetchall()
-    return render(request, "validar.html", t=t, executor=executor, linha=linha)
+        minhas = solicitacoes_do_visitante(request, c)
+    return render(request, "validar.html", t=t, executor=executor, linha=linha, minhas=minhas)
 
 
 @app.post("/validar/{token}")
@@ -1837,8 +1875,36 @@ def _sessao_auto(request, c):
     return None
 
 
+def solicitacoes_do_visitante(request, c):
+    """Lista lateral do assistente: só aparece para quem já acessou 'Meus chamados' neste navegador (leitura apenas)."""
+    token = request.cookies.get("acesso_solicitante")
+    acesso = c.execute("SELECT email FROM acessos_solicitante WHERE token=? AND criado_em>=?", (
+        token, (datetime.now() - timedelta(days=ACESSO_DIAS)).strftime("%Y-%m-%d %H:%M:%S"))).fetchone() if token else None
+    if not acesso:
+        return []
+    return c.execute("SELECT protocolo, titulo, criado_em, token FROM solicitacoes WHERE lower(email)=? "
+                     "ORDER BY criado_em DESC LIMIT 12", (acesso["email"],)).fetchall()
+
+
 def responder_autoatendimento(c, token, pergunta):
     historico = c.execute("SELECT autor, texto FROM auto_msgs WHERE token=? ORDER BY id DESC LIMIT 10", (token,)).fetchall()
+    relatos = [h["texto"] for h in reversed(historico) if h["autor"] == "servidor"]
+    if not relatos or relatos[-1] != pergunta:
+        relatos.append(pergunta)
+    try:
+        decisao = route_conversation(relatos, BASE_AUTOATENDIMENTO)
+        c.execute("UPDATE autoatendimento SET jev_json=? WHERE token=?",
+                  (json.dumps(decisao, ensure_ascii=False), token))
+        acao = decisao["answers"]["acao"]["choice"]
+        if acao == "esclarecer":
+            return "Pode descrever o que acontece e qual mensagem de erro aparece? Se preferir, clique em 'Abrir solicitação'.", "jev"
+        if acao == "helpdesk":
+            return "Este caso precisa ser avaliado pelo Helpdesk. Clique em 'Abrir solicitação' e revise os dados; o atendente receberá o histórico e formalizará o chamado, se necessário.", "jev"
+        if acao == "risco":
+            return "Afaste-se do risco e não toque em equipamentos ou instalações. Acione o atendimento de emergência adequado se houver perigo imediato. Para registrar a demanda no Helpdesk, clique em 'Abrir solicitação'.", "jev"
+    except JevError as exc:
+        log.warning("avaliação de entrada indisponível: %s", exc)
+        c.execute("UPDATE autoatendimento SET jev_json=NULL WHERE token=?", (token,))
     msgs = [{"role": "system", "content":
              "Você é o Assistente Virtual do Help Desk da Prefeitura de São José dos Pinhais, atendendo servidores "
              "municipais que NÃO são técnicos. Objetivo: resolver problemas simples com orientações seguras antes que "
@@ -1850,11 +1916,15 @@ def responder_autoatendimento(c, token, pergunta):
              "para clicar em 'Abrir solicitação' — o atendente receberá o resumo desta conversa. Responda em português, "
              "em texto simples, sem markdown.\n"
              f"ORIENTAÇÕES PERMITIDAS: {json.dumps(BASE_AUTOATENDIMENTO, ensure_ascii=False)}"}]
-    for h in reversed(historico):
+    # A rota já inseriu a mensagem atual; não enviar a mesma pergunta duas vezes.
+    anteriores = list(reversed(historico))
+    if anteriores and anteriores[-1]["autor"] == "servidor" and anteriores[-1]["texto"] == pergunta:
+        anteriores.pop()
+    for h in anteriores:
         msgs.append({"role": "user" if h["autor"] == "servidor" else "assistant", "content": h["texto"]})
     msgs.append({"role": "user", "content": pergunta})
     try:
-        resposta = llm(msgs, max_tokens=800, temperature=0.3)
+        resposta = llm(msgs, max_tokens=800, effort=os.getenv("HAIKU_CHAT_EFFORT", "low"))
         return re.sub(r"\*\*|^#+\s*", "", resposta, flags=re.M), "llm"
     except Exception as e:  # noqa: BLE001
         log.warning("autoatendimento LLM falhou (%s)", e)
@@ -1893,7 +1963,8 @@ def servidor(request: Request):
     with db() as c:
         token = _sessao_auto(request, c)
         conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall() if token else []
-    return render(request, "servidor.html", conversa=conversa)
+        minhas = solicitacoes_do_visitante(request, c)
+    return render(request, "servidor.html", conversa=conversa, minhas=minhas)
 
 
 @app.post("/servidor/chat", response_class=HTMLResponse)
@@ -1938,8 +2009,9 @@ def servidor_solicitar_form(request: Request, via: str = ""):
         setores = c.execute("SELECT * FROM setores").fetchall()
         token = _sessao_auto(request, c) if via == "ia" else None
         rascunho, fonte = rascunho_da_conversa(c, token) if token else ({}, None)
+        minhas = solicitacoes_do_visitante(request, c)
     return render(request, "servidor_solicitar.html", setores=setores, r=rascunho, fonte=fonte, via_ia=bool(token),
-                  secretarias=SECRETARIAS)
+                  secretarias=SECRETARIAS, minhas=minhas)
 
 
 @app.post("/servidor/solicitar")
@@ -2042,7 +2114,8 @@ def servidor_acompanhar(request: Request, token: str):
         if not s:
             raise HTTPException(404, "Solicitação não encontrada")
         t = tarefa_ou_404(c, s["tarefa_id"]) if s["tarefa_id"] else None
-    return render(request, "servidor_acompanhar.html", s=s, t=t)
+        minhas = solicitacoes_do_visitante(request, c)
+    return render(request, "servidor_acompanhar.html", s=s, t=t, minhas=minhas)
 
 
 @app.post("/solicitacoes/{sid}/registrar")

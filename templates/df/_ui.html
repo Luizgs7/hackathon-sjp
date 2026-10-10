@@ -1,0 +1,137 @@
+{# Macros DataForge para as telas do produto. Textos e atributos são escapados pelo Jinja; nunca usar |safe com dados de usuários. #}
+{% macro icon(name) -%}<svg class="df-icon" aria-hidden="true" focusable="false"><use href="/static/ui/phosphor.svg#{{ name }}"/></svg>{%- endmacro %}
+
+{% macro attrs_out(attrs) -%}{% for k, v in (attrs or {}).items() %}{% if v is sameas true %} {{ k }}{% elif v is not none and v is not sameas false %} {{ k }}="{{ v }}"{% endif %}{% endfor %}{%- endmacro %}
+
+{# Botão ou link com aparência de botão. type/name/value seguem o contrato de formulários reais. #}
+{% macro button(label, type='submit', style='primary', size='medium', name=None, value=None, glyph=None, href=None, disabled=False, attrs=None, cls='') -%}
+{% if href %}<a class="df-button df-{{ style }} df-size-{{ size }} {{ cls }}" href="{{ href }}"{{ attrs_out(attrs) }}>{% if glyph %}{{ icon(glyph) }}{% endif %}<span class="df-button-content">{{ label }}</span></a>
+{%- else %}<button type="{{ type }}" class="df-button df-{{ style }} df-size-{{ size }} {{ cls }}"{% if name %} name="{{ name }}"{% endif %}{% if value is not none %} value="{{ value }}"{% endif %}{% if disabled %} disabled{% endif %}{{ attrs_out(attrs) }}><span class="df-button-content">{% if glyph %}{{ icon(glyph) }}{% endif %}{{ label }}</span></button>{% endif %}
+{%- endmacro %}
+
+{% macro icon_button(label, glyph, type='button', style='ghost', attrs=None) -%}
+<button type="{{ type }}" class="df-button df-{{ style }} df-icon-button" aria-label="{{ label }}"{{ attrs_out(attrs) }}><span class="df-button-content">{{ icon(glyph) }}</span></button>
+{%- endmacro %}
+
+{% macro field(name, label, value='', type='text', required=False, helper='', error='', placeholder='', autocomplete=None, maxlength=None, inputmode=None, id=None, autofocus=False, attrs=None, readonly=False) -%}
+{% set fid = id or ('f-' ~ name) %}
+<div class="df-field">
+  <label for="{{ fid }}">{{ label }}{% if required %}<span class="df-req" aria-hidden="true">*</span>{% endif %}</label>
+  <input id="{{ fid }}" name="{{ name }}" type="{{ type }}" value="{{ value if value is not none else '' }}"{% if required %} required aria-required="true"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if inputmode %} inputmode="{{ inputmode }}"{% endif %}{% if autofocus %} autofocus{% endif %}{% if readonly %} readonly{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if helper or error %} aria-describedby="{{ fid }}-help"{% endif %}{{ attrs_out(attrs) }}>
+  {% if helper or error %}<small id="{{ fid }}-help" class="{{ 'df-error' if error else 'df-help' }}">{{ error or helper }}</small>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro textarea(name, label, value='', rows=4, required=False, helper='', error='', placeholder='', maxlength=None, id=None, attrs=None) -%}
+{% set fid = id or ('f-' ~ name) %}
+<div class="df-field">
+  <label for="{{ fid }}">{{ label }}{% if required %}<span class="df-req" aria-hidden="true">*</span>{% endif %}</label>
+  <textarea id="{{ fid }}" name="{{ name }}" rows="{{ rows }}"{% if required %} required aria-required="true"{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if helper or error %} aria-describedby="{{ fid }}-help"{% endif %}{{ attrs_out(attrs) }}>{{ value if value is not none else '' }}</textarea>
+  {% if helper or error %}<small id="{{ fid }}-help" class="{{ 'df-error' if error else 'df-help' }}">{{ error or helper }}</small>{% endif %}
+</div>
+{%- endmacro %}
+
+{# options: lista de (valor, rótulo). value é comparado como texto. #}
+{% macro select(name, label, options, value='', required=False, helper='', error='', id=None, empty=None, attrs=None, empty_value='') -%}
+{% set fid = id or ('f-' ~ name) %}
+<div class="df-field">
+  <label for="{{ fid }}">{{ label }}{% if required %}<span class="df-req" aria-hidden="true">*</span>{% endif %}</label>
+  <select id="{{ fid }}" name="{{ name }}"{% if required %} required aria-required="true"{% endif %}{% if error %} aria-invalid="true"{% endif %}{% if helper or error %} aria-describedby="{{ fid }}-help"{% endif %}{{ attrs_out(attrs) }}>
+    {% if empty is not none %}<option value="{{ empty_value }}" {{ 'selected' if (value|string) == (empty_value|string) }}{{ ' disabled' if required }}>{{ empty }}</option>{% endif %}
+    {% for v, l in options %}<option value="{{ v }}" {{ 'selected' if (v|string) == (value|string) }}>{{ l }}</option>{% endfor %}
+  </select>
+  {% if helper or error %}<small id="{{ fid }}-help" class="{{ 'df-error' if error else 'df-help' }}">{{ error or helper }}</small>{% endif %}
+</div>
+{%- endmacro %}
+
+{# Grupo de opções exclusivas: options = lista de (valor, rótulo, ajuda). #}
+{% macro choice(name, legend, options, value=None, required=True, kind='radio') -%}
+<fieldset class="df-choice">
+  <legend>{{ legend }}{% if required %}<span class="df-req" aria-hidden="true">*</span>{% endif %}</legend>
+  {% for v, l, h in options %}
+  <label class="df-choice-item"><input type="{{ kind }}" name="{{ name }}" value="{{ v }}"{% if required and loop.first %} required{% endif %}{% if (value|string) == (v|string) %} checked{% endif %}><span>{{ l }}{% if h %}<small> · {{ h }}</small>{% endif %}</span></label>
+  {% endfor %}
+</fieldset>
+{%- endmacro %}
+
+{% macro notice(text, tone='info', glyph='info', role='status') -%}
+<div class="df-notice df-notice-{{ tone }}" role="{{ role }}">{{ icon(glyph) }}<div>{{ caller() if caller else text }}</div></div>
+{%- endmacro %}
+
+{% macro empty(text, glyph='tray') -%}
+<div class="df-empty">{{ icon(glyph) }}<p>{{ text }}</p>{% if caller %}{{ caller() }}{% endif %}</div>
+{%- endmacro %}
+
+{% macro avatar(nome, size='') -%}
+{% set partes = (nome or '?').split() %}<span class="df-avatar {{ 'df-avatar-sm' if size == 'sm' }}" aria-hidden="true">{{ partes[0][0]|upper }}{{ partes[-1][0]|upper if partes|length > 1 }}</span>
+{%- endmacro %}
+
+{% set STATUS_ICONES = {'novo': 'tray', 'encaminhado': 'paper-plane-right', 'a_caminho': 'navigation-arrow', 'em_execucao': 'wrench',
+  'impedido': 'warning', 'devolvido': 'arrow-bend-up-left', 'executado': 'check-circle', 'concluido': 'seal-check-fill',
+  'reaberto': 'arrows-clockwise', 'cancelado': 'prohibit'} %}
+{% macro status(s) -%}
+<span class="df-st df-st-{{ s }}">{{ icon(STATUS_ICONES.get(s, 'info')) }}{{ STATUS[s][1] }}</span>
+{%- endmacro %}
+
+{% macro prio(p) -%}
+{% if p %}<span class="df-badge df-priority-{{ p|lower }}" title="Criticidade {{ PRIORIDADES[p] }}">{{ p }} · {{ PRIORIDADES[p] }}</span>{% else %}<span class="df-badge">sem criticidade</span>{% endif %}
+{%- endmacro %}
+
+{% macro fonte(f) -%}
+{% if f in ('jev', 'llm') %}<span class="df-badge df-ia" title="Sugestão de IA para conferência humana">{{ icon('sparkle') }}IA</span>
+{% elif f == 'regras' %}<span class="df-badge" title="Orientação pelas regras locais">{{ icon('gear') }}sugestão por regras</span>{% endif %}
+{%- endmacro %}
+
+{% macro solicitante(t) -%}
+<span class="df-item-meta"><span>{{ icon('user') }}{{ t.solicitante or t.nome }}</span>{% if t.secretaria %}<span>{{ t.secretaria }}</span>{% endif %}{% if t.email %}<span><a href="mailto:{{ t.email }}">{{ t.email }}</a></span>{% endif %}{% if t.contato %}<span>{{ icon('phone') }}{{ t.contato }}</span>{% endif %}</span>
+{%- endmacro %}
+
+{# Campos de quem abre o chamado; mesmos nomes do formulário original. #}
+{% macro campos_solicitante(nome='', email='', secretaria='', contato=None, nome_campo='solicitante', prefix='') -%}
+<div class="df-form-row">
+  {{ field(nome_campo, 'Nome de quem está abrindo o chamado', nome, required=True, autocomplete='name', id=prefix ~ 'f-' ~ nome_campo) }}
+  {{ field('email', 'E-mail', email, type='email', required=True, autocomplete='email', placeholder='nome.sobrenome@sjp.pr.gov.br', id=prefix ~ 'f-email') }}
+</div>
+<div class="df-form-row">
+  {% set opts = [] %}{% for s in SECRETARIAS %}{% set _ = opts.append((s, s)) %}{% endfor %}
+  {{ select('secretaria', 'Secretaria', opts, secretaria, required=True, empty='Selecione…', id=prefix ~ 'f-secretaria') }}
+  {% if contato is not none %}{{ field('contato', 'Telefone ou ramal', contato, autocomplete='tel', inputmode='tel', id=prefix ~ 'f-contato') }}{% endif %}
+</div>
+{%- endmacro %}
+
+{# Cartão de indicador. #}
+{% macro kpi(valor, rotulo, alerta=False, titulo='') -%}
+<div class="df-kpi {{ 'df-kpi-alert' if alerta }}"{% if titulo %} title="{{ titulo }}"{% endif %}><b>{{ valor }}</b><small>{{ rotulo }}</small></div>
+{%- endmacro %}
+
+{# Coluna lateral "Minhas solicitações" (Figma 1.x e 2.x). atual: token da solicitação aberta. #}
+{% macro lista_solicitacoes(minhas, atual=None, confirmar=False) -%}
+<h2>Minhas solicitações</h2>
+<form method="post" action="/servidor/nova" data-df-form{% if confirmar %} data-confirm="Iniciar uma nova conversa? A conversa atual será encerrada sem gerar solicitação." data-confirm-label="Nova conversa"{% endif %}>
+  {{ button('Nova conversa', style='secondary', cls='df-wide') }}
+</form>
+<div class="df-field df-search">
+  {{ icon('magnifying-glass') }}<label class="df-sr" for="busca-sol">Buscar solicitações</label>
+  <input id="busca-sol" type="search" placeholder="Buscar solicitações" data-filter-list="#lista-sol" autocomplete="off">
+</div>
+<nav id="lista-sol" class="df-stack-sm" aria-label="Solicitações enviadas">
+  {% for s in minhas %}
+  <a class="df-list-item" href="/servidor/acompanhar/{{ s.token }}"{% if atual == s.token %} aria-current="page"{% endif %} data-filter-text="{{ s.protocolo }} {{ s.titulo }}"><b>{{ s.protocolo }} · {{ s.titulo }}</b><small>{{ s.criado_em|datahora }}</small></a>
+  {% else %}
+  <p class="df-muted"><small>As solicitações que você enviar aparecem aqui. <a href="/meus-chamados">Acessar com meu e-mail</a></small></p>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{# Painel de contexto "Sobre a IA" (Figma AI Info Panel). #}
+{% macro sobre_ia() -%}
+<section class="df-card df-ai-info" aria-labelledby="ia-t">
+  <div class="df-row"><h2 id="ia-t" style="font-size:16px">{{ icon('sparkle') }} Sobre a IA</h2><span class="df-badge" style="background:var(--df-brand-semantic-reward-gold-subtle);border:0">Teste: serviço externo</span></div>
+  <dl class="df-dl">
+    <dt>O que ela faz</dt><dd>Sugere tipo, prioridade, informações que faltam e quem pode atender. Ela não decide sozinha.</dd>
+    <dt>Dados usados</dt><dd>Descrição do chamado, local, histórico do local e carga das equipes.</dd>
+    <dt>Onde roda</dt><dd>Em um serviço externo, só para testes. Use apenas dados fictícios.</dd>
+    <dt>Quem confere</dt><dd>Toda sugestão que muda prioridade, encaminhamento ou avaliação passa por uma pessoa, e a decisão fica registrada.</dd>
+  </dl>
+</section>
+{%- endmacro %}

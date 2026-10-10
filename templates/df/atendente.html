@@ -1,0 +1,109 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'painel' %}
+{% set ativo = 'atendimento' %}
+{% set has_list = true %}
+{% block title %}Atendimento{% endblock %}
+{% block list_label %}Solicitações{% endblock %}
+{% block list_col %}
+<h2>Solicitações</h2>
+<div class="df-field df-search">
+  {{ ui.icon('magnifying-glass') }}<label class="df-sr" for="busca-atend">Buscar solicitações</label>
+  <input id="busca-atend" type="search" placeholder="Buscar solicitações" data-filter-list="#lista-atend" autocomplete="off">
+</div>
+<nav id="lista-atend" class="df-stack-sm" aria-label="Solicitações aguardando registro">
+  {% for s in solicitacoes %}
+  <a class="df-list-item" href="/atendente?sol={{ s.id }}"{% if sel and sel.id == s.id %} aria-current="page"{% endif %} data-filter-text="{{ s.protocolo }} {{ s.titulo }}"><b>{{ s.protocolo }} · {{ s.titulo }}</b><small>{{ s.criado_em|datahora }}</small></a>
+  {% else %}
+  <p class="df-muted"><small>Nenhuma solicitação aguardando registro.</small></p>
+  {% endfor %}
+</nav>
+{% endblock %}
+{% block main %}
+<div class="df-page-head">
+  <div>
+    <h1>Fila de atendimento</h1>
+    <p>Chamados novos, devolvidos pelo time técnico e reabertos. Avalie cada um: resolva no atendimento ou encaminhe para a área técnica.</p>
+  </div>
+  <small id="ind-fila" class="htmx-indicator" role="status">atualizando…</small>
+</div>
+
+{% if not sel %}
+<section class="df-select-empty" aria-label="Nenhuma solicitação selecionada">
+  <span class="df-select-ico">{{ ui.icon('tray') }}</span>
+  <h2>Selecione uma solicitação</h2>
+  <p class="df-muted">Escolha uma solicitação da lista para conferir a conversa e registrar o chamado.</p>
+</section>
+{% endif %}
+
+<section id="fila" aria-live="polite" aria-label="Fila de atendimento" hx-get="/atendente/fila" hx-trigger="load, every 5s" hx-indicator="#ind-fila">
+  <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando a fila"><div class="df-skeleton"></div><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
+</section>
+
+{% if sel %}
+<section class="df-card" aria-labelledby="sol-t">
+  <header>
+    <h2 id="sol-t">Registrar chamado a partir da solicitação</h2>
+    <small>Enviada pelo <a href="/servidor" target="_blank" rel="noopener">autoatendimento</a>. Confira, ajuste se necessário e registre o chamado.</small>
+  </header>
+  {% for s in [sel] %}
+  <details class="df-details" open>
+    <summary><span><b class="df-mono">{{ s.protocolo }}</b> · {{ s.titulo }} · {{ s.nome }}{{ ' (' ~ s.secretaria ~ ')' if s.secretaria }} · {{ s.criado_em|datahora }}
+      {% if s.via_ia %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}via assistente</span>{% else %}<span class="df-badge">formulário sem IA</span>{% endif %}</span></summary>
+    <div class="df-details-body">
+      <form class="df-form" method="post" action="/solicitacoes/{{ s.id }}/registrar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+        <div class="df-form-row">
+          {{ ui.field('titulo', 'Assunto', s.titulo, required=True, id='sol' ~ s.id ~ '-titulo') }}
+          {% set opts = [] %}{% for st in setores %}{% set _ = opts.append((st.id, st.nome)) %}{% endfor %}
+          {{ ui.select('setor_id', 'Área', opts, s.setor_id, required=True, id='sol' ~ s.id ~ '-setor') }}
+        </div>
+        {{ ui.textarea('descricao', 'Descrição', s.descricao, rows=3, required=True, id='sol' ~ s.id ~ '-desc') }}
+        {{ ui.field('local', 'Local', s.local, required=True, id='sol' ~ s.id ~ '-local') }}
+        {{ ui.campos_solicitante(s.nome, s.email, s.secretaria, nome_campo='nome', prefix='sol' ~ s.id ~ '-') }}
+        <small>{% if s.contato %}{{ ui.icon('phone') }}{{ s.contato }}{% endif %}{% if s.tentativas %} · Já tentou: {{ s.tentativas }}{% endif %}</small>
+        {% if s.conversa %}<details class="df-details"><summary>Ver conversa com o assistente</summary><div class="df-details-body"><p class="df-prewrap">{{ s.conversa }}</p></div></details>{% endif %}
+        <div class="df-form-actions">{{ ui.button('Registrar chamado', glyph='check') }}</div>
+      </form>
+      <form class="df-form" method="post" action="/solicitacoes/{{ s.id }}/descartar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Encerrar a solicitação {{ s.protocolo }} sem abrir chamado?" data-confirm-label="Encerrar sem chamado">
+        <div class="df-form-row">
+          {{ ui.field('motivo', 'Motivo para não abrir', '', required=True, placeholder='Ex.: resolvido por telefone', id='sol' ~ s.id ~ '-motivo') }}
+          <div class="df-form-actions" style="align-self:end">{{ ui.button('Encerrar sem chamado', style='secondary') }}</div>
+        </div>
+      </form>
+    </div>
+  </details>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div class="df-grid-eq df-grid-eq-2">
+  <section class="df-card" aria-labelledby="dir-t">
+    <header><h2 id="dir-t">Nova tarefa: cadastro direto</h2>
+      <small>Para áreas sem sistema próprio. No Help Desk o chamado também pode ser registrado no <a href="http://localhost:8001" target="_blank" rel="noopener">SisChamados Legado</a> e chega pela integração.</small></header>
+    <form class="df-form" method="post" action="/tarefas" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      {% set opts = [] %}{% for s in setores %}{% set _ = opts.append((s.id, s.nome)) %}{% endfor %}
+      {{ ui.select('setor_id', 'Área responsável', opts, '', required=True, id='dir-setor') }}
+      {{ ui.field('titulo', 'Título', '', required=True, placeholder='Ex.: Infiltração no teto da sala 3', id='dir-titulo') }}
+      {{ ui.textarea('descricao', 'Descrição do problema', '', rows=3, required=True, id='dir-desc') }}
+      {{ ui.field('local', 'Local (unidade, sala, andar)', '', placeholder='Ex.: CMEI Jardim Ipê – sala 3', id='dir-local') }}
+      {{ ui.campos_solicitante(contato='', prefix='dir-') }}
+      <div class="df-form-actions">{{ ui.button('Registrar tarefa', glyph='check') }}</div>
+      <small>A IA fará a triagem (tipo, criticidade, informações faltantes) para conferência do atendimento.</small>
+    </form>
+  </section>
+  <section class="df-card" aria-labelledby="ult-t">
+    <header><h2 id="ult-t">Últimas tarefas</h2></header>
+    <div class="df-list">
+    {% for t in tarefas %}
+      <a class="df-item-card" href="/tarefa/{{ t.id }}">
+        <div class="df-item-top">{{ ui.status(t.status) }} {{ ui.prio(t.prioridade) }}</div>
+        <h3><span class="df-code">#{{ t.id }}</span> {{ t.titulo }}</h3>
+        <small>{{ 'Origem: ' ~ SISTEMAS[t.origem].nome ~ ' ' ~ t.external_id if t.origem != 'web' else 'Cadastro web' }} · {{ t.criado_em|datahora }}</small>
+      </a>
+    {% else %}
+      {{ ui.empty('Nenhuma tarefa cadastrada ainda.', 'tray') }}
+    {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}

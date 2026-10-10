@@ -1,0 +1,17 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro board_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Board Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro board_column(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Board Column', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro priority_chip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Priority Chip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro priority_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Priority Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro ticket_header(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Ticket Header', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

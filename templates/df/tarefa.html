@@ -1,0 +1,216 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'painel' %}
+{% set ativo = 'painel' if eh_gestor else 'atendimento' %}
+{% set has_list = true %}
+{% set has_context = true %}
+{% set na_fila = t.status in ('novo', 'reaberto', 'devolvido') %}
+{% set sug = ia if (ia and t.ia_status == 'sugerida') else {} %}
+{% block title %}#{{ t.id }} {{ t.titulo }}{% endblock %}
+{% block list_label %}Fila de atendimento{% endblock %}
+{% block context_label %}Triagem da IA{% endblock %}
+{% block list_col %}
+<h2>Fila de atendimento</h2>
+<div class="df-field df-search">{{ ui.icon('magnifying-glass') }}<label class="df-sr" for="busca-fila">Buscar chamados</label><input id="busca-fila" type="search" placeholder="Buscar chamados" data-filter-list="#lista-fila" autocomplete="off"></div>
+<div id="fila-lateral" aria-live="polite" hx-get="/atendente/fila?compacta=1&atual={{ t.id }}" hx-trigger="load, every 10s"><div class="df-skeleton-group" aria-busy="true" aria-label="Carregando a fila"><div class="df-skeleton"></div><div class="df-skeleton"></div></div></div>
+{% endblock %}
+{% block context_col %}
+  {% if na_fila or t.ia_status in ('analisando', 'sugerida') %}
+  <section class="df-ctx" aria-labelledby="ia-t"{% if t.ia_status == 'analisando' %} aria-busy="true"{% endif %}>
+    <div class="df-row"><h2 id="ia-t" style="font-size:16px">Triagem da IA</h2>{{ ui.fonte(t.ia_fonte) }}</div>
+    {% if t.ia_status == 'analisando' %}
+      <div class="df-skeleton-group" aria-label="Analisando a demanda"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
+      <small role="status">Analisando tipo, criticidade, informações faltantes e executor mais adequado…</small>
+    {% elif ia %}
+      <div class="df-row"><small>Prioridade sugerida</small>{{ ui.prio(ia.prioridade) }}</div>
+      <article class="df-card"><h3>{{ ia.categoria }}</h3><small>Complexidade {{ ia.complexidade }}/5. {{ ia.justificativa }}</small><small>{{ ia.resumo }}</small></article>
+      {% if ia.informacoes_faltantes %}<article class="df-card"><h3>Informações que faltam</h3><ul class="df-stack-sm" style="margin:0;padding-left:18px">{% for f in ia.informacoes_faltantes %}<li><small>{{ f }}</small></li>{% endfor %}</ul></article>{% endif %}
+      {% if ia.resolvivel_no_atendimento %}<article class="df-card"><h3><span class="df-badge df-n1">{{ ui.icon('chat-circle') }}Resolvível no atendimento</span></h3><small>{{ ia.orientacao_atendimento }}</small></article>{% endif %}
+      {% if ia.executor_id %}
+      <div class="df-stack-sm"><small>{{ 'Se precisar de técnico' if ia.resolvivel_no_atendimento else 'Executor sugerido' }}</small>
+        {% for e in executores if e.id == ia.executor_id %}<article class="df-card"><div class="df-pessoa">{{ ui.avatar(e.nome) }}<div><b>{{ e.nome }}</b><br><small>{{ e.equipe }} · {{ e.carga }} ativa(s)</small></div></div></article>{% endfor %}
+        <small>{{ ia.motivo_executor }}</small></div>
+      {% endif %}
+      {% if t.prioridade_ajustada_por and t.prioridade and t.prioridade != ia.prioridade %}<small>{{ ui.icon('pencil-simple') }}Ajuste manual: {{ t.prioridade }} por {{ t.prioridade_ajustada_por }} (a IA sugeriu {{ ia.prioridade }}).</small>{% endif %}
+      <small>Sugestão {{ t.ia_status }}. Nada é aplicado sem a avaliação do atendimento.</small>
+    {% endif %}
+  </section>
+  {% endif %}
+
+
+  {% if t.origem != 'web' %}
+  <section class="df-card" aria-labelledby="sy-t">
+    <h2 id="sy-t">Sincronização com {{ SISTEMAS[t.origem].nome }}</h2>
+    <div class="df-table-scroll" role="region" aria-label="Fila de saída da tarefa" tabindex="0">
+      <table class="df-table"><tbody>
+      {% for o in outbox %}{% set p = o.payload|fromjson %}
+        <tr><td><small>#{{ o.id }}</small></td><td>{{ p.status_label }}</td>
+          <td>{% if o.status == 'entregue' %}{{ ui.icon('check') }}entregue {{ o.entregue_em|hora }}{% else %}{{ ui.icon('clock') }}pendente ({{ o.tentativas }} tent.){% endif %}</td></tr>
+      {% endfor %}
+      </tbody></table>
+    </div>
+  </section>
+  {% endif %}
+  {% if pontos %}
+  <section class="df-card" aria-labelledby="pt-t">
+    <h2 id="pt-t">Pontuação gerada</h2>
+    {% for p in pontos %}<p><small>{{ p.nome }}: <b>{{ '+' if p.pontos >= 0 }}{{ p.pontos }}</b> ({{ p.tipo }}) · {{ p.descricao }}</small></p>{% endfor %}
+  </section>
+  {% endif %}
+
+{% endblock %}
+{% block main %}
+<div hx-get="/tarefa/{{ t.id }}/estado?v={{ t.atualizado_em|urlencode }}" hx-trigger="every 3s" hx-swap="none"></div>
+
+<header class="df-ticket-head">
+  <p><a class="df-link" href="{{ '/gestor' if eh_gestor else '/atendente' }}">← Voltar</a></p>
+  <div class="df-ticket-id"><h1><span class="df-mono">{{ t.external_id or ('#' ~ t.id) }}</span></h1>{{ ui.status(t.status) }}{{ ui.prio(t.prioridade or (ia.prioridade if ia else none)) }}</div>
+  <p class="df-ticket-title">{{ t.titulo }}</p>
+  <p class="df-item-meta"><span>Registrado em {{ t.criado_em|datahora }}</span>
+    <span>{% if t.origem != 'web' %}origem {{ SISTEMAS[t.origem].nome }}{% else %}cadastro web{% endif %}</span>
+    {% if setor %}<span>área <b>{{ setor.nome }}</b></span>{% endif %}{% if tipo %}<span>{{ tipo.nome }}</span>{% endif %}</p>
+</header>
+<div class="df-stack">
+  <section class="df-card" aria-labelledby="res-t">
+    <h2 id="res-t">Resumo do chamado</h2>
+    <p><b>Descrição:</b> <span class="df-prewrap">{{ t.descricao }}</span></p>
+    <p class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local or '—' }}</span></p>
+    <p>{{ ui.solicitante(t) }}</p>
+    {% if executor %}<p class="df-pessoa">{{ ui.avatar(executor.nome, 'sm') }}<span>Executor: <b>{{ executor.nome }}</b></span></p>{% endif %}
+    {% if t.relato %}<p><b>{{ 'Solução do atendimento (' ~ t.resolvido_atendimento_por ~ ')' if t.resolvido_atendimento_por else 'Relato do executor' }}:</b> <span class="df-prewrap">{{ t.relato }}</span></p>{% endif %}
+    {% if t.resumo_ia %}<p><b>Resumo para a demandante</b> <span class="df-badge df-ia">{{ ui.icon('sparkle') }}IA</span>: {{ t.resumo_ia }}</p>{% endif %}
+    {% if t.evidencia %}<img class="df-img" src="/uploads/{{ t.evidencia }}" alt="Evidência da conclusão">{% endif %}
+    {% if t.nota %}<p><b>Avaliação da demandante:</b> <span class="df-stars" role="img" aria-label="{{ t.nota }} de 5 estrelas">{{ '★' * t.nota }}{{ '☆' * (5 - t.nota) }}</span> {{ t.comentario_demandante or '' }}</p>{% endif %}
+  </section>
+
+  {% if ultimo and t.status in ('devolvido', 'cancelado') %}
+  {% call ui.notice('', 'warn' if t.status == 'devolvido' else 'info', 'arrow-bend-up-left' if t.status == 'devolvido' else 'prohibit') %}
+    <b>{{ STATUS[t.status][1] }}</b> por {{ ultimo.usuario }} em {{ ultimo.criado_em|datahora }}<br>{{ ultimo.texto }}
+    {% if t.status == 'devolvido' %}<br><small>O chamado voltou para a fila do atendimento: revise as informações com o solicitante, se necessário, e resolva ou reencaminhe.</small>{% endif %}
+  {% endcall %}
+  {% endif %}
+
+
+
+  {% if na_fila or t.status == 'encaminhado' %}
+  <section class="df-card" aria-labelledby="dec-t">
+    <header>
+      <h2 id="dec-t">{{ 'Avaliação do atendimento' if na_fila else 'Reencaminhar' }}</h2>
+      <small>{{ 'Este chamado está na fila do atendimento. Resolva aqui mesmo ou encaminhe para a área técnica.' if na_fila else 'O técnico ainda não iniciou: dá para trocar a área ou o técnico.' }}</small>
+    </header>
+
+    {% if na_fila %}
+    <details class="df-details"{% if sug.resolvivel_no_atendimento %} open{% endif %}>
+      <summary><span>{{ ui.icon('chat-circle') }} Resolver no atendimento {% if sug.resolvivel_no_atendimento %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}IA recomenda</span>{% endif %}</span></summary>
+      <div class="df-details-body">
+        <form class="df-form" method="post" action="/tarefa/{{ t.id }}/resolver-atendimento" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+          {{ ui.textarea('solucao', 'Solução dada ao solicitante', sug.orientacao_atendimento or '', rows=3, required=True, placeholder='Ex.: senha desbloqueada no AD após confirmar a matrícula; orientado a trocar no próximo acesso.') }}
+          <div class="df-form-actions">{{ ui.button('Registrar solução', glyph='check-circle') }}</div>
+          <small>O chamado fica como Executado e o solicitante confirma pelo link, como nos demais atendimentos.</small>
+        </form>
+      </div>
+    </details>
+    {% endif %}
+
+    <details class="df-details"{% if not sug.resolvivel_no_atendimento or not na_fila %} open{% endif %}>
+      <summary><span>{{ ui.icon('paper-plane-right') }} {{ 'Encaminhar ao time técnico' if na_fila else 'Trocar área ou técnico' }} {% if sug and not sug.resolvivel_no_atendimento and na_fila %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}IA recomenda</span>{% endif %}</span></summary>
+      <div class="df-details-body">
+        {% if ia and t.ia_status == 'sugerida' %}<small>Campos pré-preenchidos pela IA. Revise e edite se necessário.</small>{% endif %}
+        <form class="df-form" method="post" action="/tarefa/{{ t.id }}/atribuir" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+          <div class="df-form-row">
+            {% set tipo_opts = [] %}{% for tp in tipos %}{% set _ = tipo_opts.append((tp.id, tp.setor ~ ' › ' ~ tp.nome)) %}{% endfor %}
+            {{ ui.select('tipo_id', 'Tipo de tarefa', tipo_opts, (sug.tipo_id or t.tipo_id), required=True) }}
+            {% set prio_opts = [] %}{% for p, n in PRIORIDADES.items() %}{% set _ = prio_opts.append((p, p ~ ' – ' ~ n)) %}{% endfor %}
+            {{ ui.select('prioridade', 'Criticidade', prio_opts, ((t.prioridade if t.prioridade_ajustada_por else sug.prioridade) or t.prioridade or 'P3'), required=True) }}
+          </div>
+          {% set ex_opts = [] %}{% for e in executores %}{% set _ = ex_opts.append((e.id, e.equipe ~ ' › ' ~ e.nome ~ ' · ' ~ e.carga ~ ' ativa(s)')) %}{% endfor %}
+          {{ ui.select('executor_id', 'Executor', ex_opts, (sug.executor_id or t.executor_id), required=True) }}
+          {{ ui.field('observacao', 'Orientação ao executor (opcional)', '') }}
+          <div class="df-form-actions">{{ ui.button('Encaminhar e notificar', glyph='paper-plane-right') }}</div>
+        </form>
+      </div>
+    </details>
+
+    {% if t.ia_status == 'sugerida' %}
+    <div class="df-actions">
+      <form method="post" action="/tarefa/{{ t.id }}/rejeitar-ia" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Rejeitar a sugestão da IA para este chamado? Você poderá refazer a triagem depois." data-confirm-label="Rejeitar sugestão">{{ ui.button('Rejeitar sugestão da IA', style='secondary') }}</form>
+      <form method="post" action="/tarefa/{{ t.id }}/retriar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>{{ ui.button('Refazer triagem', style='secondary', glyph='arrows-clockwise') }}</form>
+    </div>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if t.status not in ('concluido', 'cancelado') %}
+  <section class="df-card" aria-labelledby="crit-t">
+    <header><h2 id="crit-t">Criticidade</h2>
+      <div>{{ ui.prio(t.prioridade) }}{% if ia and ia.prioridade %} <small>· sugestão da IA: {{ ia.prioridade }} – {{ PRIORIDADES[ia.prioridade] }}</small>{% endif %}
+        {% if t.prioridade_ajustada_por %}<br><small>{{ ui.icon('pencil-simple') }}Ajustada manualmente por {{ t.prioridade_ajustada_por }}</small>{% endif %}</div></header>
+    <details class="df-details">
+      <summary>Discorda da criticidade? Ajustar manualmente</summary>
+      <div class="df-details-body">
+        <form class="df-form" method="post" action="/tarefa/{{ t.id }}/prioridade" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+          <div class="df-form-row">
+            {% set prio_opts2 = [] %}{% for p, n in PRIORIDADES.items() %}{% set _ = prio_opts2.append((p, p ~ ' – ' ~ n)) %}{% endfor %}
+            {{ ui.select('prioridade', 'Nova criticidade', prio_opts2, (t.prioridade or (ia.prioridade if ia) or 'P3'), required=True, id='nova-prio') }}
+            {{ ui.field('motivo', 'Motivo do ajuste', '', required=True, placeholder='Ex.: unidade de saúde com atendimento parado', id='motivo-prio') }}
+          </div>
+          <div class="df-form-actions">{{ ui.button('Salvar criticidade', style='secondary') }}</div>
+          <small>O ajuste fica registrado na linha do tempo{{ ' e o executor é notificado' if t.executor_id }}.</small>
+        </form>
+      </div>
+    </details>
+  </section>
+  {% endif %}
+
+  {% for i in impedimentos %}
+  <section class="df-card" aria-labelledby="imp-{{ i.id }}">
+    <header><h2 id="imp-{{ i.id }}">{{ ui.icon('warning' if i.aberto else 'check-circle') }} {{ 'Impedimento aberto' if i.aberto else 'Impedimento resolvido' }}</h2><small>{{ i.criado_em|datahora }}</small></header>
+    <p><b>{{ i.motivo }}</b>{% if i.detalhe %}: {{ i.detalhe }}{% endif %}
+      {% if i.externo %}<span class="df-badge" title="Fora do controle do executor: o SLA é pausado e não há penalidade">{{ ui.icon('pause') }}externo · SLA pausado</span>{% endif %}</p>
+    {% if i.sugestao_ia %}<p><span class="df-badge df-ia">{{ ui.icon('sparkle') }}IA sugere</span> {{ i.sugestao_ia }}</p>{% elif i.aberto %}<p class="df-muted" aria-busy="true">IA analisando apoio…</p>{% endif %}
+    {% if i.aberto and eh_gestor %}
+    <form class="df-form" method="post" action="/impedimento/{{ i.id }}/resolver" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      {{ ui.field('providencia', 'Providência tomada', '', required=True, placeholder='Ex.: Almoxarifado enviou 2 keystones Cat6 ao local', id='prov-' ~ i.id) }}
+      {% set apoio_opts = [] %}{% for p in todos %}{% set _ = apoio_opts.append((p.id, p.nome)) %}{% endfor %}
+      {{ ui.select('apoio_id', 'Apoio prestado por (gera pontos de colaboração)', apoio_opts, '', empty='Ninguém', id='apoio-' ~ i.id) }}
+      <div class="df-form-actions">{{ ui.button('Resolver impedimento e liberar executor', glyph='check-circle') }}</div>
+    </form>
+    {% elif not i.aberto %}<p><b>Providência:</b> {{ i.providencia }} ({{ i.resolvido_por }}{{ ', apoio: ' ~ i.apoio if i.apoio }}) · {{ i.resolvido_em|datahora }}</p>{% endif %}
+  </section>
+  {% endfor %}
+
+  <section class="df-card" aria-labelledby="val-t">
+    <h2 id="val-t">Validação pela demandante</h2>
+    {% if t.status == 'executado' %}
+      <p>Link enviado a <b>{{ t.solicitante }}</b>{{ ' (' ~ t.email ~ ')' if t.email }} (SMS e e-mail simulados).</p>
+      <div>{{ ui.button('Abrir link da demandante', href='/validar/' ~ t.token, glyph='arrow-right', attrs={'target': '_blank', 'rel': 'noopener'}) }}</div>
+    {% elif t.status == 'concluido' %}<p>{{ ui.icon('check') }}Resolução confirmada pela demandante.</p>
+    {% elif t.status == 'reaberto' %}<p>A demandante indicou pendência: <b>{{ t.comentario_demandante }}</b>. Reatribua para continuar o atendimento.</p>
+    {% elif t.status == 'cancelado' %}<p class="df-muted">Chamado cancelado: não há validação.</p>
+    {% else %}<p class="df-muted">O link será disponibilizado quando o técnico marcar o chamado como Executado. Executado não é Concluído (resolução confirmada).</p>{% endif %}
+  </section>
+
+  <section class="df-card" aria-labelledby="lt-t">
+    <h2 id="lt-t">Linha do tempo</h2>
+    <ol class="df-timeline">
+    {% for e in eventos %}
+      <li><span class="df-dot" aria-hidden="true"></span><small>{{ e.criado_em|datahora }} · {{ e.usuario }} ({{ e.papel }})</small>
+        <span>{% if e.para %}{{ ui.status(e.para) }} {% endif %}{{ e.texto }}</span>
+        {% if e.anexo %}<img src="/uploads/{{ e.anexo }}" alt="Anexo do evento">{% endif %}</li>
+    {% endfor %}
+    </ol>
+  </section>
+
+  {% if t.status in CANCELAVEIS %}
+  <details class="df-details">
+    <summary><span>{{ ui.icon('prohibit') }} Cancelar chamado</span></summary>
+    <div class="df-details-body">
+      <form class="df-form" method="post" action="/tarefa/{{ t.id }}/cancelar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Cancelar o chamado #{{ t.id }}? Esta ação encerra o atendimento." data-confirm-label="Cancelar chamado">
+        {{ ui.field('motivo', 'Motivo do cancelamento', '', required=True, placeholder='Ex.: chamado duplicado do #12', id='motivo-cancel') }}
+        <div class="df-form-actions">{{ ui.button('Cancelar chamado', style='destructive') }}</div>
+      </form>
+    </div>
+  </details>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,6 @@
+{% import "df/_ui.html" as ui %}
+{% for c in chat %}
+<div class="df-bubble {{ 'me' if c.autor == 'executor' else 'ia' }}">{% if c.autor == 'copiloto' %}<small>{{ ui.icon('sparkle') }}Copiloto{{ ' (base de conhecimento)' if c.fonte == 'regras' }}</small>{% endif %}{{ c.texto }}</div>
+{% else %}
+<p class="df-muted"><small>Dica: descreva o sintoma. O copiloto usa os procedimentos internos e casos já resolvidos.</small></p>
+{% endfor %}

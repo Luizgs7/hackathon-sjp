@@ -1,0 +1,73 @@
+{% import "df/_ui.html" as ui %}
+<!doctype html>
+<html lang="pt-BR" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>SisChamados Legado · DataForge</title>
+  <script>try{var c=localStorage.getItem('dataforge.theme')||'system';var d=c==='dark'||(c==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}</script>
+  <link rel="stylesheet" href="/static/ui/library.css">
+  <link rel="stylesheet" href="/static/ui/app.css">
+  <script src="/static/htmx.min.js" defer></script>
+</head>
+<body class="df-ui df-app" data-theme="light">
+<script>document.body.dataset.theme=document.documentElement.dataset.theme;</script>
+<a class="df-skip" href="#conteudo">Ir para o conteúdo</a>
+<header class="df-topbar">
+  <div class="df-brand-mobile" style="display:flex"><span class="df-brand-mark">{{ ui.icon('headset') }}</span><span>SisChamados Legado</span></div>
+  <div class="df-actions">
+    <div class="df-strip" role="group" aria-label="Tema da interface">
+      <button type="button" class="df-chip df-icon-button" data-theme-choice="light" aria-pressed="false" aria-label="Tema claro">{{ ui.icon('sun') }}</button>
+      <button type="button" class="df-chip df-icon-button" data-theme-choice="dark" aria-pressed="false" aria-label="Tema escuro">{{ ui.icon('moon') }}</button>
+      <button type="button" class="df-chip df-icon-button" data-theme-choice="system" aria-pressed="true" aria-label="Tema do sistema">{{ ui.icon('sun-horizon') }}</button>
+    </div>
+  </div>
+</header>
+<main id="conteudo" class="df-main" tabindex="-1">
+  <div class="df-page-head">
+    <div>
+      <h1>SisChamados · Legado</h1>
+      <p>Sistema de Help Desk existente da Prefeitura, simulado para demonstrar a integração com a plataforma.</p>
+    </div>
+    <form class="df-actions" method="post" action="/alternar" data-df-form>
+      <span class="df-st {{ 'df-st-concluido' if online else 'df-st-impedido' }}" role="status">{{ ui.icon('check-circle' if online else 'wifi-slash') }}{{ 'Online' if online else 'Fora do ar (simulado)' }}</span>
+      {{ ui.button('Simular sistema fora do ar' if online else 'Religar sistema', style='secondary' if online else 'primary') }}
+    </form>
+  </div>
+
+  {% if msg %}<div class="df-notice df-notice-info" role="status">{{ ui.icon('info') }}<div>{{ msg }}</div></div>{% endif %}
+  {% if not online %}
+    <div class="df-notice df-notice-warn" role="status">{{ ui.icon('warning') }}<div>Sistema fora do ar: as atualizações da plataforma ficam pendentes na fila de saída e são entregues ao religar.</div></div>
+  {% endif %}
+
+  <section class="df-card" aria-labelledby="novo-t">
+    <h2 id="novo-t">Registrar chamado (atendente)</h2>
+    <form class="df-form" method="post" action="/chamados" data-df-form>
+      <div class="df-form-row">
+        {{ ui.field('solicitante', 'Solicitante', 'Ana Souza', required=True, autocomplete='name') }}
+        {{ ui.field('telefone', 'Telefone', '(41) 3381-0000 r.214', autocomplete='tel') }}
+      </div>
+      {{ ui.field('unidade', 'Unidade e local', 'UBS Vila Nova – Sala de vacinação', required=True) }}
+      {{ ui.textarea('descricao', 'Descrição', 'Ponto de rede da sala de vacinação não funciona. Computador sem acesso ao sistema de vacinação.', rows=3, required=True) }}
+      <div class="df-form-row">
+        {{ ui.field('atendente', 'Atendente', 'Carlos Lima') }}
+        <div class="df-form-actions" style="align-self:end">{{ ui.button('Gravar chamado', glyph='check') }}</div>
+      </div>
+      <small>Ao gravar, o chamado é enviado à plataforma pela API de integração (idempotente por origem e número).</small>
+    </form>
+  </section>
+
+  <section class="df-stack" aria-labelledby="lista-t">
+    <h2 id="lista-t">Chamados <small id="ind" class="htmx-indicator">atualizando…</small></h2>
+    <div id="lista" aria-live="polite" hx-get="/lista" hx-trigger="load, every 3s" hx-indicator="#ind">
+      <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando chamados"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
+    </div>
+    <small class="df-muted">Integração: envia para {{ plataforma }}/api/integracao/legado/tarefas · recebe em /api/atualizacoes</small>
+  </section>
+</main>
+<div class="df-toasts" aria-live="polite"></div>
+<script src="/static/ui/library.js"></script>
+<script src="/static/ui/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1107 @@
+{
+  "variables": [
+    {
+      "id": "VariableID:2368:2410",
+      "name": "Danger/Surface",
+      "collectionId": "VariableCollectionId:2115:36",
+      "type": "COLOR",
+      "valuesByMode": {
+        "2115:1": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:2:66"
+        },
+        "2226:0": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:2:66"
+        }
+      },
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "codeSyntax": {
+        "WEB": "var(--danger-surface)"
+      }
+    },
+    {
+      "id": "VariableID:2368:2411",
+      "name": "Danger/Surface Hover",
+      "collectionId": "VariableCollectionId:2115:36",
+      "type": "COLOR",
+      "valuesByMode": {
+        "2115:1": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:2:67"
+        },
+        "2226:0": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:2:67"
+        }
+      },
+      "scopes": [
+        "FRAME_FILL",
+        "SHAPE_FILL"
+      ],
+      "codeSyntax": {
+        "WEB": "var(--danger-surface-hover)"
+      }
+    },
+    {
+      "id": "VariableID:2368:2412",
+      "name": "Text/On Danger",
+      "collectionId": "VariableCollectionId:2115:36",
+      "type": "COLOR",
+      "valuesByMode": {
+        "2115:1": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:3:384"
+        },
+        "2226:0": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:3:384"
+        }
+      },
+      "scopes": [
+        "TEXT_FILL"
+      ],
+      "codeSyntax": {
+        "WEB": "var(--text-on-danger)"
+      }
+    },
+    {
+      "id": "VariableID:2368:2413",
+      "name": "Border/Input",
+      "collectionId": "VariableCollectionId:2115:36",
+      "type": "COLOR",
+      "valuesByMode": {
+        "2115:1": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:2115:31"
+        },
+        "2226:0": {
+          "type": "VARIABLE_ALIAS",
+          "id": "VariableID:2115:30"
+        }
+      },
+      "scopes": [
+        "STROKE_COLOR"
+      ],
+      "codeSyntax": {
+        "WEB": "var(--border-input)"
+      }
+    }
+  ],
+  "components": [
+    {
+      "id": "2118:61",
+      "name": "Button",
+      "section": "01 · Ações",
+      "description": "Botão. Primary = ação principal (marinho da marca); Secondary = ação de apoio; Ghost = ação discreta; Destructive = ação irreversível. Pill, texto Antenna Bold (substituta: Montserrat).\nFocus Visible, Pressed e Loading são propriedades independentes sem multiplicar variantes. Loading mantém caixa e substitui visual pelo indicador; frontend conserva nome acessível/aria-busy e bloqueia reenvio. Disabled prevalece: desligar propriedades de interação. Pressed aplica escurecimento sutil. Para toque mobile, alvo interativo mínimo de referência: 44 pt iOS/48 dp Android, mantendo dimensões visuais quando necessário.",
+      "properties": {
+        "Label#2118:0": {
+          "type": "TEXT",
+          "defaultValue": "Botão"
+        },
+        "Focus Visible#2369:0": {
+          "type": "BOOLEAN",
+          "defaultValue": false
+        },
+        "Loading#2369:25": {
+          "type": "BOOLEAN",
+          "defaultValue": false
+        },
+        "Pressed#2369:50": {
+          "type": "BOOLEAN",
+          "defaultValue": false
+        },
+        "Size": {
+          "type": "VARIANT",
+          "defaultValue": "Medium",
+          "variantOptions": [
+            "Medium",
+            "Small"
+          ]
+        },
+        "Style": {
+          "type": "VARIANT",
+          "defaultValue": "Primary",
+          "variantOptions": [
+            "Primary",
+            "Secondary",
+            "Ghost",
+            "Destructive"
+          ]
+        },
+        "State": {
+          "type": "VARIANT",
+          "defaultValue": "Default",
+          "variantOptions": [
+            "Default",
+            "Hover",
+            "Disabled"
+          ]
+        }
+      },
+      "variants": [
+        {
+          "id": "2118:13",
+          "name": "Size=Medium, Style=Primary, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Primary",
+            "State": "Default"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:15",
+          "name": "Size=Medium, Style=Primary, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Primary",
+            "State": "Hover"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:17",
+          "name": "Size=Medium, Style=Primary, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Primary",
+            "State": "Disabled"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:19",
+          "name": "Size=Medium, Style=Secondary, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Secondary",
+            "State": "Default"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:21",
+          "name": "Size=Medium, Style=Secondary, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Secondary",
+            "State": "Hover"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:23",
+          "name": "Size=Medium, Style=Secondary, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Secondary",
+            "State": "Disabled"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:25",
+          "name": "Size=Medium, Style=Ghost, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Ghost",
+            "State": "Default"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:27",
+          "name": "Size=Medium, Style=Ghost, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Ghost",
+            "State": "Hover"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:29",
+          "name": "Size=Medium, Style=Ghost, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Ghost",
+            "State": "Disabled"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:31",
+          "name": "Size=Medium, Style=Destructive, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Destructive",
+            "State": "Default"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:33",
+          "name": "Size=Medium, Style=Destructive, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Destructive",
+            "State": "Hover"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:35",
+          "name": "Size=Medium, Style=Destructive, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Destructive",
+            "State": "Disabled"
+          },
+          "width": 86,
+          "height": 48
+        },
+        {
+          "id": "2118:37",
+          "name": "Size=Small, Style=Primary, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Primary",
+            "State": "Default"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:39",
+          "name": "Size=Small, Style=Primary, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Primary",
+            "State": "Hover"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:41",
+          "name": "Size=Small, Style=Primary, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Primary",
+            "State": "Disabled"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:43",
+          "name": "Size=Small, Style=Secondary, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Secondary",
+            "State": "Default"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:45",
+          "name": "Size=Small, Style=Secondary, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Secondary",
+            "State": "Hover"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:47",
+          "name": "Size=Small, Style=Secondary, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Secondary",
+            "State": "Disabled"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:49",
+          "name": "Size=Small, Style=Ghost, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Ghost",
+            "State": "Default"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:51",
+          "name": "Size=Small, Style=Ghost, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Ghost",
+            "State": "Hover"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:53",
+          "name": "Size=Small, Style=Ghost, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Ghost",
+            "State": "Disabled"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:55",
+          "name": "Size=Small, Style=Destructive, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Destructive",
+            "State": "Default"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:57",
+          "name": "Size=Small, Style=Destructive, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Destructive",
+            "State": "Hover"
+          },
+          "width": 73,
+          "height": 34
+        },
+        {
+          "id": "2118:59",
+          "name": "Size=Small, Style=Destructive, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Destructive",
+            "State": "Disabled"
+          },
+          "width": 73,
+          "height": 34
+        }
+      ]
+    },
+    {
+      "id": "2127:149",
+      "name": "Icon Button",
+      "section": "01 · Ações",
+      "description": "Botão redondo só com ícone (troque o ícone pela propriedade Icon). Styles: Primary, Secondary, Ghost, Overlay (sobre imagem/câmera).\nFocus Visible, Pressed e Loading são propriedades independentes sem multiplicar variantes. Loading mantém caixa e substitui visual pelo indicador; frontend conserva nome acessível/aria-busy e bloqueia reenvio. Disabled prevalece: desligar propriedades de interação. Pressed aplica escurecimento sutil. Para toque mobile, alvo interativo mínimo de referência: 44 pt iOS/48 dp Android, mantendo dimensões visuais quando necessário.",
+      "properties": {
+        "Icon#2127:0": {
+          "type": "INSTANCE_SWAP",
+          "defaultValue": "2125:248",
+          "preferredValues": []
+        },
+        "Focus Visible#2369:75": {
+          "type": "BOOLEAN",
+          "defaultValue": false
+        },
+        "Loading#2369:100": {
+          "type": "BOOLEAN",
+          "defaultValue": false
+        },
+        "Pressed#2369:125": {
+          "type": "BOOLEAN",
+          "defaultValue": false
+        },
+        "Size": {
+          "type": "VARIANT",
+          "defaultValue": "Medium",
+          "variantOptions": [
+            "Medium",
+            "Small"
+          ]
+        },
+        "Style": {
+          "type": "VARIANT",
+          "defaultValue": "Primary",
+          "variantOptions": [
+            "Primary",
+            "Secondary",
+            "Ghost",
+            "Overlay"
+          ]
+        },
+        "State": {
+          "type": "VARIANT",
+          "defaultValue": "Default",
+          "variantOptions": [
+            "Default",
+            "Hover",
+            "Disabled"
+          ]
+        }
+      },
+      "variants": [
+        {
+          "id": "2127:77",
+          "name": "Size=Medium, Style=Primary, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Primary",
+            "State": "Default"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:80",
+          "name": "Size=Medium, Style=Primary, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Primary",
+            "State": "Hover"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:83",
+          "name": "Size=Medium, Style=Primary, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Primary",
+            "State": "Disabled"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:86",
+          "name": "Size=Medium, Style=Secondary, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Secondary",
+            "State": "Default"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:89",
+          "name": "Size=Medium, Style=Secondary, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Secondary",
+            "State": "Hover"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:92",
+          "name": "Size=Medium, Style=Secondary, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Secondary",
+            "State": "Disabled"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:95",
+          "name": "Size=Medium, Style=Ghost, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Ghost",
+            "State": "Default"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:98",
+          "name": "Size=Medium, Style=Ghost, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Ghost",
+            "State": "Hover"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:101",
+          "name": "Size=Medium, Style=Ghost, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Ghost",
+            "State": "Disabled"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:104",
+          "name": "Size=Medium, Style=Overlay, State=Default",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Overlay",
+            "State": "Default"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:107",
+          "name": "Size=Medium, Style=Overlay, State=Hover",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Overlay",
+            "State": "Hover"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:110",
+          "name": "Size=Medium, Style=Overlay, State=Disabled",
+          "properties": {
+            "Size": "Medium",
+            "Style": "Overlay",
+            "State": "Disabled"
+          },
+          "width": 40,
+          "height": 40
+        },
+        {
+          "id": "2127:113",
+          "name": "Size=Small, Style=Primary, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Primary",
+            "State": "Default"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:116",
+          "name": "Size=Small, Style=Primary, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Primary",
+            "State": "Hover"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:119",
+          "name": "Size=Small, Style=Primary, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Primary",
+            "State": "Disabled"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:122",
+          "name": "Size=Small, Style=Secondary, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Secondary",
+            "State": "Default"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:125",
+          "name": "Size=Small, Style=Secondary, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Secondary",
+            "State": "Hover"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:128",
+          "name": "Size=Small, Style=Secondary, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Secondary",
+            "State": "Disabled"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:131",
+          "name": "Size=Small, Style=Ghost, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Ghost",
+            "State": "Default"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:134",
+          "name": "Size=Small, Style=Ghost, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Ghost",
+            "State": "Hover"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:137",
+          "name": "Size=Small, Style=Ghost, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Ghost",
+            "State": "Disabled"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:140",
+          "name": "Size=Small, Style=Overlay, State=Default",
+          "properties": {
+            "Size": "Small",
+            "Style": "Overlay",
+            "State": "Default"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:143",
+          "name": "Size=Small, Style=Overlay, State=Hover",
+          "properties": {
+            "Size": "Small",
+            "Style": "Overlay",
+            "State": "Hover"
+          },
+          "width": 32,
+          "height": 32
+        },
+        {
+          "id": "2127:146",
+          "name": "Size=Small, Style=Overlay, State=Disabled",
+          "properties": {
+            "Size": "Small",
+            "Style": "Overlay",
+            "State": "Disabled"
+          },
+          "width": 32,
+          "height": 32
+        }
+      ]
+    },
+    {
+      "id": "2118:98",
+      "name": "Input",
+      "section": "03 · Formulários",
+      "description": "Campo de texto com rótulo e texto de apoio. Estados: Default, Focused, Error, Disabled.\nDimensão externa estável entre estados. Delimitador padrão usa Border/Input. Foco pode coexistir com erro/aberto; conservar mensagem de erro e anel de foco.",
+      "properties": {
+        "Label#2118:29": {
+          "type": "TEXT",
+          "defaultValue": "Rótulo"
+        },
+        "Placeholder#2118:34": {
+          "type": "TEXT",
+          "defaultValue": "Digite aqui"
+        },
+        "Helper#2118:39": {
+          "type": "TEXT",
+          "defaultValue": "Texto de apoio"
+        },
+        "Show Helper#2118:44": {
+          "type": "BOOLEAN",
+          "defaultValue": true
+        },
+        "State": {
+          "type": "VARIANT",
+          "defaultValue": "Default",
+          "variantOptions": [
+            "Default",
+            "Focused",
+            "Error",
+            "Disabled"
+          ]
+        }
+      },
+      "variants": [
+        {
+          "id": "2118:78",
+          "name": "State=Default",
+          "properties": {
+            "State": "Default"
+          },
+          "width": 320,
+          "height": 98
+        },
+        {
+          "id": "2118:83",
+          "name": "State=Focused",
+          "properties": {
+            "State": "Focused"
+          },
+          "width": 320,
+          "height": 98
+        },
+        {
+          "id": "2118:88",
+          "name": "State=Error",
+          "properties": {
+            "State": "Error"
+          },
+          "width": 320,
+          "height": 98
+        },
+        {
+          "id": "2118:93",
+          "name": "State=Disabled",
+          "properties": {
+            "State": "Disabled"
+          },
+          "width": 320,
+          "height": 98
+        }
+      ]
+    },
+    {
+      "id": "2136:345",
+      "name": "Select",
+      "section": "03 · Formulários",
+      "description": "Campo de seleção com rótulo e texto de apoio. Estados: Default, Open, Error, Disabled. Abra o Select Menu abaixo do campo.\nDimensão externa estável entre estados. Delimitador padrão usa Border/Input. Foco pode coexistir com erro/aberto; conservar mensagem de erro e anel de foco.",
+      "properties": {
+        "Label#2136:0": {
+          "type": "TEXT",
+          "defaultValue": "Rótulo"
+        },
+        "Value#2136:5": {
+          "type": "TEXT",
+          "defaultValue": "Selecione uma opção"
+        },
+        "Helper#2136:10": {
+          "type": "TEXT",
+          "defaultValue": "Texto de apoio"
+        },
+        "Show Helper#2136:15": {
+          "type": "BOOLEAN",
+          "defaultValue": true
+        },
+        "State": {
+          "type": "VARIANT",
+          "defaultValue": "Default",
+          "variantOptions": [
+            "Default",
+            "Open",
+            "Error",
+            "Disabled"
+          ]
+        }
+      },
+      "variants": [
+        {
+          "id": "2136:317",
+          "name": "State=Default",
+          "properties": {
+            "State": "Default"
+          },
+          "width": 320,
+          "height": 98
+        },
+        {
+          "id": "2136:324",
+          "name": "State=Open",
+          "properties": {
+            "State": "Open"
+          },
+          "width": 320,
+          "height": 98
+        },
+        {
+          "id": "2136:331",
+          "name": "State=Error",
+          "properties": {
+            "State": "Error"
+          },
+          "width": 320,
+          "height": 98
+        },
+        {
+          "id": "2136:338",
+          "name": "State=Disabled",
+          "properties": {
+            "State": "Disabled"
+          },
+          "width": 320,
+          "height": 98
+        }
+      ]
+    },
+    {
+      "id": "2149:853",
+      "name": "Toast",
+      "section": "15 · Feedback e estados",
+      "description": "Aviso temporário flutuante com ação opcional. Tons: Neutral (escuro), Info e Danger.\nDanger informa falha e recuperação. Ação é opcional. Usar aviso persistente para pendência operacional e erro junto ao campo para validação; frontend anuncia retornos sem roubar foco.",
+      "properties": {
+        "Message#2149:19": {
+          "type": "TEXT",
+          "defaultValue": "Não foi possível salvar."
+        },
+        "Action#2149:23": {
+          "type": "TEXT",
+          "defaultValue": "Tentar novamente"
+        },
+        "Show Action#2149:27": {
+          "type": "BOOLEAN",
+          "defaultValue": true
+        },
+        "Tone": {
+          "type": "VARIANT",
+          "defaultValue": "Neutral",
+          "variantOptions": [
+            "Neutral",
+            "Info",
+            "Danger"
+          ]
+        }
+      },
+      "variants": [
+        {
+          "id": "2149:838",
+          "name": "Tone=Neutral",
+          "properties": {
+            "Tone": "Neutral"
+          },
+          "width": 358,
+          "height": 44
+        },
+        {
+          "id": "2149:843",
+          "name": "Tone=Info",
+          "properties": {
+            "Tone": "Info"
+          },
+          "width": 358,
+          "height": 44
+        },
+        {
+          "id": "2149:848",
+          "name": "Tone=Danger",
+          "properties": {
+            "Tone": "Danger"
+          },
+          "width": 358,
+          "height": 44
+        }
+      ]
+    },
+    {
+      "id": "2180:2028",
+      "name": "KPI Card",
+      "section": "23 · Gráficos e métricas",
+      "description": "Cartão de indicador: rótulo, valor grande e variação em relação ao período anterior. Trend: Up (verde), Down (vermelho) ou Neutral (cinza). Subir ou descer não indica bom ou ruim por si só; a regra depende da métrica. Valores ilustrativos.\nTrend representa direção matemática; Sentiment representa efeito favorável, desfavorável ou neutro. Alta de reabertura pode ser Negative; queda de espera pode ser Positive. Sempre informar período/base.",
+      "properties": {
+        "Trend": {
+          "type": "VARIANT",
+          "defaultValue": "Up",
+          "variantOptions": [
+            "Up",
+            "Down",
+            "Neutral"
+          ]
+        },
+        "Sentiment": {
+          "type": "VARIANT",
+          "defaultValue": "Positive",
+          "variantOptions": [
+            "Positive",
+            "Negative",
+            "Neutral"
+          ]
+        }
+      },
+      "variants": [
+        {
+          "id": "2180:2002",
+          "name": "Trend=Up, Sentiment=Positive",
+          "properties": {
+            "Trend": "Up",
+            "Sentiment": "Positive"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2180:2011",
+          "name": "Trend=Down, Sentiment=Negative",
+          "properties": {
+            "Trend": "Down",
+            "Sentiment": "Negative"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2180:2020",
+          "name": "Trend=Neutral, Sentiment=Neutral",
+          "properties": {
+            "Trend": "Neutral",
+            "Sentiment": "Neutral"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2368:2414",
+          "name": "Trend=Up, Sentiment=Negative",
+          "properties": {
+            "Trend": "Up",
+            "Sentiment": "Negative"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2368:2423",
+          "name": "Trend=Up, Sentiment=Neutral",
+          "properties": {
+            "Trend": "Up",
+            "Sentiment": "Neutral"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2368:2432",
+          "name": "Trend=Down, Sentiment=Positive",
+          "properties": {
+            "Trend": "Down",
+            "Sentiment": "Positive"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2368:2441",
+          "name": "Trend=Down, Sentiment=Neutral",
+          "properties": {
+            "Trend": "Down",
+            "Sentiment": "Neutral"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2368:2450",
+          "name": "Trend=Neutral, Sentiment=Positive",
+          "properties": {
+            "Trend": "Neutral",
+            "Sentiment": "Positive"
+          },
+          "width": 200,
+          "height": 111
+        },
+        {
+          "id": "2368:2458",
+          "name": "Trend=Neutral, Sentiment=Negative",
+          "properties": {
+            "Trend": "Neutral",
+            "Sentiment": "Negative"
+          },
+          "width": 200,
+          "height": 111
+        }
+      ]
+    },
+    {
+      "id": "2220:2577",
+      "name": "Text Area",
+      "section": "27 · Operação e formulários",
+      "description": "Campo de texto de várias linhas, com rótulo, ajuda e contador. State: Default, Focus, Error (mensagem de validação) e Disabled. Usar em descrição do problema, relato de conclusão, impedimento e comentário. Textos de exemplo.\nDimensão externa estável entre estados. Delimitador padrão usa Border/Input. Foco pode coexistir com erro/aberto; conservar mensagem de erro e anel de foco.",
+      "properties": {
+        "State": {
+          "type": "VARIANT",
+          "defaultValue": "Default",
+          "variantOptions": [
+            "Default",
+            "Focus",
+            "Error",
+            "Disabled"
+          ]
+        }
+      },
+      "variants": [
+        {
+          "id": "2220:2549",
+          "name": "State=Default",
+          "properties": {
+            "State": "Default"
+          },
+          "width": 358,
+          "height": 165
+        },
+        {
+          "id": "2220:2556",
+          "name": "State=Focus",
+          "properties": {
+            "State": "Focus"
+          },
+          "width": 358,
+          "height": 165
+        },
+        {
+          "id": "2220:2563",
+          "name": "State=Error",
+          "properties": {
+            "State": "Error"
+          },
+          "width": 358,
+          "height": 165
+        },
+        {
+          "id": "2220:2570",
+          "name": "State=Disabled",
+          "properties": {
+            "State": "Disabled"
+          },
+          "width": 358,
+          "height": 165
+        }
+      ]
+    }
+  ]
+}

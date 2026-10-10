@@ -1,0 +1,23 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro streak_counter(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Streak Counter', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro streak_day(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Streak Day', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro week_streak(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Week Streak', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro streak_cell(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Streak Cell', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro streak_calendar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Streak Calendar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro streak_goal(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Streak Goal', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro streak_banner(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Streak Banner', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

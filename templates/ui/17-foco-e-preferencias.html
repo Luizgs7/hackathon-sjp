@@ -1,0 +1,14 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro focus_option(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Focus Option', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro focus_timer(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Focus Timer', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro setting_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Setting Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro locked_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Locked Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

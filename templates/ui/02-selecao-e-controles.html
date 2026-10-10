@@ -1,0 +1,29 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro chip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Chip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro toggle(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Toggle', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro checkbox(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Checkbox', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro radio(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Radio', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro option_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Option Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro segment(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Segment', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro segmented_control(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Segmented Control', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro slider(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Slider', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro switch(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Switch', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

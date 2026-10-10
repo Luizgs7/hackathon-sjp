@@ -1,0 +1,8 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro button(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Button', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro icon_button(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Icon Button', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

@@ -1,0 +1,29 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro message_assistant(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Message Assistant', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro message_user(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Message User', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro suggestion_chip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Suggestion Chip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro composer(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Composer', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro chat_header(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Chat Header', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro conversation_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Conversation Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro reaction_bar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Reaction Bar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro message_actions(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Message Actions', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro ai_info_panel(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('AI Info Panel', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

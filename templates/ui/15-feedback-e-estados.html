@@ -1,0 +1,29 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro toast(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Toast', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro empty_state(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Empty State', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro spinner(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Spinner', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro skeleton(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Skeleton', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro tooltip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Tooltip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro push_notification(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Push Notification', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro error_state(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Error State', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro push_permission(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Push Permission', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro skeleton_column(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Skeleton Column', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

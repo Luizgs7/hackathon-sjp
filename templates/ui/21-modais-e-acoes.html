@@ -1,0 +1,14 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro alert_dialog(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Alert Dialog', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro modal(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Modal', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro side_drawer(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Side Drawer', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro action_sheet(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Action Sheet', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

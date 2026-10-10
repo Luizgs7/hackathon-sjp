@@ -1,0 +1,29 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro legend_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Legend Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro legend_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Legend Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro chart_legend(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Chart Legend', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro chart_tooltip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Chart Tooltip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro kpi_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('KPI Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro bar_chart(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Bar Chart', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro line_chart(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Line Chart', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro donut_chart(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Donut Chart', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro chart_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Chart Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

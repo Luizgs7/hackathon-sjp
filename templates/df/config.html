@@ -1,0 +1,96 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'painel' %}
+{% set ativo = 'config' %}
+{% block title %}Configuração{% endblock %}
+{% block main %}
+{% set setor_opts = [] %}{% for s in setores %}{% set _ = setor_opts.append((s.id, s.nome)) %}{% endfor %}
+<div class="df-page-head"><div><h1>{{ ui.icon('gear') }} Configuração</h1><p>Cadastros e regras que adaptam a plataforma a outras áreas.</p></div></div>
+
+<div data-tabs>
+<div class="df-tablist" role="tablist" aria-label="Seções da configuração"><button type="button" role="tab" id="t-areas" aria-controls="p-areas" aria-selected="false">Áreas e equipes</button><button type="button" role="tab" id="t-tipos" aria-controls="p-tipos" aria-selected="false">Tipos de tarefa</button><button type="button" role="tab" id="t-pontos" aria-controls="p-pontos" aria-selected="false">Pontuação e temporadas</button><button type="button" role="tab" id="t-integ" aria-controls="p-integ" aria-selected="false">Integração</button><button type="button" role="tab" id="t-perfis" aria-controls="p-perfis" aria-selected="false">Perfis e permissões</button></div>
+<div id="p-areas" role="tabpanel" aria-labelledby="t-areas" tabindex="0" hidden><div class="df-stack">
+  <section class="df-card" aria-labelledby="area-t">
+    <header><h2 id="area-t">{{ ui.icon('users') }} Áreas</h2></header>
+    <div class="df-table-scroll" role="region" aria-label="Áreas cadastradas" tabindex="0"><table class="df-table"><thead><tr><th scope="col">Nome</th><th scope="col" class="num">Equipes</th></tr></thead><tbody>{% for s in setores %}<tr><td>{{ s.nome }}</td><td class="num">{{ equipes|selectattr('setor', 'equalto', s.nome)|list|length }}</td></tr>{% endfor %}</tbody></table></div>
+    <form class="df-form" method="post" action="/config/setor" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      <div class="df-form-row">{{ ui.field('nome', 'Nova área', '', required=True, id='area-nome') }}<div class="df-form-actions" style="align-self:end">{{ ui.button('Adicionar área', style='secondary') }}</div></div>
+    </form>
+  </section>
+  <section class="df-card" aria-labelledby="eq-t">
+    <header><h2 id="eq-t">Equipes</h2></header>
+    <ul class="df-stack-sm" style="margin:0;padding-left:20px">{% for e in equipes %}<li>{{ e.nome }} <small>({{ e.setor }})</small></li>{% endfor %}</ul>
+    <form class="df-form" method="post" action="/config/equipe" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      <div class="df-form-row">{{ ui.field('nome', 'Nova equipe', '', required=True, id='eq-nome') }}{{ ui.select('setor_id', 'Área', setor_opts, '', required=True, id='eq-setor') }}</div>
+      <div class="df-form-actions">{{ ui.button('Adicionar equipe', style='secondary') }}</div>
+    </form>
+  </section>
+</div></div>
+<div id="p-tipos" role="tabpanel" aria-labelledby="t-tipos" tabindex="0" hidden><div class="df-stack">
+  <section class="df-card" aria-labelledby="tp-t">
+    <header><h2 id="tp-t">{{ ui.icon('list-checks') }} Tipos de tarefa</h2></header>
+    <div class="df-table-scroll" role="region" aria-label="Tipos de tarefa" tabindex="0">
+      <table class="df-table">
+        <thead><tr><th scope="col">Tipo</th><th scope="col" class="num">Complexidade</th><th scope="col">Palavras-chave</th></tr></thead>
+        <tbody>{% for tp in tipos %}<tr><td>{{ tp.nome }}<br><small>{{ tp.setor }}</small></td><td class="num">{{ tp.complexidade }}</td><td><small>{{ tp.palavras }}</small></td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <form class="df-form" method="post" action="/config/tipo" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      <div class="df-form-row">{{ ui.field('nome', 'Novo tipo', '', required=True, id='tp-nome') }}{{ ui.select('setor_id', 'Área', setor_opts, '', required=True, id='tp-setor') }}</div>
+      {{ ui.field('complexidade', 'Complexidade (1 a 5)', 2, type='number', required=True, attrs={'min': 1, 'max': 5}, id='tp-cx') }}
+      {{ ui.field('palavras', 'Palavras-chave para triagem', '', helper='Separadas por vírgula.', id='tp-palavras') }}
+      <div class="df-form-actions">{{ ui.button('Adicionar tipo', style='secondary') }}</div>
+    </form>
+  </section>
+</div></div>
+<div id="p-pontos" role="tabpanel" aria-labelledby="t-pontos" tabindex="0" hidden><div class="df-stack">
+  <section class="df-card" aria-labelledby="reg-t">
+    <header><h2 id="reg-t">Regras de pontuação</h2><small>JSON editável. Salvar só é possível com JSON válido.</small></header>
+    <form class="df-form" method="post" action="/config/regras" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-json-form>
+      <div class="df-field">
+        <label for="regras_json">Regras (JSON)</label>
+        <textarea id="regras_json" name="regras_json" rows="14" class="df-mono" data-json aria-describedby="regras-ajuda" spellcheck="false">{{ regras_json }}</textarea>
+        <small id="regras-ajuda" class="df-help" role="status">JSON válido</small>
+      </div>
+      <div class="df-form-actions">{{ ui.button('Salvar regras') }}</div>
+    </form>
+  </section>
+  <section class="df-card" aria-labelledby="temp-t">
+    <header><h2 id="temp-t">{{ ui.icon('calendar-blank') }} Temporadas do placar</h2></header>
+    <ul class="df-stack-sm" style="margin:0;padding-left:20px">{% for tp in temporadas %}<li>{{ tp.nome }}: {{ tp.inicio|datahora }}{{ ' → ' ~ (tp.fim|datahora) if tp.fim else ' (atual)' }}</li>{% endfor %}</ul>
+    <form class="df-form" method="post" action="/config/temporada" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Encerrar a temporada atual e zerar o placar? O histórico é preservado." data-confirm-label="Encerrar e iniciar nova">
+      <div class="df-form-row">
+        {{ ui.field('nome', 'Nome da nova temporada', '', required=True, placeholder='Ex.: Temporada de Novembro', id='temp-nome') }}
+        <div class="df-form-actions" style="align-self:end">{{ ui.button('Encerrar e iniciar nova', style='secondary') }}</div>
+      </div>
+    </form>
+  </section>
+</div></div>
+<div id="p-integ" role="tabpanel" aria-labelledby="t-integ" tabindex="0" hidden><div class="df-stack">
+  <section class="df-card" aria-labelledby="out-t">
+    <header><h2 id="out-t">{{ ui.icon('arrows-clockwise') }} Integração: fila de saída (outbox)</h2><small>O reenvio também é automático a cada 5 s.</small></header>
+    <form method="post" action="/integracoes/reprocessar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>{{ ui.button('Reprocessar pendentes agora', style='secondary', glyph='arrows-clockwise') }}</form>
+    <div class="df-table-scroll" role="region" aria-label="Fila de saída" tabindex="0">
+      <table class="df-table">
+        <thead><tr><th scope="col">#</th><th scope="col">Chamado</th><th scope="col">Atualização</th><th scope="col">Situação</th></tr></thead>
+        <tbody>{% for o in outbox %}{% set p = o.payload|fromjson %}
+          <tr><td>{{ o.id }}</td><td>{{ p.external_id }}</td><td>{{ p.status_label }}</td>
+            <td>{% if o.status == 'entregue' %}{{ ui.icon('check') }}entregue{% else %}{{ ui.icon('clock') }}pendente · {{ o.tentativas }} tent.<br><small>{{ o.erro or '' }}</small>{% endif %}</td></tr>
+        {% else %}<tr><td colspan="4"><small>Sem mensagens.</small></td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+</div></div>
+<div id="p-perfis" role="tabpanel" aria-labelledby="t-perfis" tabindex="0" hidden><div class="df-stack">
+  <section class="df-card" aria-labelledby="perf-t">
+    <header><h2 id="perf-t">{{ ui.icon('shield-check') }} Perfis e permissões</h2></header>
+    <ul class="df-stack-sm" style="margin:0;padding-left:20px">
+      <li><b>Atendente:</b> cadastra tarefas, avalia a fila e resolve ou encaminha chamados.</li>
+      <li><b>Gestor:</b> confere a triagem da IA, atribui, resolve impedimentos, configura e vê indicadores.</li>
+      <li><b>Executor:</b> vê e atualiza apenas as próprias missões (interface de campo).</li>
+      <li><b>Demandante:</b> acessa só o próprio chamado, por link com token único.</li>
+    </ul>
+  </section>
+</div></div>
+</div>
+{% endblock %}

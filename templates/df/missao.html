@@ -1,0 +1,142 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'campo' %}
+{% set ativo = 'missoes' %}
+{% set has_context = true %}
+{% set ordem = ['encaminhado', 'a_caminho', 'em_execucao', 'executado'] %}
+{% set rotulos = ['Encaminhado', 'A caminho', 'Em atendimento', 'Executado'] %}
+{% set st_etapa = 'em_execucao' if t.status == 'impedido' else ('executado' if t.status == 'concluido' else t.status) %}
+{% set idx = ordem.index(st_etapa) if st_etapa in ordem else -1 %}
+{% block title %}Missão #{{ t.id }}{% endblock %}
+{% block context_label %}Local e etapas{% endblock %}
+{% block context_col %}
+<section class="df-card df-wide-only" aria-labelledby="loc-t">
+  <h2 id="loc-t" style="font-size:16px">Local</h2>
+  <div class="df-place">{{ ui.icon('map-pin') }}<div><b>{{ t.local or '—' }}</b><br><small>{{ t.secretaria or '' }}</small></div></div>
+</section>
+<section class="df-card df-wide-only" aria-labelledby="et-t">
+  <h2 id="et-t" style="font-size:16px">Etapas</h2>
+  {% if idx >= 0 %}
+  <ol class="df-progress-steps" aria-label="Etapas da missão">
+    {% for r in rotulos %}<li class="{{ 'feito' if loop.index0 < idx or t.status == 'concluido' }}{{ ' atual' if loop.index0 == idx and t.status != 'concluido' }}"{% if loop.index0 == idx and t.status != 'concluido' %} aria-current="step"{% endif %}>{{ r }}</li>{% endfor %}
+  </ol>
+  <small>{{ STATUS[t.status][1] }}</small>
+  {% else %}<small>{{ STATUS[t.status][1] }}</small>{% endif %}
+</section>
+{% endblock %}{% block main %}
+<div hx-get="/campo/{{ t.id }}/estado?v={{ t.atualizado_em|urlencode }}" hx-trigger="every 3s" hx-swap="none"></div>
+<div class="df-page-head">
+  <div class="df-stack-sm" style="width:100%">
+    <p class="df-row"><a class="df-link" href="/campo">← Voltar</a><b class="df-mono">#{{ t.id }}</b></p>
+    <div class="df-item-top">{{ ui.status(t.status) }} {{ ui.prio(t.prioridade) }}</div>
+    <h1>{{ t.titulo }}</h1>
+  </div>
+</div>
+
+<div class="df-stack">
+  <section class="df-card" aria-labelledby="m-t">
+    <h2 id="m-t" class="df-sr">Dados da missão</h2>
+    <p class="df-item-meta"><span>{{ ui.icon('map-pin') }}<b>{{ t.local }}</b></span></p>
+    <p>{{ ui.solicitante(t) }}</p>
+    <p class="df-prewrap">{{ t.descricao }}</p>
+    {% if ia and ia.resumo %}<p><span class="df-badge df-ia">{{ ui.icon('sparkle') }}resumo IA</span> {{ ia.resumo }}</p>{% endif %}
+    {% if ia and ia.informacoes_faltantes %}<small>{{ ui.icon('warning') }}Confirmar no local: {{ ia.informacoes_faltantes|join('; ') }}</small>{% endif %}
+  </section>
+
+  <section class="df-card df-narrow-only" aria-label="Local e etapas">
+    <div class="df-place">{{ ui.icon('map-pin') }}<div><b>{{ t.local or '—' }}</b><br><small>{{ t.secretaria or '' }}</small></div></div>
+    {% if idx >= 0 %}<ol class="df-progress-steps" aria-label="Etapas da missão">{% for r in rotulos %}<li class="{{ 'feito' if loop.index0 < idx or t.status == 'concluido' }}{{ ' atual' if loop.index0 == idx and t.status != 'concluido' }}">{{ r }}</li>{% endfor %}</ol>{% endif %}
+  </section>
+
+  {% if t.status == 'encaminhado' %}
+    <form class="df-action-bar" method="post" action="/campo/{{ t.id }}/avancar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form><input type="hidden" name="para" value="a_caminho">
+      {{ ui.button('Aceitar e ir ao local', glyph='navigation-arrow', cls='df-big-action') }}</form>
+  {% elif t.status == 'a_caminho' %}
+    <form class="df-action-bar" method="post" action="/campo/{{ t.id }}/avancar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form><input type="hidden" name="para" value="em_execucao">
+      {{ ui.button('Cheguei: iniciar atendimento', glyph='map-pin', cls='df-big-action') }}</form>
+  {% elif t.status == 'em_execucao' %}
+    <details class="df-details" open>
+      <summary><span>{{ ui.icon('check-circle') }} Marcar como executado</span></summary>
+      <div class="df-details-body">
+        <form class="df-form" method="post" action="/campo/{{ t.id }}/concluir" enctype="multipart/form-data" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+          {{ ui.textarea('relato', 'O que foi feito?', '', rows=3, required=True, placeholder='Ex.: Keystone do ponto 12 danificado, substituído. Testado com testador e notebook.', id='relato-exec') }}
+          {{ ui.field('foto', 'Foto da evidência', '', type='file', id='foto-exec', attrs={'accept': 'image/*', 'capture': 'environment'}, helper='Opcional. Use a câmera do celular.') }}
+          <div class="df-form-actions">{{ ui.button('Enviar execução', glyph='check-circle', cls='df-big-action') }}</div>
+        </form>
+      </div>
+    </details>
+    <details class="df-details">
+      <summary><span>{{ ui.icon('warning') }} Reportar impedimento</span></summary>
+      <div class="df-details-body">
+        <form class="df-form" method="post" action="/campo/{{ t.id }}/impedimento" enctype="multipart/form-data" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+          {% set mo = [] %}{% for m in MOTIVOS %}{% set _ = mo.append((m, m, '')) %}{% endfor %}
+          {{ ui.choice('motivo', 'Motivo do impedimento', mo, MOTIVOS[0]) }}
+          {{ ui.field('detalhe', 'Detalhe', '', placeholder='Ex.: keystone Cat6 danificado, sem peça reserva', id='detalhe-imp') }}
+          {{ ui.field('foto', 'Foto (opcional)', '', type='file', id='foto-imp', attrs={'accept': 'image/*', 'capture': 'environment'}) }}
+          <div class="df-form-actions">{{ ui.button('Enviar impedimento ao gestor') }}</div>
+        </form>
+      </div>
+    </details>
+  {% elif t.status == 'devolvido' %}
+    {% call ui.notice('', 'warn', 'arrow-bend-up-left') %}<b>Devolvido à triagem.</b> O atendimento vai reavaliar e reencaminhar, se necessário.{% endcall %}
+  {% elif t.status == 'cancelado' %}
+    {% call ui.notice('', 'info', 'prohibit') %}<b>Chamado cancelado.</b> Nenhuma ação necessária.{% endcall %}
+  {% elif t.status == 'impedido' %}
+    {% call ui.notice('', 'warn', 'warning') %}<b>Aguardando providência do gestor</b><br>{{ impedimento.motivo }}{% if impedimento.detalhe %}: {{ impedimento.detalhe }}{% endif %}
+      {% if impedimento.externo %}<br><small>{{ ui.icon('pause') }}Motivo externo: o relógio do SLA está pausado e você não perde pontos.</small>{% endif %}{% endcall %}
+  {% elif t.status == 'executado' %}
+    {% call ui.notice('', 'ok', 'check-circle') %}<b>Executado.</b> Aguardando a confirmação de {{ t.solicitante }}.
+      {% for p in pontos if p.tipo == 'provisorio' %}<br><b>+{{ p.pontos }} pts provisórios</b>{% endfor %}{% endcall %}
+  {% elif t.status == 'concluido' %}
+    {% call ui.notice('', 'ok', 'trophy-fill') %}<b>Missão cumprida!</b> {{ t.solicitante }} confirmou: <span class="df-stars">{{ '★' * (t.nota or 0) }}</span>
+      {% for p in pontos if p.tipo in ('definitivo', 'bonus') %}<br><small>+{{ p.pontos }} · {{ p.descricao }}</small>{% endfor %}{% endcall %}
+  {% elif t.status == 'reaberto' %}
+    {% call ui.notice('', 'warn', 'arrows-clockwise') %}<b>Reaberta pela demandante:</b> {{ t.comentario_demandante }}<br><small>De volta à fila do atendimento para reavaliação.</small>{% endcall %}
+  {% endif %}
+
+  {% if t.status in ('encaminhado', 'a_caminho', 'em_execucao') %}
+  <details class="df-details">
+    <summary><span>{{ ui.icon('arrow-bend-up-left') }} Devolver à triagem</span></summary>
+    <div class="df-details-body">
+      <form class="df-form" method="post" action="/campo/{{ t.id }}/devolver" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-confirm="Devolver este chamado à fila do atendimento?" data-confirm-label="Devolver chamado">
+        {% set md = [] %}{% for m in MOTIVOS_DEVOLUCAO %}{% set _ = md.append((m, m, '')) %}{% endfor %}
+        {{ ui.choice('motivo', 'Motivo da devolução', md, MOTIVOS_DEVOLUCAO[0]) }}
+        {{ ui.field('detalhe', 'Detalhe', '', placeholder='Ex.: não informaram o número do ramal', id='detalhe-dev') }}
+        <div class="df-form-actions">{{ ui.button('Devolver chamado', style='secondary') }}</div>
+      </form>
+    </div>
+  </details>
+  {% endif %}
+
+  {% if t.status in ('encaminhado', 'a_caminho', 'em_execucao', 'impedido') %}
+  <section class="df-card df-chat" aria-labelledby="cop-t">
+    <header><h2 id="cop-t">{{ ui.icon('sparkle') }} Copiloto de campo</h2><small>Pergunte como resolver</small></header>
+    <div id="chat" class="df-chat-log" role="log" aria-live="polite" aria-label="Conversa com o copiloto">{% include "df/_chat.html" %}</div>
+    <form id="form-copiloto" class="df-compose" hx-post="/campo/{{ t.id }}/chat" hx-target="#chat" hx-indicator="#pensando" autocomplete="off">
+      <div class="df-field"><label class="df-sr" for="pergunta-cop">Sua pergunta ao copiloto</label>
+        <input id="pergunta-cop" name="pergunta" required placeholder="Ex.: o ponto está sem link e o LED do switch apagado"></div>
+      {{ ui.button('Enviar') }}
+    </form>
+    <small id="pensando" class="htmx-indicator" role="status">{{ ui.icon('sparkle') }}pensando… (pode levar alguns segundos)</small>
+  </section>
+  {% endif %}
+</div>
+
+<section aria-label="Histórico">
+  <details class="df-details" open><summary>Histórico</summary>
+    <div class="df-details-body">
+      <ol class="df-timeline">{% for e in eventos %}<li><span class="df-dot" aria-hidden="true"></span><small>{{ e.criado_em|datahora }} · {{ e.usuario }}</small><span>{{ e.texto }}</span></li>{% endfor %}</ol>
+    </div>
+  </details>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const f = document.getElementById('form-copiloto');
+  if (!f) return;
+  document.body.addEventListener('htmx:afterRequest', e => { if (e.detail.elt === f && e.detail.successful) { f.reset(); f.pergunta.focus(); } });
+})();
+</script>
+{% endblock %}

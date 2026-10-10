@@ -1,0 +1,49 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'publico' %}
+{% set ativo = 'chamados' %}
+{% set has_list = true %}
+{% set has_context = true %}
+{% block title %}Solicitação {{ s.protocolo }}{% endblock %}
+{% block list_label %}Minhas solicitações{% endblock %}
+{% block context_label %}Resumo{% endblock %}
+{% block list_col %}{{ ui.lista_solicitacoes(minhas, atual=s.token) }}{% endblock %}
+{% block context_col %}
+<section class="df-card"><h2 style="font-size:16px">Resumo</h2>
+  <dl class="df-dl"><dt>Protocolo</dt><dd class="df-mono">{{ s.protocolo }}</dd><dt>Local</dt><dd>{{ s.local }}</dd><dt>Enviada em</dt><dd>{{ s.criado_em|datahora }}</dd><dt>Descrição</dt><dd class="df-prewrap">{{ s.descricao }}</dd></dl></section>
+{{ ui.sobre_ia() }}
+{% endblock %}
+{% block main %}
+<div hx-get="/servidor/acompanhar/{{ s.token }}" hx-trigger="every 5s" hx-select="#acomp" hx-target="#acomp" hx-swap="outerHTML"></div>
+<div id="acomp" class="df-stack">
+  <div class="df-page-head">
+    <div>
+      <h1>Solicitação <span class="df-mono">{{ s.protocolo }}</span></h1>
+      <p>{{ s.titulo }} · {{ ui.icon('map-pin') }}{{ s.local }}</p>
+    </div>
+  </div>
+
+  <section class="df-card" aria-label="Situação da solicitação">
+    {% if s.status == 'aguardando' %}
+      <div class="df-item-top"><span class="df-st df-st-novo">{{ ui.icon('clock') }}Aguardando atendente</span></div>
+      <p>Um atendente vai conferir e registrar seu chamado. Guarde o protocolo <b class="df-mono">{{ s.protocolo }}</b> e este endereço para acompanhar.</p>
+    {% elif s.status == 'descartada' %}
+      <div class="df-item-top"><span class="df-st df-st-cancelado">{{ ui.icon('info') }}Encerrada sem chamado</span></div>
+      <p>{{ s.motivo_descarte }} ({{ s.registrada_por }})</p>
+    {% elif t %}
+      <p>Chamado registrado por {{ s.registrada_por }} em {{ s.registrada_em|datahora }}: <b>tarefa #{{ t.id }}</b></p>
+      <div class="df-item-top">{{ ui.status(t.status) }} {{ ui.prio(t.prioridade) }}</div>
+      {% if t.status == 'executado' %}
+        <p>O técnico informou a conclusão.</p>
+        <div>{{ ui.button('Confirmar e avaliar o atendimento', href='/validar/' ~ t.token, glyph='check-circle') }}</div>
+      {% elif t.status == 'cancelado' %}
+        <p>Este chamado foi cancelado. Se o problema continuar, abra uma nova solicitação.</p>
+      {% elif t.status in ('concluido', 'reaberto') %}
+        <p><a class="df-link" href="/validar/{{ t.token }}">Ver detalhes do atendimento</a></p>
+      {% endif %}
+    {% endif %}
+  </section>
+
+  <p><a class="df-link" href="/meus-chamados">Ver todos os meus chamados</a> · <a class="df-link" href="/servidor">Precisa de outra coisa? Fale com o assistente →</a></p>
+</div>
+{% endblock %}

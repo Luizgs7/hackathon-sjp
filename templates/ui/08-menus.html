@@ -1,0 +1,8 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro menu_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Menu Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro context_menu(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Context Menu', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

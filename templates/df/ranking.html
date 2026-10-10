@@ -1,0 +1,82 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'campo' if campo else 'painel' %}
+{% set ativo = 'ranking' %}
+{% set has_context = true %}
+{% set ns = namespace(pos=0, pts=0) %}
+{% for r in individual %}{% if r.id == u.id %}{% set ns.pos = loop.index %}{% set ns.pts = r.pontos %}{% endif %}{% endfor %}
+{% block title %}Ranking{% endblock %}
+{% block context_label %}Sua posição e regras{% endblock %}
+{% block context_col %}
+<section class="df-ctx" aria-labelledby="pos-t">
+  <h2 id="pos-t" style="font-size:16px">Sua posição</h2>
+  {% if ns.pos %}
+  <div class="df-cols-2">
+    <div class="df-score df-score-pos"><small>POSIÇÃO</small><b>{{ ui.icon('timer') }}{{ ns.pos }}º</b></div>
+    <div class="df-score df-score-pts"><small>PONTOS</small><b>{{ ui.icon('lightning-fill') }}{{ ns.pts }}</b></div>
+  </div>
+  {% if ns.pos > 1 %}<small>Faltam <b>{{ individual[ns.pos - 2].pontos - ns.pts + 1 }} pontos</b> para alcançar o {{ ns.pos - 1 }}º lugar. Sem recompensa financeira: o ranking só reconhece o trabalho da equipe.</small>
+  {% else %}<small>Você lidera a temporada. Sem recompensa financeira: o ranking só reconhece o trabalho da equipe.</small>{% endif %}
+  {% else %}<small>Você ainda não pontuou nesta temporada. Sem recompensa financeira: o ranking só reconhece o trabalho da equipe.</small>{% endif %}
+</section>
+<section class="df-card" aria-labelledby="eq-t">
+  <header><h2 id="eq-t" style="font-size:16px">Por equipe</h2></header>
+  <ol class="df-rank-list df-rank-compact" aria-label="Ranking por equipe (resumo)" >{% for e in equipes %}<li><span class="df-rank-pos">{{ loop.index }}</span><span class="df-rank-name"><b>{{ e.nome }}</b><small>{{ e.setor }}</small></span><span class="df-rank-pts df-mono">{{ e.pontos }}</span></li>{% else %}<li><small>Sem equipes pontuando.</small></li>{% endfor %}</ol>
+</section>
+<section class="df-card" aria-labelledby="reg-t">
+  <h2 id="reg-t" style="font-size:16px">{{ ui.icon('file-text') }} Regras de pontuação (configuráveis)</h2>
+  <ul class="df-stack-sm" style="margin:0;padding-left:18px;font-size:14px">
+    <li><b>Entrega:</b> {{ rg.pontos_por_complexidade }} pts × complexidade (1–5), <i>provisórios</i> ao concluir.</li>
+    <li><b>Qualidade:</b> ao confirmar, multiplica pela nota da demandante ({% for k, v in rg.multiplicador_nota.items() %}{{ k }}★×{{ v }}{{ ', ' if not loop.last }}{% endfor %}).</li>
+    <li><b>Prazo:</b> +{{ rg.bonus_sla }} se dentro do SLA da criticidade. Impedimentos externos pausam o relógio e não penalizam.</li>
+    <li><b>Sem reabertura:</b> +{{ rg.bonus_sem_reabertura }}. Com pendência, os pontos ficam suspensos até a resolução.</li>
+    <li><b>Colaboração:</b> +{{ rg.bonus_apoio_colega }} para quem apoia a missão de um colega; +{{ rg.bonus_desbloqueio_gestor }} para o gestor que remove um impedimento.</li>
+    <li>O placar reinicia a cada temporada e o histórico fica preservado.</li>
+  </ul>
+</section>
+{% endblock %}
+
+{% block main %}
+{% set tp = (temporadas|selectattr('numero', 'equalto', temporada)|list)|first %}
+<div class="df-page-head">
+  <div><h1>Ranking</h1><p>{{ tp.nome if tp else 'Temporada' }} · pontos definitivos e provisórios</p></div>
+</div>
+<form class="df-filters df-filters-eq" method="get" action="/ranking" data-autosubmit>
+  {% set tps = [] %}{% for t2 in temporadas %}{% set _ = tps.append((t2.numero, t2.nome ~ (' (atual)' if not t2.fim else ' (encerrada)'))) %}{% endfor %}
+  {{ ui.select('temporada', 'Temporada', tps, temporada, id='f-temporada') }}
+  {% set opts = [] %}{% for st in setores %}{% set _ = opts.append((st.id, st.nome)) %}{% endfor %}
+  {{ ui.select('setor_id', 'Área', opts, setor_id or 0, empty='Todas', empty_value=0, id='f-area-r') }}
+  <noscript>{{ ui.button('Filtrar', style='secondary') }}</noscript>
+</form>
+
+<section class="df-rank" aria-labelledby="ind-t" data-tabs>
+  <header class="df-rank-head">
+    <span class="df-rank-trophy">{{ ui.icon('trophy-fill') }}</span>
+    <div><h2 id="ind-t">Classificação do mês</h2><small>{{ tp.nome if tp else '' }}{% if tp and not tp.fim %} · temporada atual{% endif %}</small></div>
+  </header>
+  <div class="df-segment" role="tablist" aria-label="Tipo de classificação">
+    <button type="button" role="tab" id="t-ind" aria-controls="p-ind" aria-selected="true">Individual</button>
+    <button type="button" role="tab" id="t-eq" aria-controls="p-eq" aria-selected="false">Equipe</button>
+  </div>
+  <div id="p-ind" role="tabpanel" aria-labelledby="t-ind" tabindex="0">
+    <ol class="df-rank-list" aria-label="Ranking individual">
+    {% for r in individual %}
+      <li{% if r.id == u.id %} class="df-me" aria-current="true"{% endif %}>
+        <span class="df-rank-pos">{% if loop.index <= 3 %}<span class="df-medal" aria-label="{{ loop.index }}º lugar">{{ ui.icon('medal-fill') }}</span>{% else %}{{ loop.index }}{% endif %}</span>
+        {{ ui.avatar(r.nome, 'sm') }}
+        <span class="df-rank-name"><b>{{ r.nome }}</b><small>{{ r.equipe or 'Gestão' }}{% set ms = medalhas[r.id] %}{% if ms %} · {{ ms|length }} medalha{{ 's' if ms|length > 1 }}{% endif %}</small></span>
+        <span class="df-rank-pts df-mono">{{ r.pontos }}{% if r.provisorios %} · +{{ r.provisorios }} a confirmar{% endif %}</span>
+      </li>
+    {% else %}<li><small>Sem pontuação nesta temporada.</small></li>{% endfor %}
+    </ol>
+  </div>
+  <div id="p-eq" role="tabpanel" aria-labelledby="t-eq" tabindex="0" hidden>
+    <ol class="df-rank-list" aria-label="Ranking por equipe">
+    {% for e in equipes %}
+      <li><span class="df-rank-pos">{% if loop.index <= 3 %}<span class="df-medal" aria-label="{{ loop.index }}º lugar">{{ ui.icon('medal-fill') }}</span>{% else %}{{ loop.index }}{% endif %}</span>
+        <span class="df-rank-name"><b>{{ e.nome }}</b><small>{{ e.setor }}</small></span><span class="df-rank-pts df-mono">{{ e.pontos }}</span></li>
+    {% else %}<li><small>Sem equipes pontuando.</small></li>{% endfor %}
+    </ol>
+  </div>
+</section>
+{% endblock %}

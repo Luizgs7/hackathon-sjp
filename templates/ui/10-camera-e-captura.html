@@ -1,0 +1,11 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro capture_button(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Capture Button', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro camera(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Camera', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro camera_preview(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Camera Preview', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

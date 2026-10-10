@@ -1,0 +1,32 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro badge(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Badge', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro list_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('List Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro cell(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Cell', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro table(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Table', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro divider(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Divider', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro stat_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Stat Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro stat_bar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Stat Bar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro stat_tile(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Stat Tile', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

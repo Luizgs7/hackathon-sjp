@@ -1,0 +1,26 @@
+{% import "df/_ui.html" as ui %}
+{% if analise and analise.status == 'gerando' %}
+<div hx-get="/gestor/metricas/analise" hx-trigger="every 3s" hx-target="#analise" hx-swap="innerHTML" aria-busy="true">
+  <div class="df-skeleton-group" aria-label="Gerando análise"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
+  <p class="df-muted" role="status">Analisando a recorrência de chamados dos últimos {{ analise.dias }} dias por secretaria e tipo… (pode levar até 1 minuto)</p>
+</div>
+{% elif analise and analise.acoes is defined %}
+<div class="df-stack">
+  <p>{{ ui.fonte(analise.fonte) }} <small>Gerada em {{ analise.gerada_em|datahora }} · últimos {{ analise.dias }} dias</small></p>
+  <p><b>Diagnóstico:</b> {{ analise.resumo }}</p>
+  <div class="df-list">
+  {% for a in analise.acoes %}
+    <article class="df-item-card">
+      <div class="df-item-top"><span class="df-badge">{{ a.secretaria }}</span><span class="df-badge">impacto {{ a.impacto|default('médio') }}</span></div>
+      <h3>{{ a.tema }}</h3>
+      <small><b>Formato:</b> {{ a.formato }} · <b>Público:</b> {{ a.publico }}</small>
+      <small><b>Evidência:</b> {{ a.evidencia }}</small>
+      <small>{{ a.justificativa }}</small>
+      {% if a.chamados_evitaveis_mes %}<p>≈ <b>{{ a.chamados_evitaveis_mes|dec if a.chamados_evitaveis_mes is number else a.chamados_evitaveis_mes }}</b> chamados/mês evitáveis <small>(estimativa)</small></p>{% endif %}
+    </article>
+  {% endfor %}
+  </div>
+</div>
+{% else %}
+<p class="df-muted">Nenhuma análise gerada ainda. Clique em <b>Gerar análise</b> para a IA propor ações de capacitação a partir dos dados acima.</p>
+{% endif %}

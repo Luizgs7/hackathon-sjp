@@ -1,0 +1,32 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro map_button(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Map Button', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro map_pill(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Map Pill', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro map_controls(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Map Controls', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro map_marker(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Map Marker', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro pin_tooltip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Pin Tooltip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro route_line(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Route Line', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro area_overlay(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Area Overlay', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro address_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Address Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro location_sheet(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Location Sheet', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro map_canvas(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Map Canvas', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

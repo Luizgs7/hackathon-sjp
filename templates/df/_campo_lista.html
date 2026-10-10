@@ -1,0 +1,42 @@
+{% import "df/_ui.html" as ui %}
+{% set pendentes = tarefas|selectattr('status', 'equalto', 'encaminhado')|list %}
+{% set andamento = tarefas|rejectattr('status', 'equalto', 'encaminhado')|list %}
+<div data-ultima="{{ ultima }}"></div>
+<div class="df-stack">
+  <div id="ctx-progresso" hx-swap-oob="true" class="df-cols-3 df-wide-only">
+    <div class="df-score df-score-pts"><small>PONTOS</small><b>{{ ui.icon('lightning-fill') }}{{ pts.d }}</b></div>
+    <div class="df-score df-score-pos"><small>NÍVEL</small><b>{{ nivel }}</b></div>
+    <div class="df-score df-score-med"><small>MEDALHAS</small><b>{{ ui.icon('medal-fill') }}{{ medalhas|length }}</b></div>
+  </div>
+  <section class="df-stats df-narrow-only" aria-label="Seu progresso">
+    <div class="df-stat-tile"><small>Pontos na temporada</small><b>{{ pts.d }}</b>{% if pts.p %}<small>+{{ pts.p }} a confirmar</small>{% endif %}</div>
+    <div class="df-stat-tile"><small>Nível</small><b>{{ nivel }}</b></div>
+    <div class="df-stat-tile"><small>Medalhas</small><b>{{ medalhas|length }}</b></div>
+  </section>
+  {% if medalhas %}<div class="df-strip" aria-label="Medalhas conquistadas">{% for i, n in medalhas %}<span class="df-badge">{{ ui.icon('medal-fill') }}{{ n }}</span>{% endfor %}</div>{% endif %}
+
+  <div data-tabs data-tabs-key="campo">
+    <div class="df-tablist df-tablist-fill" role="tablist" aria-label="Minhas missões">
+      <button type="button" role="tab" id="t-pend" aria-controls="p-pend" aria-selected="true">Pendentes <span class="df-badge">{{ pendentes|length }}</span></button>
+      <button type="button" role="tab" id="t-and" aria-controls="p-and" aria-selected="false">Em andamento <span class="df-badge">{{ andamento|length }}</span></button>
+      <button type="button" role="tab" id="t-conc" aria-controls="p-conc" aria-selected="false">Concluídas <span class="df-badge">{{ feitas|length if feitas else 0 }}</span></button>
+    </div>
+    <div id="p-pend" role="tabpanel" aria-labelledby="t-pend" tabindex="0"><div class="df-list">
+    {% for t in pendentes %}
+      <a class="df-mission df-new" href="/campo/{{ t.id }}"><span class="df-mission-ico">{{ ui.icon('list-checks') }}</span>
+        <span class="df-mission-body"><h3>{{ t.titulo }}</h3><span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local }}</span>{{ ui.prio(t.prioridade) }}</span></span><span class="df-radio" aria-hidden="true"></span></a>
+    {% else %}{{ ui.empty('Nenhuma missão nova. Aguarde novas missões.', 'shield-check') }}{% endfor %}
+    </div></div>
+    <div id="p-and" role="tabpanel" aria-labelledby="t-and" tabindex="0" hidden><div class="df-list">
+    {% for t in andamento %}
+      <a class="df-mission" href="/campo/{{ t.id }}"><span class="df-mission-ico">{{ ui.icon('wrench') }}</span>
+        <span class="df-mission-body"><h3>{{ t.titulo }}</h3><span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local }}</span>{{ ui.prio(t.prioridade) }}{{ ui.status(t.status) }}</span></span><span class="df-radio" aria-hidden="true"></span></a>
+    {% else %}{{ ui.empty('Nenhuma missão em andamento.', 'wrench') }}{% endfor %}
+    </div></div>
+    <div id="p-conc" role="tabpanel" aria-labelledby="t-conc" tabindex="0" hidden><div class="df-list">
+    {% for t in feitas %}
+      <div class="df-mission"><span class="df-mission-ico">{{ ui.icon('trophy-fill') }}</span><span class="df-mission-body"><h3>#{{ t.id }} {{ t.titulo }}</h3><span class="df-stars" aria-label="{{ t.nota or 0 }} de 5 estrelas">{{ '★' * (t.nota or 0) }}</span></span></div>
+    {% else %}{{ ui.empty('Nenhuma missão concluída ainda.', 'trophy-fill') }}{% endfor %}
+    </div></div>
+  </div>
+</div>

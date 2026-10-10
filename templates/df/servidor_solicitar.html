@@ -1,0 +1,45 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'publico' %}
+{% set ativo = 'solicitar' %}
+{% set has_list = true %}
+{% block title %}Abrir solicitação{% endblock %}
+{% block list_label %}Minhas solicitações{% endblock %}
+{% block list_col %}{{ ui.lista_solicitacoes(minhas) }}{% endblock %}
+{% block main %}
+<div class="df-page-head">
+  <div>
+    <p><a class="df-link" href="/servidor">← Voltar ao assistente</a></p>
+    <h1>{{ 'Revisar solicitação' if via_ia else 'Solicitação de atendimento' }}</h1>
+  </div>
+</div>
+
+{% if via_ia %}
+  {% call ui.notice('', 'info', 'sparkle') %}Preenchi os campos com base na nossa conversa{{ ' (modo simplificado)' if fonte == 'regras' }}. Revise, complete seus dados e envie. A conversa também será enviada ao atendente.{% endcall %}
+{% else %}
+  {% call ui.notice('', 'info', 'info') %}Antes de enviar, que tal <a href="/servidor">tentar o assistente virtual</a>? Muitos problemas se resolvem na hora.{% endcall %}
+{% endif %}
+
+<section aria-labelledby="sol-t">
+  <h2 id="sol-t" class="df-sr">Dados da solicitação</h2>
+  <form class="df-form" method="post" action="/servidor/solicitar" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+    <input type="hidden" name="via_ia" value="{{ 1 if via_ia else 0 }}">
+    {{ ui.campos_solicitante(contato='', nome_campo='nome') }}
+    <div class="df-form-row">
+      {{ ui.field('local', 'Local (unidade, sala, andar)', r.local or '', required=True, placeholder='Ex.: UBS Vila Nova – Sala de vacinação') }}
+      {{ ui.field('titulo', 'Assunto', r.titulo or '', required=True, maxlength=80, placeholder='Resuma em poucas palavras') }}
+    </div>
+    <div class="df-field-counter">
+      {{ ui.textarea('descricao', 'O que está acontecendo?', r.descricao or '', rows=5, required=True, helper='Quanto mais detalhe, mais rápido o atendimento.', maxlength=500, attrs={'data-counter': '#cont-desc'}) }}
+      <small id="cont-desc" class="df-counter" aria-hidden="true">0/500</small>
+    </div>
+    {% set opts = [] %}{% for st in setores %}{% set _ = opts.append((st.id, st.nome)) %}{% endfor %}
+    <div class="df-form-row">
+      {{ ui.field('tentativas', 'O que você já tentou?', r.tentativas or '', placeholder='Ex.: reiniciei o computador') }}
+      {{ ui.select('setor_id', 'Área de atendimento', opts, r.setor_id, required=True) }}
+    </div>
+    <div class="df-form-actions df-actions-end">{{ ui.button('Enviar solicitação') }}</div>
+    <small>Pela regra municipal, o chamado é registrado por um atendente, que confere estas informações e pode ligar para você.</small>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,9 @@
+@layer theme, components, utilities;
+@import "tailwindcss/theme.css" layer(theme) prefix(df);
+@import "./tokens.generated.css";
+@import "./components.css" layer(components);
+.df-ui {
+  @import "tailwindcss/utilities.css" layer(utilities) prefix(df);
+}
+@source "../templates/ui";
+@source "../static/ui/library.js";

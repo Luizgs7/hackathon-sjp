@@ -16,8 +16,8 @@
 {%- endmacro %}
 
 {% macro fonte(f) -%}
-{% if f == 'llm' %}<span class="selo" title="Modelo {{ LLM_MODEL }} via endpoint externo de testes">{{ i('sparkles') }}IA (LLM)</span>
-{% elif f == 'regras' %}<span class="selo selo-regras" title="LLM indisponível — fallback determinístico">{{ i('settings') }}sugestão por regras</span>{% endif %}
+{% if f in ('jev', 'llm') %}<span class="selo" title="Sugestão de IA para conferência humana">{{ i('sparkles') }}IA</span>
+{% elif f == 'regras' %}<span class="selo selo-regras" title="Orientação pelas regras locais">{{ i('settings') }}sugestão por regras</span>{% endif %}
 {%- endmacro %}
 
 {% macro nav_painel(u) -%}

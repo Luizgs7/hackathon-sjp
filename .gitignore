@@ -19,5 +19,11 @@ uploads/
 __pycache__/
 *.py[cod]
 .venv/
+.tools/
+output/ui-catalog/
+output/ui-qa/
 venv/
 *.db.bak*
+
+# Capturas de revisao visual (locais)
+capturas/

@@ -1,0 +1,35 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro input(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Input', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro select(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Select', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro select_option(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Select Option', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro select_menu(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Select Menu', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro search_field(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Search Field', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro code_input(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Code Input', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro day_cell(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Day Cell', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro date_picker(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Date Picker', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro time_field(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Time Field', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro text_area(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Text Area', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro json_editor(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('JSON Editor', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

@@ -1,0 +1,32 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro tab(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Tab', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro tabs(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Tabs', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro nav_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Nav Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro bottom_navigation(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Bottom Navigation', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro top_app_bar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Top App Bar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro page_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Page Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro pagination(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Pagination', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro tab_item(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Tab Item', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro navigation_bar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Navigation Bar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro tab_bar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Tab Bar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

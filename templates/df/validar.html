@@ -1,0 +1,60 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'publico' %}
+{% set ativo = 'chamados' %}
+{% set has_context = t.status in ('executado', 'concluido', 'reaberto') %}
+{% set has_list = (minhas|length > 0) %}
+{% block list_label %}Minhas solicitações{% endblock %}
+{% block list_col %}{{ ui.lista_solicitacoes(minhas) }}{% endblock %}
+{% block title %}Confirme seu atendimento{% endblock %}
+{% block context_label %}Evidência{% endblock %}
+{% block context_col %}
+<section class="df-card"><h2 style="font-size:16px">Evidência do atendimento</h2>
+  {% if t.evidencia %}<img class="df-img" src="/uploads/{{ t.evidencia }}" alt="Foto do serviço realizado">{% else %}{{ ui.empty('Sem foto anexada pelo atendimento.', 'image') }}{% endif %}</section>
+{% endblock %}
+{% block main %}
+<div class="df-page-head">
+  <div>
+    <h1>{{ 'Confirmar resolução' if t.status == 'executado' else 'Seu chamado' }} <span style="vertical-align:middle">{{ ui.status(t.status) }}</span></h1>
+    <p><b style="color:var(--text)">{{ t.external_id or ('#' ~ t.id) }}</b> · {{ t.titulo }}</p>
+  </div>
+</div>
+
+<div class="df-stack" style="max-width:720px">
+{% if t.status == 'executado' %}
+  <section class="df-card" aria-labelledby="exec-t">
+    <h2 id="exec-t">O que foi feito</h2>
+    <p class="df-muted"><span class="df-prewrap">{{ t.resumo_ia or t.relato }}</span></p>
+    <small>{% if t.resolvido_atendimento_por %}{{ t.resolvido_atendimento_por }} (atendimento){% elif executor %}{{ executor.nome }}{% endif %}</small>
+  </section>
+  <form class="df-card df-form" method="post" action="" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form aria-labelledby="resp-t">
+    <h2 id="resp-t">O problema foi resolvido?</h2>
+    <fieldset class="df-choice-cards">
+      <legend class="df-sr">Resultado</legend>
+      <label class="df-choice-card"><input type="radio" name="resultado" value="resolvido" required><span><b>Resolvido</b><small>O serviço funcionou</small></span></label>
+      <label class="df-choice-card"><input type="radio" name="resultado" value="pendente"><span><b>Ainda com problema</b><small>Preciso de novo atendimento</small></span></label>
+    </fieldset>
+    <fieldset class="df-rating">
+      <legend>Como foi o atendimento? <span class="df-req" aria-hidden="true">*</span></legend>
+      {% for n in [1, 2, 3, 4, 5] %}
+      <label for="nota{{ n }}"><input id="nota{{ n }}" type="radio" name="nota" value="{{ n }}" {{ 'required' if n == 1 }} {{ 'checked' if n == 5 }}><span class="df-star-off">{{ ui.icon('star') }}</span><span class="df-star-on">{{ ui.icon('star-fill') }}</span><span class="df-sr">{{ n }} de 5 estrelas</span></label>
+      {% endfor %}
+    </fieldset>
+    <div class="df-field-counter">{{ ui.textarea('comentario', 'Comentário (opcional)', '', rows=4, maxlength=500, helper='Obrigatório se ainda houver problema.', placeholder='Conte como foi o atendimento.', id='comentario', attrs={'data-counter': '#cont-com'}) }}<small id="cont-com" class="df-counter" aria-hidden="true">0/500</small></div>
+    <div class="df-form-actions df-actions-end">{{ ui.button('Ver todos os meus chamados', href='/meus-chamados', style='secondary') }}{{ ui.button('Enviar confirmação') }}</div>
+  </form>
+{% elif t.status == 'concluido' %}
+  {% call ui.notice('', 'ok', 'check-circle') %}<b>Obrigado!</b> Você confirmou a resolução e avaliou com <span class="df-stars">{{ '★' * (t.nota or 0) }}</span>.{% endcall %}
+{% elif t.status == 'reaberto' %}
+  {% call ui.notice('', 'warn', 'arrows-clockwise') %}<b>Recebemos sua pendência.</b> O atendimento foi reaberto e a equipe vai retomar. Você receberá um novo link ao final.{% endcall %}
+{% elif t.status == 'cancelado' %}
+  {% call ui.notice('', 'info', 'prohibit') %}<b>Chamado cancelado.</b> Se o problema continuar, abra uma nova solicitação.{% endcall %}
+{% else %}
+  {% call ui.notice('', 'info', 'clock') %}Seu pedido está em andamento. Você receberá um link para confirmar quando o serviço for concluído.{% endcall %}
+{% endif %}
+
+<details class="df-details"><summary>Acompanhamento</summary>
+  <div class="df-details-body"><ol class="df-timeline">{% for e in linha %}<li><span class="df-dot" aria-hidden="true"></span><small>{{ e.criado_em|datahora }}</small> {{ ui.status(e.para) }}</li>{% endfor %}</ol></div>
+</details>
+</div>
+{% endblock %}

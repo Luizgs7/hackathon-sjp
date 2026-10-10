@@ -1,0 +1,18 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = perfil|default('publico') %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block main %}
+<div class="df-error-page">
+  <section class="df-card df-error-state" aria-labelledby="erro-titulo">
+    {{ ui.icon(icone) }}
+    <h1 id="erro-titulo">{{ titulo }}</h1>
+    <p>{{ detalhe }}</p>
+    <div class="df-actions" style="justify-content:center">
+      <a class="df-button df-primary" href="{{ destino }}"><span class="df-button-content">{{ destino_rotulo }}</span></a>
+      <a class="df-button df-secondary" href="javascript:history.back()"><span class="df-button-content">Voltar</span></a>
+    </div>
+    <small>Código {{ codigo }}</small>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro points_chip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Points Chip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro achievement_badge(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Achievement Badge', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro reward_screen(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Reward Screen', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro quest_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Quest Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro challenge_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Challenge Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro habit_steps(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Habit Steps', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro leaderboard_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Leaderboard Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro leaderboard(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Leaderboard', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

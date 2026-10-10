@@ -14,9 +14,10 @@ from urllib.parse import quote
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Form, Header, HTTPException
+from fastapi import FastAPI, Form, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 BASE = Path(__file__).parent
 load_dotenv(BASE / ".env")
@@ -27,6 +28,8 @@ ESTADO = {"online": True}
 
 app = FastAPI(title="SisChamados Legado (simulado)")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
+templates = Jinja2Templates(directory=BASE / "templates")
+templates.env.filters["datahora"] = lambda s: f"{s[8:10]}/{s[5:7]} {s[11:16]}" if s else ""
 
 
 @contextmanager
@@ -116,60 +119,16 @@ def receber_atualizacao(dados: dict, x_api_key: str = Header(...)):
     return {"ok": True}
 
 
-CSS = """
-body{font-family:Verdana,Arial,sans-serif;font-size:13px;background:#d4d0c8;margin:0;color:#000}
-.barra{background:linear-gradient(#0a246a,#3a6ea5);color:#fff;padding:6px 10px;font-weight:bold}
-.conteudo{padding:10px;max-width:1100px}
-fieldset{background:#ece9d8;border:2px groove #fff;margin-bottom:10px}
-table{border-collapse:collapse;width:100%;background:#fff}td,th{border:1px solid #808080;padding:4px;vertical-align:top}
-th{background:#ece9d8;text-align:left}input,textarea{font-family:inherit;font-size:13px}
-.msg{background:#ffffe1;border:1px solid #000;padding:6px;margin-bottom:8px}
-.off{background:#c00;color:#fff;padding:6px;font-weight:bold}.on{background:#080;color:#fff;padding:6px;font-weight:bold}
-.hist{font-size:11px;color:#333}button{font-family:inherit}
-"""
-
-
 @app.get("/", response_class=HTMLResponse)
-def inicio(msg: str = ""):
-    return f"""<!doctype html><html lang=pt-BR><head><meta charset=utf-8><title>SisChamados Legado</title>
-<style>{CSS}</style><script src="/static/htmx.min.js"></script></head><body>
-<div class=barra>SisChamados v2.3 — Help Desk / Prefeitura Municipal (SISTEMA LEGADO SIMULADO)</div>
-<div class=conteudo>
-{f'<div class=msg>{html.escape(msg)}</div>' if msg else ''}
-<form method=post action=/alternar style="margin-bottom:8px">
- <span class="{'on' if ESTADO['online'] else 'off'}">Recebimento de atualizações: {'ONLINE' if ESTADO['online'] else 'FORA DO AR (simulado)'}</span>
- <button>{'Simular sistema fora do ar' if ESTADO['online'] else 'Religar sistema'}</button>
-</form>
-<fieldset><legend><b>Registrar chamado (atendente)</b></legend>
-<form method=post action=/chamados>
-<table><tr><td>Solicitante:</td><td><input name=solicitante size=30 required value="Ana Souza"></td>
-<td>Telefone:</td><td><input name=telefone size=15 value="(41) 3381-0000 r.214"></td></tr>
-<tr><td>Unidade/Local:</td><td colspan=3><input name=unidade size=70 required value="UBS Vila Nova – Sala de vacinação"></td></tr>
-<tr><td>Descrição:</td><td colspan=3><textarea name=descricao rows=2 cols=80 required>Ponto de rede da sala de vacinação não funciona. Computador sem acesso ao sistema de vacinação.</textarea></td></tr>
-<tr><td>Atendente:</td><td><input name=atendente value="Carlos Lima"></td><td colspan=2><button><b>Gravar chamado</b></button></td></tr>
-</table></form></fieldset>
-<fieldset><legend><b>Chamados</b> (atualiza a cada 3 s)</legend>
-<div hx-get=/lista hx-trigger="load, every 3s"></div></fieldset>
-<p class=hist>Integração: envia para {PLATAFORMA_URL}/api/integracao/legado/tarefas · recebe em /api/atualizacoes</p>
-</div></body></html>"""
+def inicio(request: Request, msg: str = ""):
+    return templates.TemplateResponse(request, "df/legado.html", {"msg": msg, "online": ESTADO["online"], "plataforma": PLATAFORMA_URL})
 
 
 @app.get("/lista", response_class=HTMLResponse)
-def lista():
+def lista(request: Request):
     with db() as c:
         chamados = c.execute("SELECT * FROM chamados ORDER BY id DESC").fetchall()
         atual = {}
         for a in c.execute("SELECT * FROM atualizacoes ORDER BY sequencia"):
             atual.setdefault(a["numero"], []).append(a)
-    linhas = []
-    for ch in chamados:
-        hist = "".join(f"<div>[{a['recebido_em']}] seq {a['sequencia']} · <b>{html.escape(a['situacao'])}</b> — "
-                       f"{html.escape(a['texto'] or '')} ({html.escape(a['responsavel'] or '')})</div>"
-                       for a in atual.get(ch["numero"], []))
-        linhas.append(
-            f"<tr><td><b>{ch['numero']}</b><br>{ch['criado_em']}</td><td>{html.escape(ch['solicitante'])}<br>"
-            f"{html.escape(ch['unidade'])}</td><td>{html.escape(ch['descricao'])}<div class=hist>{hist or 'Sem atualizações.'}</div></td>"
-            f"<td><b>{html.escape(ch['situacao'])}</b><br>{'Tarefa #' + str(ch['tarefa_id']) if ch['enviado'] else 'NÃO ENVIADO'}</td>"
-            f"<td><form method=post action='/chamados/{ch['numero']}/reenviar'><button>Reenviar</button></form></td></tr>")
-    return ("<table><tr><th>Nº</th><th>Solicitante/Local</th><th>Descrição / histórico recebido da plataforma</th>"
-            "<th>Situação</th><th></th></tr>" + ("".join(linhas) or "<tr><td colspan=5>Nenhum chamado.</td></tr>") + "</table>")
+    return templates.TemplateResponse(request, "df/_legado_lista.html", {"chamados": chamados, "atualizacoes": atual})

@@ -1,0 +1,20 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro attachment_thumb(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Attachment Thumb', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro image_tile(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Image Tile', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro image_grid(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Image Grid', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro image_message(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Image Message', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro audio_player(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Audio Player', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro image_viewer(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Image Viewer', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

@@ -1,0 +1,81 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'publico' %}
+{% set ativo = 'assistente' %}
+{% set has_list = true %}
+{% set has_context = true %}
+{% set flush = true %}
+{% block title %}Assistente Virtual{% endblock %}
+{% block list_label %}Minhas solicitações{% endblock %}
+{% block context_label %}Sobre a IA{% endblock %}
+
+{% block list_col %}{{ ui.lista_solicitacoes(minhas, confirmar=conversa|length > 0) }}{% endblock %}
+
+{% block main %}
+<section class="df-chat-page" aria-labelledby="chat-titulo">
+  <header class="df-chat-head">
+    <h1 id="chat-titulo">Assistente Virtual</h1>
+  </header>
+
+  <div id="conversa" class="df-chat-log" role="log" aria-live="polite" aria-label="Conversa com o assistente">{% include "df/_servidor_chat.html" %}</div>
+
+  <div class="df-chat-dock">
+    {% if not conversa %}
+    <div class="df-suggest" id="chips" role="group" aria-label="Sugestões para começar">
+      {% for s in ['Estou sem internet no computador', 'A impressora não imprime', 'Esqueci minha senha do sistema', 'O Wi-fi não conecta', 'Meu ramal está sem linha', 'O sistema está fora do ar'] %}
+      <button type="button" class="df-chip" data-suggestion hx-post="/servidor/chat" hx-vals='{"pergunta": "{{ s }}"}' hx-target="#conversa" hx-indicator="#digitando">{{ s }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form id="form-chat" class="df-composer-card" hx-post="/servidor/chat" hx-target="#conversa" hx-indicator="#digitando" autocomplete="off">
+      <label class="df-sr" for="pergunta">Escreva sua mensagem</label>
+      <textarea id="pergunta" name="pergunta" rows="2" required placeholder="Escreva sua mensagem. Ex.: o computador da recepção está sem internet desde cedo"></textarea>
+      <div class="df-composer-foot"><small>Nunca informe senhas. As respostas da IA podem conter erros; em caso de risco, afaste as pessoas e abra a solicitação.</small>{{ ui.button('Enviar', size='small') }}</div>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block context_col %}
+{{ ui.sobre_ia() }}
+<section class="df-card">
+  <h2 style="font-size:16px">Como funciona</h2>
+  <ol class="df-stack-sm" style="margin:0;padding-left:20px;font-size:14px">
+    <li>Converse com o assistente e tente as orientações.</li>
+    <li>Resolveu? Clique em <b>Resolvido</b>. Nenhum chamado é necessário.</li>
+    <li>Não resolveu? <b>Abrir solicitação</b> gera o pedido com o resumo da conversa.</li>
+    <li>Um atendente confere e registra o chamado, e você acompanha pelo protocolo.</li>
+  </ol>
+  <small>Urgências também pelo telefone do Help Desk: (41) 3381-0000.</small>
+  {{ ui.button('Abrir solicitação sem o assistente', href='/servidor/solicitar', style='secondary', glyph='note-pencil') }}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const mostrar = texto => {
+    if (!texto || !texto.trim()) return;
+    const conv = document.getElementById('conversa');
+    conv.querySelector('.df-vazio')?.remove();
+    document.getElementById('chips')?.remove();
+    const d = document.createElement('div');
+    d.className = 'df-bubble me'; d.textContent = texto;
+    conv.insertBefore(d, document.getElementById('digitando'));
+    conv.scrollTop = conv.scrollHeight;
+  };
+  const form = document.getElementById('form-chat');
+  document.body.addEventListener('htmx:beforeRequest', e => {
+    const el = e.detail.elt;
+    if (el === form) mostrar(form.pergunta.value);
+    else if (el.matches && el.matches('[data-suggestion]')) mostrar(el.textContent);
+  });
+  document.body.addEventListener('htmx:afterRequest', e => {
+    if (e.detail.elt === form && e.detail.successful) { form.reset(); form.pergunta.focus(); }
+  });
+  form.pergunta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (form.checkValidity()) htmx.trigger(form, 'submit'); else form.reportValidity(); }
+  });
+})();
+</script>
+{% endblock %}

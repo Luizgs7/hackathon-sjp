@@ -1,0 +1,17 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro avatar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Avatar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro profile_header(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Profile Header', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro status_pill(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Status Pill', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro assistant_avatar(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Assistant Avatar', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro hint_banner(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Hint Banner', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

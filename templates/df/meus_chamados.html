@@ -1,0 +1,93 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'publico' %}
+{% set ativo = 'chamados' %}
+{% block title %}Meus chamados{% endblock %}
+{% block main %}
+<div hx-get="/meus-chamados/{{ token }}" hx-trigger="every 10s" hx-select="#meus" hx-target="#meus" hx-swap="outerHTML"></div>
+<div id="meus" class="df-stack">
+  <div class="df-page-head">
+    <div>
+      <h1>Meus chamados</h1>
+      <p><b style="color:var(--text)">{% if perfil %}{{ perfil.solicitante or perfil.nome }}{{ ' · ' ~ perfil.secretaria if perfil.secretaria }}{% endif %}</b> · {{ email }}</p>
+    </div>
+    <div class="df-actions">
+      {{ ui.button('Novo chamado', href='/servidor', style='secondary', size='small') }}
+      {{ ui.button('Sair', href='/meus-chamados-sair', style='ghost', size='small') }}
+    </div>
+  </div>
+
+  <section class="df-kpis df-kpis-4" aria-label="Resumo">
+    <div class="df-stat-tile"><small>Em aberto</small><b>{{ abertos|length }}</b></div>
+    <div class="df-stat-tile"><small>Aguardando sua confirmação</small><b>{{ aguardando|length }}</b></div>
+    <div class="df-stat-tile"><small>Concluídos</small><b>{{ historico|selectattr('status', 'equalto', 'concluido')|list|length }}</b></div>
+    <div class="df-stat-tile"><small>Total de chamados</small><b>{{ abertos|length + historico|length }}</b></div>
+  </section>
+
+  {% if aguardando %}
+  {% call ui.notice('', 'info', 'info') %}<b>{{ aguardando|length }} chamado{{ 's' if aguardando|length > 1 }} aguarda{{ 'm' if aguardando|length > 1 }} a sua confirmação.</b> O técnico informou que o serviço foi feito: confirme se resolveu e avalie o atendimento.{% endcall %}
+  {% endif %}
+
+  {% if solicitacoes %}
+  <section class="df-stack" aria-labelledby="sol-h">
+    <h2 id="sol-h">Solicitações enviadas</h2>
+    <div class="df-list">
+    {% for s in solicitacoes %}
+      <a class="df-item-card" href="/servidor/acompanhar/{{ s.token }}">
+        <div class="df-item-top"><span class="df-code">{{ s.protocolo }}</span>
+          {% if s.status == 'aguardando' %}<span class="df-st df-st-novo">{{ ui.icon('clock') }}Aguardando registro pelo atendente</span>
+          {% else %}<span class="df-st df-st-cancelado">{{ ui.icon('prohibit') }}Encerrada sem chamado</span>{% endif %}</div>
+        <h3>{{ s.titulo }}</h3>
+        <span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ s.local }}</span><span>enviada em {{ s.criado_em|datahora }}</span></span>
+      </a>
+    {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="df-stack" aria-labelledby="ab-h">
+    <h2 id="ab-h">Em aberto</h2>
+    {% if abertos %}
+    <div class="df-open-grid">
+    {% for t in abertos %}{% set passo = passo_do_status[STATUS_OFICIAL[t.status]] %}
+      <article class="df-open-card">
+        <div class="df-open-inner">
+          <h3>{{ t.external_id or ('#' ~ t.id) }} · {{ t.titulo }}</h3>
+          <p>{% if t.status == 'devolvido' %}<b>Em revisão</b>: a equipe está revisando o chamado e pode entrar em contato.
+          {% elif t.status == 'reaberto' %}<b>Reaberto</b>: recebemos a sua pendência e o atendimento será retomado.
+          {% elif t.status == 'novo' %}<b>Registrado</b>: a equipe vai encaminhá-lo para a área responsável.
+          {% elif t.status == 'impedido' %}<b>Impedido</b>: aguarda uma providência (material, acesso ou apoio de outra equipe).
+          {% elif t.status == 'executado' %}<b>Executado</b>: {{ 'o atendimento' if t.resolvido_atendimento_por else (t.executor.split()[0] if t.executor else 'a equipe') }} informou que o serviço foi feito. Confirme se resolveu.
+          {% else %}<b>{{ passos[passo] }}</b>{% if t.executor %}. Técnico responsável: <b>{{ t.executor }}</b>{% endif %}. Última atualização em {{ (t.ultima_mudanca or t.atualizado_em)|datahora }}.{% endif %}</p>
+        </div>
+        <div class="df-seg" role="img" aria-label="Etapa {{ passo + 1 }} de {{ passos|length }}: {{ passos[passo] }}">{% for nome in passos %}<span class="{{ 'feito' if loop.index0 < passo }}{{ ' atual' if loop.index0 == passo }}"></span>{% endfor %}</div>
+        <b class="df-seg-label">{{ passos[passo] }}</b>
+        {{ ui.button('Confirmar e avaliar' if t.status == 'executado' else 'Ver detalhes', href='/validar/' ~ t.token, style='primary' if t.status == 'executado' else 'secondary', cls='df-wide') }}
+      </article>
+    {% endfor %}
+    </div>
+    {% else %}
+    {{ ui.empty('Nenhum chamado em aberto.', 'thumbs-up') }}
+    {% endif %}
+  </section>
+
+  <section class="df-stack" aria-labelledby="hi-h">
+    <h2 id="hi-h">Histórico</h2>
+    {% if historico %}
+    <div class="df-table-scroll" tabindex="0" role="region" aria-label="Histórico de chamados">
+      <table class="df-table">
+        <thead><tr><th scope="col">Protocolo</th><th scope="col">Chamado</th><th scope="col" class="num">Situação</th><th scope="col">Sua avaliação</th></tr></thead>
+        <tbody>{% for t in historico %}
+          <tr><td><a class="df-link" href="/validar/{{ t.token }}">{{ t.external_id or ('#' ~ t.id) }}</a></td>
+            <td>{{ t.titulo }}</td><td class="num">{{ ui.status(t.status) }}</td>
+            <td>{% if t.nota %}<span class="df-stars" role="img" aria-label="{{ t.nota }} de 5 estrelas">{{ '★' * t.nota }}{{ '☆' * (5 - t.nota) }}</span>{% else %}—{% endif %}</td></tr>
+        {% endfor %}</tbody>
+      </table>
+      <p class="df-table-foot"><small>1–{{ historico|length }} de {{ historico|length }}</small></p>
+    </div>
+    {% else %}
+    {{ ui.empty('Nenhum chamado encerrado ainda.', 'tray') }}
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

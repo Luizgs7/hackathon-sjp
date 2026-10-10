@@ -1,0 +1,5 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro rating(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Rating', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

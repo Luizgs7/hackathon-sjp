@@ -1,0 +1,11 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro heat_cell(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Heat Cell', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro task_heatmap(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Task Heatmap', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro task_activity(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Task Activity', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

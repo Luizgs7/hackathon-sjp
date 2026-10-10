@@ -1,0 +1,38 @@
+{# Gerado: wrappers públicos; comportamento compartilhado em _renderer.html. #}
+{% import "ui/_renderer.html" as r with context %}
+{% macro day_chip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Day Chip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro day_strip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Day Strip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro period_header(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Period Header', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro task_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Task Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro empty_slot(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Empty Slot', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro routine_card(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Routine Card', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro subtask_row(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Subtask Row', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro task_editor(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Task Editor', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro plan_suggestion(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Plan Suggestion', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro day_review(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Day Review', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro weekday_chip(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('.Weekday Chip', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}
+{% macro weekday_chips(id, label='Chamado de exemplo', value='', items=[], props={}, disabled=false, error='', helper='', href='#', media='') -%}
+{{ r.component('Weekday Chips', id, label, value, items, props, disabled, error, helper, href, media) }}
+{%- endmacro %}

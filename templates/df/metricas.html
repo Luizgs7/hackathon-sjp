@@ -1,0 +1,129 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'painel' %}
+{% set ativo = 'metricas' %}
+{% block title %}Métricas e capacitação{% endblock %}
+{% block main %}
+<div class="df-page-head">
+  <div>
+    <h1>Métricas e capacitação</h1>
+    <p>Desde {{ mt.inicio }} (semanas de segunda a domingo). Passe o mouse sobre os números e gráficos para ver detalhes.</p>
+  </div>
+  <form class="df-filters" method="get" action="/gestor/metricas" data-autosubmit>
+    {% set per = [] %}{% for d, nome in periodos.items() %}{% set _ = per.append((d, nome)) %}{% endfor %}
+    {{ ui.select('dias', 'Período', per, mt.dias, id='f-periodo') }}
+    {% set opts = [] %}{% for s in setores %}{% set _ = opts.append((s.id, s.nome)) %}{% endfor %}
+    {{ ui.select('setor_id', 'Área responsável', opts, setor_id or 0, empty='Todas as áreas', empty_value=0, id='f-area-m') }}
+    <noscript>{{ ui.button('Filtrar', style='secondary') }}</noscript>
+  </form>
+</div>
+
+<section class="df-kpis df-kpis-wide df-kpis-9" aria-label="Indicadores do período">
+  {{ ui.kpi(mt.abertos, 'abertos', titulo='Chamados abertos no período') }}
+  {{ ui.kpi(mt.resolvidos, 'resolvidos', titulo='Chamados abertos no período com resolução confirmada pela demandante') }}
+  {{ ui.kpi(mt.horas_media|duracao, 'tempo médio de resolução', titulo='Média entre a abertura e a confirmação da demandante') }}
+  {{ ui.kpi((mt.sla|dec(0)) ~ ('%' if mt.sla is not none else ''), 'dentro do SLA', titulo='Resolvidos dentro do SLA da criticidade (tempo líquido entre atribuição e conclusão, sem impedimentos externos)') }}
+  {{ ui.kpi((mt.csat|dec) ~ ('★' if mt.csat else ''), 'satisfação', titulo='Média das notas 1–5 (' ~ mt.n_notas ~ ' avaliações)') }}
+  {{ ui.kpi((mt.reabertura|dec(0)) ~ ('%' if mt.reabertura is not none else ''), 'reabertura', titulo='Resolvidos que precisaram ser reabertos ao menos uma vez') }}
+  {{ ui.kpi((mt.concordancia_ia|dec(0)) ~ ('%' if mt.concordancia_ia is not none else ''), 'criticidade igual à IA', titulo='Criticidade final igual à sugerida pela IA (' ~ mt.ajustes_ia ~ ' ajustados manualmente)') }}
+  {{ ui.kpi((mt.nivel1|dec(0)) ~ ('%' if mt.nivel1 is not none else ''), 'resolvidos no atendimento', titulo='Resolvidos pelo próprio atendimento, sem acionar o time técnico') }}
+  {{ ui.kpi(mt.auto_resolvidos, 'evitados pelo assistente', titulo='Conversas do autoatendimento que o servidor marcou como resolvidas') }}
+</section>
+
+<div class="df-grid-eq">
+  {% set L = mt.linhas %}
+  <section class="df-card" aria-labelledby="g1-t">
+    <header><h2 id="g1-t">Chamados abertos × resolvidos por semana</h2>
+      <div class="df-strip"><span class="df-legend-i"><i style="background:var(--df-brand-semantic-chart-series-1)"></i>Abertos</span><span class="df-legend-i"><i style="background:var(--df-brand-semantic-chart-series-3)"></i>Resolvidos</span></div></header>
+    <svg class="df-svg-chart" viewBox="0 0 {{ L.W }} {{ L.H }}" role="img" aria-label="Linhas semanais de chamados abertos e resolvidos">
+      {% for v, y in L.ticks %}<line class="grade" x1="{{ L.ml }}" x2="{{ L.W - L.mr }}" y1="{{ y }}" y2="{{ y }}"/><text class="eixo" x="{{ L.ml - 6 }}" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>{% endfor %}
+      {% for x in mt.serie %}{% if loop.first or loop.last or loop.index0 % 2 == 0 %}<text class="eixo" x="{{ x.x }}" y="{{ L.H - 8 }}" text-anchor="middle">{{ x.rotulo }}</text>{% endif %}{% endfor %}
+      <polyline class="linha" style="stroke:var(--df-brand-semantic-chart-series-1)" points="{{ L.abertos }}"/>
+      <polyline class="linha" style="stroke:var(--df-brand-semantic-chart-series-3)" points="{{ L.resolvidos }}"/>
+      {% for x in mt.serie %}
+        <circle cx="{{ x.x }}" cy="{{ x.y_ab }}" r="3.5" style="fill:var(--df-brand-semantic-chart-series-1)"><title>Semana de {{ x.rotulo }}: {{ x.abertos }} abertos</title></circle>
+        <circle cx="{{ x.x }}" cy="{{ x.y_res }}" r="3.5" style="fill:var(--df-brand-semantic-chart-series-3)"><title>Semana de {{ x.rotulo }}: {{ x.resolvidos }} resolvidos</title></circle>
+      {% endfor %}
+    </svg>
+    {% set ult = mt.serie[-1] %}
+    <small>Última semana (parcial): {{ ult.abertos }} abertos · {{ ult.resolvidos }} resolvidos. Resolvidos acima de abertos = fila diminuindo.</small>
+  </section>
+
+  {% set C = mt.colunas %}
+  <section class="df-card" aria-labelledby="g2-t">
+    <header><h2 id="g2-t">Tempo médio de resolução por semana (horas)</h2></header>
+    <svg class="df-svg-chart" viewBox="0 0 {{ C.W }} {{ C.H }}" role="img" aria-label="Colunas com o tempo médio de resolução por semana">
+      {% for v, y in C.ticks %}<line class="grade" x1="{{ C.ml }}" x2="{{ C.W - 16 }}" y1="{{ y }}" y2="{{ y }}"/><text class="eixo" x="{{ C.ml - 6 }}" y="{{ y + 4 }}" text-anchor="end">{{ v }}</text>{% endfor %}
+      {% for x in mt.serie %}
+        {% if x.horas %}{% set h = C.base - x.cy %}<path class="col" d="M{{ x.cx }},{{ C.base }} V{{ x.cy + [4, h]|min }} q0,-4 4,-4 h{{ C.larg - 8 }} q4,0 4,4 V{{ C.base }} Z"><title>Semana de {{ x.rotulo }}: {{ x.horas|duracao }} em média ({{ x.resolvidos }} resolvidos)</title></path>{% endif %}
+        {% if loop.first or loop.last or loop.index0 % 2 == 0 %}<text class="eixo" x="{{ x.cx + C.larg / 2 }}" y="{{ C.H - 8 }}" text-anchor="middle">{{ x.rotulo }}</text>{% endif %}
+      {% endfor %}
+    </svg>
+    <small>Da abertura à confirmação da demandante. Média do período: <b>{{ mt.horas_media|duracao }}</b>.</small>
+  </section>
+</div>
+
+<div class="df-grid-eq">
+  <section class="df-card" aria-labelledby="sec-t">
+    <header><h2 id="sec-t">Chamados por secretaria</h2><small>Quem mais demanda atendimento no período</small></header>
+    <div class="df-bars">
+    {% for d in mt.secretarias %}
+      <div class="df-bar-row" title="{{ d.nome }}: {{ d.n }} chamados · tempo médio {{ d.horas_media|duracao }} · satisfação {{ d.csat|dec }}">
+        <div><span>{{ d.nome }}</span><b>{{ d.n }}</b></div>
+        <span class="df-bar-track"><span class="df-bar-fill" style="width:{{ (100 * d.n / mt.max_sec)|round(1) }}%"></span></span>
+      </div>
+    {% else %}<p class="df-muted">Sem chamados no período.</p>{% endfor %}
+    </div>
+  </section>
+
+  <section class="df-card" aria-labelledby="exe-t">
+    <header><h2 id="exe-t">Produtividade do time</h2><small>Missões resolvidas no período e qualidade da entrega</small></header>
+    <div class="df-table-scroll" role="region" aria-label="Produtividade por executor" tabindex="0">
+      <table class="df-table">
+        <thead><tr><th scope="col">Executor</th><th scope="col" class="num">Resolvidas</th><th scope="col" class="num">Tempo médio</th><th scope="col" class="num">Satisfação</th><th scope="col" class="num">Reaberturas</th><th scope="col" class="num">Ativas agora</th></tr></thead>
+        <tbody>{% for d in mt.executores %}
+          <tr><th scope="row"><span class="df-pessoa">{{ ui.avatar(d.nome, 'sm') }}{{ d.nome }}</span></th>
+            <td class="num">{{ d.n }}</td><td class="num">{{ d.horas_media|duracao }}</td><td class="num">{{ d.csat|dec }}{{ '★' if d.csat }}</td><td class="num">{{ d.reab }}</td><td class="num">{{ d.ativos }}</td></tr>
+        {% else %}<tr><td colspan="6"><small>Nenhuma missão resolvida no período.</small></td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<section class="df-card" aria-labelledby="calor-t">
+  <header><h2 id="calor-t">Recorrência: secretaria × tipo de chamado</h2>
+    <small>Quanto mais escura a célula, mais chamados. Concentrações indicam onde uma ação de capacitação ou prevenção rende mais.</small></header>
+  <div class="df-table-scroll" role="region" aria-label="Mapa de calor de recorrência" tabindex="0" style="border:0">
+    <table class="df-heat">
+      <thead><tr><th scope="col">Secretaria</th>{% for tp in mt.tipos %}<th scope="col">{{ tp }}</th>{% endfor %}<th scope="col">Total</th></tr></thead>
+      <tbody>{% for d in mt.secretarias %}<tr><th scope="row">{{ d.nome }}</th>
+        {% for tp in mt.tipos %}{% set n = d.tipos.get(tp, 0) %}{% set pct = (100 * n / mt.max_cel)|round|int %}
+          <td class="df-heat-l{{ 0 if not n else 1 if pct <= 33 else 2 if pct <= 66 else 3 }}" title="{{ d.nome }} · {{ tp }}: {{ n }} chamado(s)">{{ n or '' }}</td>{% endfor %}
+        <td><b>{{ d.n }}</b></td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</section>
+
+<section class="df-card" aria-labelledby="cap-t">
+  <header><h2 id="cap-t">{{ ui.icon('lightbulb') }} Oportunidades de capacitação por secretaria</h2>
+    <div><span class="df-badge df-ia">{{ ui.icon('sparkle') }}análise por IA</span></div>
+    <small>A IA cruza a recorrência e os tipos de chamado de cada secretaria e sugere ações em massa (treinamentos, tutoriais, comunicados, prevenção) para reduzir a demanda futura. As sugestões apoiam a decisão; não são aplicadas automaticamente.</small></header>
+  <form method="post" action="/gestor/metricas/analise" hx-post="/gestor/metricas/analise" hx-target="#analise" hx-swap="innerHTML" data-df-form>
+    <input type="hidden" name="dias" value="{{ mt.dias }}">
+    {{ ui.button(('Gerar nova análise' if analise and analise.acoes else 'Gerar análise') ~ ' (' ~ (periodos[mt.dias]|lower) ~ ')', style='secondary', glyph='sparkle') }}
+  </form>
+  <div id="analise" aria-live="polite">{% include "df/_analise.html" %}</div>
+</section>
+
+<details class="df-details">
+  <summary>Ver dados semanais em tabela</summary>
+  <div class="df-details-body">
+    <div class="df-table-scroll" role="region" aria-label="Dados semanais" tabindex="0">
+      <table class="df-table">
+        <thead><tr><th scope="col">Semana</th><th scope="col" class="num">Abertos</th><th scope="col" class="num">Resolvidos</th><th scope="col" class="num">Tempo médio de resolução</th></tr></thead>
+        <tbody>{% for x in mt.serie %}<tr><td>{{ x.rotulo }}</td><td class="num">{{ x.abertos }}</td><td class="num">{{ x.resolvidos }}</td><td class="num">{{ x.horas|duracao }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </div>
+</details>
+{% endblock %}

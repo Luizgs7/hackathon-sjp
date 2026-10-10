@@ -11,7 +11,7 @@ Requisitos: Python 3.11+ (testado com 3.13) e acesso à internet só para a IA d
 
 ```bash
 cd prototipo
-cp .env.example .env        # preencha LLM_API_KEY (sem chave, a IA usa o fallback por regras)
+cp .env.example .env        # preencha TYPESAFE_API_KEY e ANTHROPIC_API_KEY; sem chaves, há fallback local
 ./run.sh                    # instala dependências e sobe os 2 serviços
 ./run.sh --reset            # recomeça do zero com os dados fictícios
 ```
@@ -24,6 +24,26 @@ cp .env.example .env        # preencha LLM_API_KEY (sem chave, a IA usa o fallba
 | http://localhost:8000/docs | Documentação OpenAPI da API de integração |
 
 ### Autoatendimento do servidor (`/servidor`, só web)
+
+### Integração de decisões com JEV
+
+Configure `TYPESAFE_API_KEY` no `.env` local. O adaptador `jev.py` usa o `httpx` já listado nas dependências; não exige outro SDK. `JEV_ENABLED=false` desliga chamadas; `JEV_MODEL` fixa a versão (padrão `jev-1.13.0`); `JEV_TIMEOUT` define o timeout por fase de conexão/leitura (padrão 8 segundos). Não há retries automáticos, para limitar espera e consumo. Referência: https://docs.typesafe.ai/introduction/quickstart.
+
+No chat, a IA avalia cada mensagem com os últimos relatos: orientação simples, esclarecimento, Helpdesk ou risco físico. Respostas de encaminhamento e esclarecimento usam textos locais; orientação simples segue o modelo generativo existente. A decisão e o consumo mais recentes ficam em `autoatendimento.jev_json`. Uma falha preserva o fluxo anterior e as orientações locais. O servidor continua enviando uma solicitação; somente o atendimento formaliza a OS.
+
+Depois da formalização, `triar()` pede sugestões de tipo e criticidade. Categoria e complexidade vêm do catálogo; carga, elegibilidade e campos faltantes são calculados no código. A decisão fica em `tarefas.ia_json`, com modelo, probabilidades, versão dos critérios e tokens. A escolha `revisar` mantém valores provisórios por regras e exige conferência. Toda sugestão precisa de revisão humana, independentemente de confiança. Resultados atrasados não substituem outra triagem ou decisão humana. A fila é ordenada por criticidade e espera, sem mudar a prioridade aprovada nem interromper técnicos.
+
+O único modelo generativo é Claude Haiku 5.5, pela Messages API nativa (`haiku.py`), com `ANTHROPIC_API_KEY` e `HAIKU_MODEL`. `HAIKU_CHAT_EFFORT=low` controla o chat; `HAIKU_EFFORT=medium` controla extração, resumos e demais chamadas. Aceita `low`, `medium`, `high`, `xhigh`, `max`; effort não é um teto financeiro. `max_tokens` continua sendo o limite da saída. Thinking fica desabilitado em low/medium/high; em xhigh/max usa adaptive e pode consumir parte desse limite. Blocos de thinking nunca são exibidos ao usuário. Respostas truncadas, vazias e falhas usam os fallbacks existentes, sem alternar para um terceiro modelo. Timeout por fase configurável em `HAIKU_TIMEOUT` (30 segundos); sem retries automáticos. Referência: https://platform.claude.com/docs/en/build-with-claude/effort.
+
+Ambas as APIs são externas: usar somente dados fictícios no protótipo; hospedagem municipal e qualidade em português ainda precisam de validação. Não se trata de resolução automática de chamados.
+
+Testes locais (API simulada e SQLite temporário, sem saldo):
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+### Jornada do autoatendimento
 O servidor com um problema conversa primeiro com o **Assistente Virtual**, que fica em destaque na página. O assistente:
 - dá orientações seguras para leigos (nunca pede senha nem manda abrir equipamento elétrico);
 - se resolver, o servidor clica em **✔ Resolvido** e nenhum chamado é aberto. Isso vira o indicador "resolvidos pelo assistente" no painel;
@@ -78,7 +98,7 @@ O painel web (atendente/gestor) e o campo (executor) usam **sessões separadas**
 
 - **Funcional:** toda a jornada acima, a integração com o legado simulado, o push, a pontuação e os indicadores.
 - **Simulado:**
-  - **IA**: usa o endpoint gratuito da NVIDIA (externo), só com dados fictícios. Em produção, troca-se o `LLM_BASE_URL` para **vLLM/Ollama no datacenter municipal**, com um modelo open-weight (ex.: Qwen2.5-14B-Instruct), sem mudar o código. A interface identifica a fonte (🤖 LLM / ⚙️ regras).
+  - **IA externa**: JEV decide e Claude Haiku 5.5 gera respostas, somente com dados fictícios no protótipo. A interface mostra “IA” ou “sugestão por regras”. Hospedagem municipal não foi comprovada; uma futura solução local exige outro adaptador e validação, não apenas trocar a URL.
   - **Sistema legado:** é o `legado.py`.
   - **Login:** seleção de usuário fictício.
   - **Envio do link à demandante:** exibido na tela no lugar de SMS/e-mail.
@@ -104,3 +124,9 @@ O painel web (atendente/gestor) e o campo (executor) usam **sessões separadas**
 | htmx 2.0.4, Pico CSS 2.0.6 | 0BSD / MIT | interface (arquivos locais em `static/`, sem CDN) |
 | SQLite | domínio público | banco de dados |
 | Nemotron 3 Super (NVIDIA API) | termos NVIDIA, gratuito para testes | **somente protótipo**; substituído por modelo local em produção |
+
+## Biblioteca frontend isolada
+
+Os fundamentos Geist, tokens do Figma, Tailwind 4.3.3 standalone e componentes Jinja2 estão documentados em [design.md](design.md). As telas atuais continuam com Pico CSS e Inter.
+
+No Windows, execute `.\tools\frontend.ps1 build` e `.\tools\frontend.ps1 serve` para abrir o catálogo em `http://127.0.0.1:8002`. Na primeira instalação do compilador, execute `.\tools\frontend.ps1 install`. No Linux, use `bash tools/frontend.sh install`, `build` e `serve`. O catálogo não cria chamados nem usa APIs de IA.
