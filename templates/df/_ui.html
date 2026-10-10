@@ -58,6 +58,11 @@
 <div class="df-notice df-notice-{{ tone }}" role="{{ role }}">{{ icon(glyph) }}<div>{{ caller() if caller else text }}</div></div>
 {%- endmacro %}
 
+{# Foto de evidência: sem arquivo (ou arquivo ausente) mostra um espaço reservado em vez de imagem quebrada #}
+{% macro foto(arq, alt, vazio='Sem foto anexada.') -%}
+{% if arq and upload_existe(arq) %}<img class="df-img" src="/uploads/{{ arq }}" alt="{{ alt }}" data-foto data-vazio="{{ vazio }}">{% else %}{{ empty(vazio, 'image') }}{% endif %}
+{%- endmacro %}
+
 {% macro empty(text, glyph='tray') -%}
 <div class="df-empty">{{ icon(glyph) }}<p>{{ text }}</p>{% if caller %}{{ caller() }}{% endif %}</div>
 {%- endmacro %}

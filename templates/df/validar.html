@@ -10,7 +10,7 @@
 {% block context_label %}Evidência{% endblock %}
 {% block context_col %}
 <section class="df-card"><h2 style="font-size:16px">Evidência do atendimento</h2>
-  {% if t.evidencia %}<img class="df-img" src="/uploads/{{ t.evidencia }}" alt="Foto do serviço realizado">{% else %}{{ ui.empty('Sem foto anexada pelo atendimento.', 'image') }}{% endif %}</section>
+  {{ ui.foto(t.evidencia, 'Foto do serviço realizado', 'Sem foto anexada pelo atendimento.') }}</section>
 {% endblock %}
 {% block main %}
 <div class="df-page-head">

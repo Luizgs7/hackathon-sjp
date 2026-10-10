@@ -629,3 +629,34 @@ class BuscaPushEManifestTests(UiFlowBase):
         pushes = [e for e in enviados if e[0] == self.users["Rafael Costa"]]
         self.assertTrue(pushes)
         self.assertEqual(pushes[0][3], f"/campo/{tid}")
+
+
+class EvidenciaEBotaoTests(UiFlowBase):
+    def test_evidencia_ausente_mostra_placeholder(self):
+        sol = self.solicitar()
+        tid = self.registrar(sol)
+        t = self.tarefa(tid)
+        with app.db() as c:
+            c.execute("UPDATE tarefas SET evidencia='nao_existe.jpg', status='executado', executor_id=? WHERE id=?",
+                      (self.users["Rafael Costa"], tid))
+        for url, ck in ((f"/validar/{t['token']}", None), (f"/tarefa/{tid}", self.gestor)):
+            r = self.client.get(url, cookies=ck or {})
+            self.assertNotIn("/uploads/nao_existe.jpg", r.text, url)
+            self.assertIn("df-empty", r.text, url)
+
+    def test_evidencia_existente_mostra_imagem(self):
+        sol = self.solicitar()
+        tid = self.registrar(sol)
+        t = self.tarefa(tid)
+        (app.UPLOADS / "evid_teste.jpg").write_bytes(b"\xff\xd8\xff")
+        self.addCleanup(lambda: (app.UPLOADS / "evid_teste.jpg").unlink(missing_ok=True))
+        with app.db() as c:
+            c.execute("UPDATE tarefas SET evidencia='evid_teste.jpg', status='executado', executor_id=? WHERE id=?",
+                      (self.users["Rafael Costa"], tid))
+        self.assertIn("/uploads/evid_teste.jpg", self.client.get(f"/validar/{t['token']}").text)
+
+    def test_botao_falar_com_atendente_no_chat_vazio(self):
+        r = self.client.get("/servidor")
+        self.assertIn("Falar com atendente", r.text)
+        self.assertIn('id="acoes-vazio"', r.text)
+        self.assertIn("/servidor/atendente", r.text)

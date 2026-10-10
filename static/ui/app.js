@@ -313,3 +313,15 @@
   document.addEventListener('DOMContentLoaded', sincronizar);
   window.addEventListener('resize', sincronizar);
 })();
+
+
+/* Imagem de evidência que não carrega (arquivo ausente em outra instância): troca por espaço reservado */
+document.addEventListener('error', e => {
+  const img = e.target;
+  if (!img || img.tagName !== 'IMG' || !img.hasAttribute('data-foto')) return;
+  const box = document.createElement('div');
+  box.className = 'df-empty';
+  box.innerHTML = '<svg class="df-icon" aria-hidden="true" focusable="false"><use href="/static/ui/phosphor.svg#image"/></svg><p></p>';
+  box.querySelector('p').textContent = img.dataset.vazio || 'Imagem indisponível.';
+  img.replaceWith(box);
+}, true);

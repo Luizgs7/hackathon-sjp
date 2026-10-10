@@ -30,6 +30,12 @@
       {% endfor %}
     </div>
     {% endif %}
+    {% if not conversa %}
+    <div id="acoes-vazio" class="df-chat-actions" role="group" aria-label="Outras formas de atendimento">
+      <button type="button" class="df-button df-secondary df-size-small" data-falar hx-post="/servidor/atendente" hx-include="#estado-chat" hx-target="#conversa"><span class="df-button-content">{{ ui.icon('headset') }}Falar com atendente</span></button>
+      {{ ui.button('Abrir chamado', href='/servidor/solicitar', size='small', style='secondary', glyph='note-pencil') }}
+    </div>
+    {% endif %}
     <form id="form-chat" class="df-composer-card" hx-post="/servidor/chat" hx-target="#conversa" hx-include="#estado-chat" hx-indicator="#digitando" autocomplete="off">
       <label class="df-sr" for="pergunta">Escreva sua mensagem</label>
       <textarea id="pergunta" name="pergunta" rows="2" required placeholder="Escreva sua mensagem. Ex.: o computador da recepção está sem internet desde cedo"></textarea>
@@ -65,6 +71,7 @@
     const conv = document.getElementById('conversa');
     conv.querySelector('.df-vazio')?.remove();
     document.getElementById('chips')?.remove();
+    document.getElementById('acoes-vazio')?.remove();
     const d = document.createElement('div');
     d.className = 'df-bubble me'; d.textContent = texto;
     conv.insertBefore(d, document.getElementById('digitando'));
@@ -76,6 +83,7 @@
     const el = e.detail.elt;
     if (el === form) mostrar(form.pergunta.value);
     else if (el.matches && el.matches('[data-suggestion]')) mostrar(el.textContent);
+    else if (el.matches && el.matches('[data-falar]')) { document.getElementById('chips')?.remove(); document.getElementById('acoes-vazio')?.remove(); document.querySelector('.df-vazio')?.remove(); }
   });
   document.body.addEventListener('htmx:afterSwap', e => { if (e.detail.target && e.detail.target.id === 'conversa') e.detail.target.scrollTop = e.detail.target.scrollHeight; });
   document.body.addEventListener('htmx:afterRequest', e => {

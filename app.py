@@ -1190,6 +1190,7 @@ app = FastAPI(title="Missões SJP – API", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOADS), name="uploads")
 templates = Jinja2Templates(directory=BASE / "templates")
+templates.env.globals["upload_existe"] = lambda nome: bool(nome) and (UPLOADS / Path(str(nome)).name).is_file()
 templates.env.globals.update(STATUS=STATUS, PRIORIDADES=PRIORIDADES, MOTIVOS=MOTIVOS_IMPEDIMENTO, MOTIVOS_DEVOLUCAO=MOTIVOS_DEVOLUCAO,
                              STATUS_OFICIAL=STATUS_OFICIAL, STATUS_OFICIAIS=STATUS_OFICIAIS,
                              CANCELAVEIS=[s for s, prox in TRANSICOES.items() if "cancelado" in prox],

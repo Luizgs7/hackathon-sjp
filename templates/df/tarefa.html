@@ -81,7 +81,7 @@
     {% if executor %}<p class="df-pessoa">{{ ui.avatar(executor.nome, 'sm') }}<span>Executor: <b>{{ executor.nome }}</b>{% if t.km_percorrido %} · {{ t.km_percorrido|dec }} km até o local{% endif %}</span></p>{% endif %}
     {% if t.relato %}<p><b>{{ 'Solução do atendimento (' ~ t.resolvido_atendimento_por ~ ')' if t.resolvido_atendimento_por else 'Relato do executor' }}:</b> <span class="df-prewrap">{{ t.relato }}</span></p>{% endif %}
     {% if t.resumo_ia %}<p><b>Resumo para a demandante</b> <span class="df-badge df-ia">{{ ui.icon('sparkle') }}IA</span>: {{ t.resumo_ia }}</p>{% endif %}
-    {% if t.evidencia %}<img class="df-img" src="/uploads/{{ t.evidencia }}" alt="Evidência da conclusão">{% endif %}
+    {{ ui.foto(t.evidencia, 'Evidência da conclusão', 'Sem foto de evidência anexada.') }}
     {% if t.nota %}<p><b>Avaliação da demandante:</b> <span class="df-stars" role="img" aria-label="{{ t.nota }} de 5 estrelas">{{ '★' * t.nota }}{{ '☆' * (5 - t.nota) }}</span> {{ t.comentario_demandante or '' }}</p>{% endif %}
   </section>
 
@@ -211,7 +211,7 @@
     {% for e in eventos %}
       <li><span class="df-dot" aria-hidden="true"></span><small>{{ e.criado_em|datahora }} · {{ e.usuario }} ({{ e.papel }})</small>
         <span>{% if e.para %}{{ ui.status(e.para) }} {% endif %}{{ e.texto }}</span>
-        {% if e.anexo %}<img src="/uploads/{{ e.anexo }}" alt="Anexo do evento">{% endif %}</li>
+        {% if e.anexo %}{{ ui.foto(e.anexo, 'Anexo do evento', 'Anexo indisponível.') }}{% endif %}</li>
     {% endfor %}
     </ol>
   </section>
