@@ -1731,7 +1731,7 @@ def gestor_quadro(request: Request, setor_id: int | None = None, q: str = ""):
     for s in FINAIS:
         colunas[s] = sorted(colunas[s], key=lambda t: t["atualizado_em"], reverse=True)[:10]
     impedidos = [t for t in tarefas if t["status"] == "impedido"]
-    alvos = {t["id"]: " ".join(sorted(alvos_arrasto(u, t["status"]))) for t in tarefas}
+    alvos = {t["id"]: " ".join(sorted(alvos_arrasto(u, t["status"], t["gt_destino_id"]))) for t in tarefas}
     return render(request, "_quadro.html", colunas=colunas, totais=totais, impedidos=impedidos, ind=ind,
                   busca=q, n_busca=len(tarefas), so_area=eh_gestor_tecnico(u), alvos=alvos)
 
@@ -1748,12 +1748,14 @@ ARRASTE = {
 }
 
 
-def alvos_arrasto(u, status):
+def alvos_arrasto(u, status, gt_destino_id=None):
     """Estados oficiais para onde este perfil pode soltar o cartão. Resolver no atendimento é do gestor Help Desk;
     reavaliar um devolvido é do gestor técnico da área (mesmas regras de /atribuir)."""
     alvos = set(ARRASTE.get(status, ())) & TRANSICOES[status]
     if eh_gestor_tecnico(u):
         alvos.discard("executado")
+        if status in FILA_ATENDIMENTO and (gt_destino_id is None or "id" not in u.keys() or gt_destino_id != u["id"]):
+            alvos.discard("encaminhado")  # só aloca o que o Help Desk encaminhou a ele
     elif status == "devolvido":
         alvos.discard("encaminhado")
     return alvos
@@ -1766,7 +1768,7 @@ def mover_formulario(request: Request, tid: int, para: str = ""):
     with db() as c:
         t = tarefa_ou_404(c, tid)
         exige_acesso(u, t)
-        if para not in alvos_arrasto(u, t["status"]):
+        if para not in alvos_arrasto(u, t["status"], t["gt_destino_id"]):
             raise HTTPException(409, f"Não é possível mover de {STATUS[t['status']][1]} para {STATUS.get(para, ('', para))[1]}.")
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
         sug = ia if t["ia_status"] == "sugerida" else {}
@@ -2111,14 +2113,14 @@ def tarefa_estado(request: Request, tid: int, v: str = ""):
 @app.post("/tarefa/{tid}/atribuir")
 def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: int = Form(...),
              prioridade: str = Form(...), observacao: str = Form("")):
-    """O atendimento (ou o gestor) avalia o chamado da fila e o encaminha ao time técnico."""
-    u = exige_painel(request, "atendente", "gestor", "gestor_tecnico")
+    """Só o gestor técnico da área aloca o técnico: o Help Desk encaminha o chamado ao gestor técnico (/encaminhar-gt)."""
+    u = exige_painel(request, "gestor_tecnico")
     papel = papel_painel(u)
     with db() as c:
         t = tarefa_ou_404(c, tid)
         exige_acesso(u, t)
-        if t["status"] == "devolvido" and not eh_gestor_tecnico(u):
-            raise HTTPException(403, "Chamado devolvido pelo técnico: quem reavalia é o gestor técnico da área.")
+        if t["status"] in FILA_ATENDIMENTO and t["gt_destino_id"] != u["id"]:
+            raise HTTPException(409, "Este chamado ainda não foi encaminhado a você pelo Help Desk.")
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
         ia_status = t["ia_status"]
         if ia_status == "sugerida":

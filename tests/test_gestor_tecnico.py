@@ -34,7 +34,8 @@ class GestorTecnicoTests(UiFlowBase):
         self.assertNotIn(f'action="/tarefa/{tid}/resolver-atendimento"',task.text)
         self.assertNotIn('hx-get="/atendente/fila',task.text)
         self.assertEqual(self.client.post(f'/tarefa/{tid}/resolver-atendimento',data={'solucao':'Fictícia'}).status_code,403)
-        r=self.client.post(f'/tarefa/{tid}/atribuir',data={'executor_id':self.users['Diego Santos'],'tipo_id':tipo2,'prioridade':'P3'})
+        self.assertEqual(self.client.post(f'/tarefa/{tid}/atribuir',data={'executor_id':self.users['Diego Santos'],'tipo_id':tipo2,'prioridade':'P3'}).status_code,409)  # ainda não encaminhado pelo Help Desk
+        r=self.alocar(tid,{'executor_id':self.users['Diego Santos'],'tipo_id':tipo2,'prioridade':'P3'})
         self.assertEqual(r.status_code,303)
         self.assertEqual(self.tarefa(tid)['status'],'encaminhado')
         self.assertEqual(self.tarefa(tid)['executor_id'],self.users['Diego Santos'])

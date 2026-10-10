@@ -32,7 +32,7 @@ class FluxosIntegradosTests(UiFlowBase):
         email = self.tarefa(tid)["email"]
 
         # 2) atendente encaminha ao técnico da área: todos os envolvidos enxergam e são avisados
-        r = self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+        r = self.alocar(tid, {
             "executor_id": self.users[tecnico], "tipo_id": tipo, "prioridade": "P2"})
         self.assertEqual(r.status_code, 303, area)
         self.assertEqual(self.tarefa(tid)["status"], "encaminhado")
@@ -72,7 +72,7 @@ class FluxosIntegradosTests(UiFlowBase):
 
         # 5) segundo chamado: devolução pelo técnico → gestor da área reavalia e reencaminha
         tid2 = self.registrar(self.solicitar(setor_id=area_id, titulo="Outro problema", descricao="Segundo chamado do dia."))
-        self.client.post(f"/tarefa/{tid2}/atribuir", cookies=self.atendente, data={
+        self.alocar(tid2, {
             "executor_id": self.users[tecnico], "tipo_id": tipo, "prioridade": "P3"})
         r = self.client.post(f"/campo/{tid2}/devolver", cookies=tec, data={"motivo": app.MOTIVOS_DEVOLUCAO[0], "detalhe": ""})
         self.assertEqual(r.status_code, 303)
@@ -80,7 +80,7 @@ class FluxosIntegradosTests(UiFlowBase):
         self.assertTrue(any(f"#{tid2}" in a and "Devolvido" in a for a in self.avisos(gestor)))
         self.assertTrue(any(f"#{tid2}" in a for a in self.avisos("Paula Mendes")))
         self.assertEqual(self.client.post(f"/tarefa/{tid2}/atribuir", cookies=self.atendente, data={
-            "executor_id": self.users[tecnico], "tipo_id": tipo, "prioridade": "P3"}).status_code, 403)   # atendimento não reavalia
+            "executor_id": self.users[tecnico], "tipo_id": tipo, "prioridade": "P3"}).status_code, 403)   # atendimento não aloca
         self.assertEqual(self.client.post(f"/tarefa/{tid2}/atribuir", cookies=gt, data={
             "executor_id": self.users[tecnico], "tipo_id": tipo, "prioridade": "P3"}).status_code, 303)  # gestor da área reencaminha
         self.assertEqual(self.tarefa(tid2)["status"], "encaminhado")
@@ -95,7 +95,7 @@ class FluxosIntegradosTests(UiFlowBase):
 
         # 7) reabertura pelo solicitante: volta à fila do atendimento e todos são avisados
         tid3 = self.registrar(self.solicitar(setor_id=area_id, titulo="Terceiro", descricao="Chamado para reabrir."))
-        self.client.post(f"/tarefa/{tid3}/atribuir", cookies=self.atendente, data={
+        self.alocar(tid3, {
             "executor_id": self.users[tecnico], "tipo_id": tipo, "prioridade": "P3"})
         for para in ("a_caminho", "em_execucao"):
             self.client.post(f"/campo/{tid3}/avancar", cookies=tec, data={"para": para})

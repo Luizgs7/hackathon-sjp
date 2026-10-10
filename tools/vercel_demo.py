@@ -96,20 +96,33 @@ if os.getenv("BLOB_READ_WRITE_TOKEN"):
                        {"platform": produto.DB_PATH, "legacy": legado.DB_PATH})
     database_lock = asyncio.Lock()
 
+    estado_blob = {"leitura_em": 0.0, "pausado_ate": 0.0}
+    LEITURA_VALIDA_S = 4     # várias requisições seguidas reaproveitam o último snapshot (poucas operações no Blob)
+    PAUSA_APOS_FALHA_S = 30  # Blob indisponível (403, cota, rede): atende com o banco local e só tenta de novo depois
+
     @app.middleware("http")
     async def shared_demo_records(request, call_next):
         internal = request.headers.get("x-dataforge-internal", "")
         if secrets.compare_digest(internal, INTERNAL_SECRET) or request.url.path.startswith("/static/"):
             return await call_next(request)
+        leitura = request.method in ("GET", "HEAD", "OPTIONS")
+        agora = time.monotonic()
+        # modo degradado: sem o Blob o site continua no ar, com os dados desta instância (a demonstração não cai)
+        if agora < estado_blob["pausado_ate"] or (leitura and agora - estado_blob["leitura_em"] < LEITURA_VALIDA_S):
+            return await call_next(request)
         async with database_lock:
             lease = None
             try:
-                lease = await shared.load(write=request.method not in ("GET", "HEAD", "OPTIONS"))
+                lease = await shared.load(write=not leitura)
+                estado_blob["leitura_em"] = time.monotonic()
                 # O snapshot compartilhado pode vir de uma versão anterior: aplica as colunas e tabelas novas antes de atender.
                 await asyncio.to_thread(produto.init_db)
                 response = await call_next(request)
                 body = b"".join([part async for part in response.body_iterator])
-                await shared.finish(lease, commit=response.status_code < 500)
+                try:
+                    await shared.finish(lease, commit=response.status_code < 500)
+                except Exception:  # a requisição já foi atendida: não repete; só pausa o Blob por um tempo
+                    estado_blob["pausado_ate"] = time.monotonic() + PAUSA_APOS_FALHA_S
                 lease = None
                 result = Response(body, status_code=response.status_code)
                 # Preserve every Set-Cookie header, including the signed Ana profile.
@@ -122,5 +135,6 @@ if os.getenv("BLOB_READ_WRITE_TOKEN"):
                         await shared.finish(lease, commit=False)
                     except Exception:
                         pass
-                return HTMLResponse('Não foi possível acessar os registros agora. Aguarde alguns segundos e tente novamente.',
-                                    status_code=503, headers={'Retry-After': '5', 'Cache-Control': 'no-store'})
+                estado_blob["pausado_ate"] = time.monotonic() + PAUSA_APOS_FALHA_S
+                await asyncio.to_thread(produto.init_db)
+                return await call_next(request)

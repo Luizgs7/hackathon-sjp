@@ -82,6 +82,21 @@ class UiFlowBase(unittest.TestCase):
         with app.db() as c:
             return c.execute("SELECT * FROM solicitacoes WHERE token=?", (token,)).fetchone()
 
+    def alocar(self, tid, data, ck=None):
+        """Fluxo único: o Help Desk encaminha ao gestor técnico da área do técnico, que aloca o técnico."""
+        with app.db() as c:
+            area = c.execute("SELECT e.setor_id FROM usuarios u JOIN equipes e ON e.id=u.equipe_id WHERE u.id=?", (data["executor_id"],)).fetchone()[0]
+            gt = c.execute("SELECT id FROM usuarios WHERE papeis='gestor_tecnico' AND area_id=?", (area,)).fetchone()["id"]
+            st = c.execute("SELECT status, gt_destino_id FROM tarefas WHERE id=?", (tid,)).fetchone()
+        if st["status"] in app.FILA_ATENDIMENTO and st["gt_destino_id"] != gt:
+            r = self.client.post(f"/tarefa/{tid}/encaminhar-gt", cookies=self.gestor, data={"gestor_tecnico_id": gt})
+            assert r.status_code == 303, r.status_code
+        with app.db() as c:
+            tipo_ok = c.execute("SELECT 1 FROM tipos WHERE id=? AND setor_id=?", (data.get("tipo_id"), area)).fetchone()
+            if not tipo_ok:
+                data = {**data, "tipo_id": c.execute("SELECT id FROM tipos WHERE setor_id=?", (area,)).fetchone()["id"]}
+        return self.client.post(f"/tarefa/{tid}/atribuir", cookies={"sess_painel": app.assinar(gt)}, data=data)
+
     def registrar(self, sol):
         r = self.client.post(f"/solicitacoes/{sol['id']}/registrar", cookies=self.atendente, data={
             "titulo": sol["titulo"], "descricao": sol["descricao"], "local": sol["local"], "setor_id": sol["setor_id"],
@@ -245,8 +260,7 @@ class CaminhosTests(UiFlowBase):
         tid = self.registrar(sol)
         with app.db() as c:
             tipo = c.execute("SELECT id FROM tipos WHERE setor_id=?", (self.setor,)).fetchone()["id"]
-        r = self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente,
-                             data={"executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P2", "observacao": "Levar testador"})
+        r = self.alocar(tid, {"executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P2", "observacao": "Levar testador"})
         self.assertEqual(r.status_code, 303)
         self.assertEqual(self.tarefa(tid)["status"], "encaminhado")
         self.assertIn("Aceitar e ir ao local", self.client.get(f"/campo/{tid}", cookies=self.tecnico).text)
@@ -304,9 +318,9 @@ class CaminhosTests(UiFlowBase):
         with app.db() as c:
             tipo = c.execute("SELECT id FROM tipos WHERE setor_id=3").fetchone()["id"]  # área do Rafael (Telecom)
         helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}  # gestora técnica de Telecom
-        atribuir = lambda ck: self.client.post(f"/tarefa/{tid}/atribuir", cookies=ck,
-                                               data={"executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P3"})
-        atribuir(self.atendente)
+        dados = {"executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P3"}
+        atribuir = lambda ck: self.client.post(f"/tarefa/{tid}/atribuir", cookies=ck, data=dados)
+        self.alocar(tid, dados)
         # devolução com motivo oficial vai ao gestor técnico da área (não à fila do atendimento)
         r = self.client.post(f"/campo/{tid}/devolver", cookies=self.tecnico, data={"motivo": app.MOTIVOS_DEVOLUCAO[0], "detalhe": ""})
         self.assertEqual(r.status_code, 303)
@@ -460,7 +474,7 @@ class RastroApiTests(UiFlowBase):
         tid = self.registrar(sol)
         with app.db() as c:
             c.execute("UPDATE tarefas SET executor_id=? WHERE id=?", (self.users["Rafael Costa"], tid))
-        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.gestor, data={
+        self.alocar(tid, {
             "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
         self.assertEqual(self.client.get(f"/api/rastro/{tid}").status_code, 403)
         self.assertEqual(self.client.get(f"/api/rastro/{tid}", cookies=self.atendente).status_code, 403)
@@ -532,7 +546,7 @@ class ChatComAtendenteTests(UiFlowBase):
 class DisponibilidadeEKmTests(UiFlowBase):
     def encaminhar(self, executor="Rafael Costa"):
         tid = self.registrar(self.solicitar())
-        r = self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+        r = self.alocar(tid, {
             "executor_id": self.users[executor], "tipo_id": 1, "prioridade": "P2"})
         return tid, r
 
@@ -574,7 +588,7 @@ class PainelEquipeTests(UiFlowBase):
         with app.db() as c:  # o painel é do gestor técnico: os chamados do teste pertencem à área dele (Telecom, 3)
             c.execute("UPDATE tarefas SET setor_id=3 WHERE id=?", (tid,))
         if executor:
-            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            self.alocar(tid, {
                 "executor_id": self.users[executor], "tipo_id": 1, "prioridade": "P2"})
         return tid
 
@@ -657,7 +671,7 @@ class BuscaPushEManifestTests(UiFlowBase):
         with patch.object(app, "enviar_push", lambda *a: enviados.append(a)), \
                 patch.object(app, "em_segundo_plano", lambda fn, *a: fn(*a)):
             tid = self.registrar(self.solicitar())
-            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            self.alocar(tid, {
                 "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
         pushes = [e for e in enviados if e[0] == self.users["Rafael Costa"]]
         self.assertTrue(pushes)
@@ -727,7 +741,7 @@ class AreaDoGestorTecnicoTests(UiFlowBase):
         tid = self.chamado(3)
         with app.db() as c:
             tipo = c.execute("SELECT id FROM tipos WHERE setor_id=3").fetchone()["id"]
-        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+        self.alocar(tid, {
             "executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P3"})
         self.client.post(f"/campo/{tid}/devolver", cookies=self.tecnico, data={"motivo": app.MOTIVOS_DEVOLUCAO[1], "detalhe": ""})
         # aparece para o gestor técnico da área e não para o de outra área
@@ -784,7 +798,7 @@ class RotaDoTecnicoTests(UiFlowBase):
         a = self.registrar(self.solicitar(local="UBS Centro"))
         b = self.registrar(self.solicitar(local="Escola Municipal Sul"))
         for tid, prio in ((a, "P3"), (b, "P1")):
-            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            self.alocar(tid, {
                 "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": prio})
         self.assertEqual(self.client.get("/campo/rota", cookies=self.atendente).status_code, 303)  # só técnico
         pag = self.client.get("/campo/rota", cookies=self.tecnico)
@@ -811,7 +825,7 @@ class SinoDeNotificacoesTests(UiFlowBase):
         # atendente recebeu aviso da nova solicitação
         self.assertIn("Nova solicitação", self.sino(self.atendente, "painel"))
         # encaminhar -> técnico recebe nova missão; solicitante recebe andamento
-        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+        self.alocar(tid, {
             "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
         tecnico = self.sino(self.tecnico, "campo")
         self.assertIn(f"Nova missão #{tid}", tecnico)
@@ -831,7 +845,7 @@ class SinoDeNotificacoesTests(UiFlowBase):
 
     def test_ler_marca_como_lida_e_pagina_de_listagem(self):
         tid = self.registrar(self.solicitar())
-        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+        self.alocar(tid, {
             "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P3"})
         pag = self.client.get("/notificacoes?perfil=campo", cookies=self.tecnico)
         self.assertEqual(pag.status_code, 200)
@@ -895,7 +909,7 @@ class PessoasEHistoricoTests(UiFlowBase):
 
     def test_historico_de_rotas_do_gestor(self):
         tid = self.registrar(self.solicitar(local="UBS Centro"))
-        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+        self.alocar(tid, {
             "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P3"})
         for para in ("a_caminho", "em_execucao"):
             self.client.post(f"/campo/{tid}/avancar", cookies=self.tecnico, data={"para": para})
@@ -909,7 +923,7 @@ class PessoasEHistoricoTests(UiFlowBase):
 class CargaPorTecnicoTests(UiFlowBase):
     def test_tabelas_de_carga_por_tecnico_e_equipe(self):
         tid = self.registrar(self.solicitar())
-        self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+        self.alocar(tid, {
             "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P2"})
         with app.db() as c:
             d = app.painel_equipe(c)
@@ -928,7 +942,7 @@ class RoteiroDoTecnicoTests(UiFlowBase):
         ids = []
         for local, prio in (("UBS Centro", "P3"), ("Escola Municipal Sul", "P1"), ("Paço Municipal", "P3")):
             tid = self.registrar(self.solicitar(local=local))
-            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+            self.alocar(tid, {
                 "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": prio})
             ids.append(tid)
         with app.db() as c:  # a seed já deixou missões de Rafael em andamento: só as novas importam

@@ -15,14 +15,22 @@ class KanbanDndTests(UiFlowBase):
             c.execute("UPDATE tarefas SET setor_id=3 WHERE id=?", (self.tid,))
             self.tipo = c.execute("SELECT id FROM tipos WHERE setor_id=3").fetchone()["id"]
 
+    def encaminhar_helena(self):
+        """O Help Desk encaminha o chamado ao gestor técnico da Telecom, que passa a poder alocar o técnico."""
+        r = self.client.post(f"/tarefa/{self.tid}/encaminhar-gt", cookies=self.gestor, data={"gestor_tecnico_id": self.users["Helena Prado"]})
+        self.assertEqual(r.status_code, 303)
+
     def mover(self, para, cookies=None, tid=None):
         return self.client.get(f"/tarefa/{tid or self.tid}/mover", params={"para": para}, cookies=cookies or self.gestor)
 
     def test_alvos_por_perfil(self):
         self.assertEqual(app.alvos_arrasto({"papeis": "gestor,atendente"}, "novo"), {"encaminhado", "executado", "cancelado"})
-        self.assertEqual(app.alvos_arrasto({"papeis": "gestor_tecnico"}, "novo"), {"encaminhado", "cancelado"})
+        gt = {"id": 7, "papeis": "gestor_tecnico"}
+        self.assertEqual(app.alvos_arrasto(gt, "novo"), {"cancelado"})                  # ainda não encaminhado pelo Help Desk
+        self.assertEqual(app.alvos_arrasto(gt, "novo", 99), {"cancelado"})              # encaminhado a outro gestor técnico
+        self.assertEqual(app.alvos_arrasto(gt, "novo", 7), {"encaminhado", "cancelado"})  # encaminhado a ele: aloca o técnico
         self.assertEqual(app.alvos_arrasto({"papeis": "gestor,atendente"}, "devolvido"), {"executado", "cancelado"})
-        self.assertEqual(app.alvos_arrasto({"papeis": "gestor_tecnico"}, "devolvido"), {"encaminhado", "cancelado"})
+        self.assertEqual(app.alvos_arrasto(gt, "devolvido"), {"encaminhado", "cancelado"})
         for s in ("encaminhado", "a_caminho", "em_execucao", "impedido"):
             self.assertEqual(app.alvos_arrasto({"papeis": "gestor"}, s), {"cancelado"}, s)
         for s in ("executado", "concluido", "cancelado"):
@@ -34,6 +42,8 @@ class KanbanDndTests(UiFlowBase):
         self.assertIn('data-alvos="cancelado encaminhado executado"', html)
         self.assertIn('data-col="encaminhado"', html)
         self.assertIn("data-mover-abrir", html)
+        self.assertIn('data-alvos="cancelado"', self.client.get("/gestor/quadro", cookies=self.helena).text)
+        self.encaminhar_helena()
         self.assertIn('data-alvos="cancelado encaminhado"', self.client.get("/gestor/quadro", cookies=self.helena).text)
 
     def test_pagina_do_gestor_tem_modal_e_script(self):
@@ -47,6 +57,8 @@ class KanbanDndTests(UiFlowBase):
         self.assertIn(f"/tarefa/{self.tid}/encaminhar-gt", r.text)
         self.assertIn('name="gestor_tecnico_id"', r.text)
         self.assertNotIn('name="executor_id"', r.text)
+        self.assertEqual(self.mover("encaminhado", cookies=self.helena).status_code, 409)  # antes do encaminhamento do Help Desk
+        self.encaminhar_helena()
         r = self.mover("encaminhado", cookies=self.helena)  # gestor técnico: aloca o técnico da área
         self.assertIn(f"/tarefa/{self.tid}/atribuir", r.text)
         self.assertIn('name="executor_id"', r.text)
@@ -65,6 +77,7 @@ class KanbanDndTests(UiFlowBase):
         self.assertEqual(self.mover("cancelado", cookies={"sess_painel": "999.invalido"}).status_code, 303)
 
     def test_gestor_tecnico_ve_so_tecnicos_da_area(self):
+        self.encaminhar_helena()
         html = self.mover("encaminhado", cookies=self.helena).text
         self.assertIn("Rafael Costa", html)
         self.assertNotIn("Diego Santos", html)
@@ -76,6 +89,7 @@ class KanbanDndTests(UiFlowBase):
         self.assertEqual(self.mover("encaminhado", cookies=self.helena).status_code, 200)
 
     def test_envio_do_modal_usa_os_endpoints_existentes(self):
+        self.encaminhar_helena()
         r = self.client.post(f"/tarefa/{self.tid}/atribuir", cookies=self.helena, headers=FETCH, data={
             "executor_id": self.users["Rafael Costa"], "tipo_id": self.tipo, "prioridade": "P2", "observacao": ""})
         self.assertEqual(r.status_code, 303)
@@ -87,6 +101,7 @@ class KanbanDndTests(UiFlowBase):
         self.assertEqual(self.mover("cancelado").status_code, 409)  # estado final não aceita nada
 
     def test_erro_volta_como_json_para_o_modal(self):
+        self.encaminhar_helena()
         self.client.post(f"/tarefa/{self.tid}/atribuir", cookies=self.helena, data={
             "executor_id": self.users["Rafael Costa"], "tipo_id": self.tipo, "prioridade": "P2"})
         r = self.client.post(f"/tarefa/{self.tid}/resolver-atendimento", cookies=self.gestor, headers=FETCH, data={"solucao": "ok"})
