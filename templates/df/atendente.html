@@ -25,7 +25,10 @@
     <h1>Fila de atendimento</h1>
     <p>Chamados novos, devolvidos pelo time técnico e reabertos. Avalie cada um: resolva no atendimento ou encaminhe para a área técnica.</p>
   </div>
-  <small id="ind-fila" class="htmx-indicator" role="status">atualizando…</small>
+  <div class="df-actions">
+    <small id="ind-fila" class="htmx-indicator" role="status">atualizando…</small>
+    <button type="button" class="df-button df-primary df-size-medium" data-dialog-open="modal-nova-tarefa"><span class="df-button-content">{{ ui.icon('plus') }}Nova tarefa</span></button>
+  </div>
 </div>
 
 {% if not sel and solicitacoes %}
@@ -74,21 +77,23 @@
 </section>
 {% endif %}
 
-<div class="df-grid-eq df-grid-eq-2">
-  <section class="df-card" aria-labelledby="dir-t">
-    <header><h2 id="dir-t">Nova tarefa: cadastro direto</h2>
-      <small>Para áreas sem sistema próprio. No Help Desk o chamado também pode ser registrado no <a href="http://localhost:8001" target="_blank" rel="noopener">SisChamados Legado</a> e chega pela integração.</small></header>
-    <form class="df-form" method="post" action="/tarefas" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
-      {% set opts = [] %}{% for s in setores %}{% set _ = opts.append((s.id, s.nome)) %}{% endfor %}
-      {{ ui.select('setor_id', 'Área responsável', opts, '', required=True, id='dir-setor') }}
-      {{ ui.field('titulo', 'Título', '', required=True, placeholder='Ex.: Infiltração no teto da sala 3', id='dir-titulo') }}
-      {{ ui.textarea('descricao', 'Descrição do problema', '', rows=3, required=True, id='dir-desc') }}
-      {{ ui.field('local', 'Local (unidade, sala, andar)', '', placeholder='Ex.: CMEI Jardim Ipê – sala 3', id='dir-local') }}
-      {{ ui.campos_solicitante(contato='', prefix='dir-') }}
-      <div class="df-form-actions">{{ ui.button('Registrar tarefa', glyph='check') }}</div>
-      <small>A IA fará a triagem (tipo, criticidade, informações faltantes) para conferência do atendimento.</small>
-    </form>
-  </section>
+<dialog id="modal-nova-tarefa" class="df-dialog df-modal-medium df-modal-form" aria-labelledby="dir-t">
+  <div class="df-row"><h2 id="dir-t" style="font-size:20px;margin:0">Nova tarefa: cadastro direto</h2>
+    <button type="button" class="df-button df-ghost df-icon-button" data-dialog-close aria-label="Fechar"><span class="df-button-content">{{ ui.icon('x') }}</span></button></div>
+  <small>Para áreas sem sistema próprio. No Help Desk o chamado também pode ser registrado no <a href="http://localhost:8001" target="_blank" rel="noopener">SisChamados Legado</a> e chega pela integração.</small>
+  <form class="df-form" method="post" action="/tarefas" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+    {% set opts = [] %}{% for s in setores %}{% set _ = opts.append((s.id, s.nome)) %}{% endfor %}
+    {{ ui.select('setor_id', 'Área responsável', opts, '', required=True, id='dir-setor') }}
+    {{ ui.field('titulo', 'Título', '', required=True, placeholder='Ex.: Infiltração no teto da sala 3', id='dir-titulo') }}
+    {{ ui.textarea('descricao', 'Descrição do problema', '', rows=3, required=True, id='dir-desc') }}
+    {{ ui.field('local', 'Local (unidade, sala, andar)', '', placeholder='Ex.: CMEI Jardim Ipê – sala 3', id='dir-local') }}
+    {{ ui.campos_solicitante(contato='', prefix='dir-') }}
+    <small>A IA fará a triagem (tipo, criticidade, informações faltantes) para conferência do atendimento.</small>
+    <div class="df-form-actions"><button type="button" class="df-button df-ghost df-size-medium" data-dialog-close><span class="df-button-content">Cancelar</span></button>{{ ui.button('Registrar tarefa', glyph='check') }}</div>
+  </form>
+</dialog>
+
+<div class="df-grid-eq">
   <section class="df-card" aria-labelledby="ult-t">
     <header><h2 id="ult-t">Últimas tarefas</h2></header>
     <div class="df-list">
@@ -105,3 +110,4 @@
   </section>
 </div>
 {% endblock %}
+{% block scripts %}{% if abrir_nova %}<script>document.addEventListener('DOMContentLoaded',()=>{const d=document.getElementById('modal-nova-tarefa'); if(d&&d.showModal) d.showModal();});</script>{% endif %}{% endblock %}

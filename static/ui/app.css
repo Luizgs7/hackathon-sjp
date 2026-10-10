@@ -693,3 +693,11 @@ body[data-theme="dark"] { --df-scroll-thumb: #5b5f61; }
 }
 
 @supports (appearance: base-select) { .df-ui .df-field select { inline-size: 100%; min-inline-size: 0; } }
+
+/* Modal de formulário (cadastro direto de tarefa) */
+.df-dialog.df-modal-form { width: min(640px, calc(100vw - 24px)); padding: 22px 24px; display: none; }
+.df-dialog.df-modal-form[open] { display: grid; gap: 12px; }
+.df-dialog.df-modal-form .df-form { display: grid; gap: 14px; justify-content: stretch; }
+.df-dialog.df-modal-form .df-form-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.df-dialog.df-modal-form .df-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+@media (max-width: 520px) { .df-dialog.df-modal-form { padding: 16px; } }

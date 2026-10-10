@@ -1017,3 +1017,15 @@ class MapaDoGestorTecnicoTests(UiFlowBase):
         roberto = {"sess_painel": app.assinar(self.users["Roberto Nunes"])}
         self.assertEqual(self.client.get(f"/api/rastro/{tid}", cookies=helena).status_code, 200)
         self.assertEqual(self.client.get(f"/api/rastro/{tid}", cookies=roberto).status_code, 403)
+
+
+class ModalNovaTarefaTests(UiFlowBase):
+    def test_cadastro_direto_abre_em_modal_com_botao_no_topo(self):
+        pag = self.client.get("/atendente", cookies=self.atendente).text
+        self.assertIn('data-dialog-open="modal-nova-tarefa"', pag)
+        self.assertIn('<dialog id="modal-nova-tarefa"', pag)
+        self.assertIn("Nova tarefa", pag)
+        self.assertNotIn("abrir_nova", pag)
+        auto = self.client.get("/atendente?nova=1", cookies=self.atendente).text
+        self.assertIn("showModal()", auto)  # vindo de "Novo chamado" do painel, já abre o modal
+        self.assertNotIn("showModal()", pag)

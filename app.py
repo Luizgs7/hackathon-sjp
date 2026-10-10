@@ -1544,7 +1544,7 @@ def reprocessar(request: Request):
 # ---------------------------------------------------------------- atendente e gestor (web)
 
 @app.get("/atendente", response_class=HTMLResponse)
-def atendente(request: Request, sol: int = 0):
+def atendente(request: Request, sol: int = 0, nova: int = 0):
     u = exige_painel(request, "atendente", "gestor")
     with db() as c:
         setores = c.execute("SELECT * FROM setores").fetchall()
@@ -1552,7 +1552,7 @@ def atendente(request: Request, sol: int = 0):
         solicitacoes = c.execute("SELECT * FROM solicitacoes WHERE status='aguardando' ORDER BY id").fetchall()
     sel = next((s for s in solicitacoes if s["id"] == sol), None)
     return render(request, "atendente.html", u=u, setores=setores, tarefas=minhas, solicitacoes=solicitacoes,
-                  sel=sel, secretarias=SECRETARIAS)
+                  sel=sel, secretarias=SECRETARIAS, abrir_nova=bool(nova))
 
 
 def fila_atendimento(c):
