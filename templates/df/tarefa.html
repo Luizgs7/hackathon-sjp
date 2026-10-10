@@ -53,7 +53,7 @@
     </div>
   </section>
   {% endif %}
-  {% if pontos %}
+  {% if pontos and gt %}
   <section class="df-card" aria-labelledby="pt-t">
     <h2 id="pt-t">Pontuação gerada</h2>
     {% for p in pontos %}<p><small>{{ p.nome }}: <b>{{ '+' if p.pontos >= 0 }}{{ p.pontos }}</b> ({{ p.tipo }}) · {{ p.descricao }}</small></p>{% endfor %}

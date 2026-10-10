@@ -12,7 +12,10 @@
     {% set _ = nav.append(('equipe', '/gestor/equipe', 'Equipe', 'users')) %}
     {% set _ = nav.append(('metricas', '/gestor/metricas', 'Métricas', 'chart-bar')) %}
   {% endif %}
-  {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy')) %}
+  {% if gestor_tecnico %}
+    {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy')) %}
+    {% set _ = nav.append(('pontuacao', '/gestor/pontuacao', 'Pontuação', 'medal-fill')) %}
+  {% endif %}
   {% if 'gestor' in papeis %}{% set _ = nav.append(('config', '/config', 'Configurar', 'gear')) %}{% endif %}
 {% elif nav_perfil == 'campo' %}
   {% set _ = nav.append(('missoes', '/campo', 'Missões', 'list-checks')) %}

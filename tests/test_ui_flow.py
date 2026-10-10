@@ -105,7 +105,7 @@ class PaginasTests(UiFlowBase):
         return [("/login", None), ("/servidor", None),
                 (f"/servidor/acompanhar/{sol['token']}", None), (f"/validar/{t['token']}", None),
                 ("/atendente", self.atendente), (f"/tarefa/{tid}", self.atendente), ("/gestor", self.gestor),
-                ("/gestor/metricas", self.gestor), ("/ranking", self.gestor), ("/config", self.gestor),
+                ("/gestor/metricas", self.gestor), ("/gestor/pontuacao", {"sess_painel": app.assinar(self.users["Helena Prado"])}), ("/config", self.gestor),
                 ("/campo", self.tecnico), (f"/campo/{tid}", self.tecnico), ("/ranking", self.tecnico)]
 
     def test_todas_as_paginas_usam_somente_dataforge(self):
@@ -144,16 +144,29 @@ class PaginasTests(UiFlowBase):
                 self.assertIn(f'id="{i}"', html, f"{path}: #{i}")
 
     def test_navegacao_por_perfil(self):
-        for ck, presentes, ausentes in ((self.atendente, ["/atendente", "/ranking"], ["/config", "/gestor/metricas"]),
-                                        (self.gestor, ["/atendente", "/gestor", "/gestor/metricas", "/ranking", "/config"], []),
-                                        (self.tecnico, ["/campo", "/ranking"], ["/atendente", "/gestor"])):
-            path = "/ranking"
+        helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}
+        # gamificação (ranking e pontuação) só para técnicos e gestores técnicos
+        for ck, path, presentes, ausentes in (
+                (self.atendente, "/atendente", ["/atendente"], ["/config", "/gestor/metricas", "/ranking", "/gestor/pontuacao"]),
+                (self.gestor, "/gestor", ["/atendente", "/gestor", "/gestor/metricas", "/config"], ["/ranking", "/gestor/pontuacao"]),
+                (helena, "/gestor", ["/gestor", "/gestor/equipe", "/ranking", "/gestor/pontuacao"], ["/atendente", "/config"]),
+                (self.tecnico, "/campo", ["/campo", "/ranking"], ["/atendente", "/gestor"])):
             html = self.client.get(path, cookies=ck).text
             nav = re.search(r'<nav class="df-nav".*?</nav>', html, re.S).group(0)
             for p in presentes:
-                self.assertIn(f'href="{p}"', nav)
+                self.assertIn(f'href="{p}"', nav, (path, p))
             for p in ausentes:
-                self.assertNotIn(f'href="{p}"', nav)
+                self.assertNotIn(f'href="{p}"', nav, (path, p))
+
+    def test_ranking_e_pontuacao_so_para_tecnicos_e_gestores_tecnicos(self):
+        helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}
+        self.assertEqual(self.client.get("/ranking", cookies=self.atendente).status_code, 403)
+        self.assertEqual(self.client.get("/ranking", cookies=self.gestor).status_code, 403)
+        self.assertEqual(self.client.get("/ranking", cookies=helena).status_code, 200)
+        self.assertEqual(self.client.get("/ranking", cookies=self.tecnico).status_code, 200)
+        self.assertEqual(self.client.get("/gestor/pontuacao", cookies=self.gestor).status_code, 403)
+        self.assertEqual(self.client.get("/gestor/pontuacao", cookies=helena).status_code, 200)
+        self.assertNotIn("Pontuação e temporadas", self.client.get("/config", cookies=self.gestor).text)
 
     def test_tema_inicial_e_preferencia_persistida(self):
         html = self.client.get("/login").text
@@ -963,6 +976,10 @@ class FilaCompactaTests(UiFlowBase):
 
 
 class RegrasDePontuacaoTests(UiFlowBase):
+    def setUp(self):
+        super().setUp()
+        self.helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}
+
     def form(self, **extra):
         base = {"pontos_por_complexidade": "20", "mult_1": "0.5", "mult_2": "0.75", "mult_3": "1", "mult_4": "1.2", "mult_5": "1.5",
                 "sla_P1": "60", "sla_P2": "240", "sla_P3": "1440", "sla_P4": "4320", "bonus_sla": "20", "bonus_sem_reabertura": "15",
@@ -972,13 +989,14 @@ class RegrasDePontuacaoTests(UiFlowBase):
         return {**base, **extra}
 
     def test_tabela_edita_valores_e_liga_desliga(self):
-        pag = self.client.get("/config", cookies=self.gestor).text
+        self.assertEqual(self.client.post("/config/regras/tabela", cookies=self.gestor, data=self.form()).status_code, 403)  # gestor do Help Desk não configura
+        pag = self.client.get("/gestor/pontuacao", cookies=self.helena).text
         self.assertIn('name="mult_5"', pag)
         self.assertIn("Regra desligada não pontua", pag)
         self.assertEqual(self.client.post("/config/regras/tabela", cookies=self.atendente, data=self.form()).status_code, 403)
         dados = self.form(bonus_sla="33", mult_5="1.8")
         del dados["ativa_bonus_apoio_colega"]  # desliga
-        r = self.client.post("/config/regras/tabela", cookies=self.gestor, data=dados)
+        r = self.client.post("/config/regras/tabela", cookies=self.helena, data=dados)
         self.assertEqual(r.status_code, 303)
         with app.db() as c:
             r = app.regras(c)
@@ -987,13 +1005,13 @@ class RegrasDePontuacaoTests(UiFlowBase):
             self.assertEqual(r["bonus_apoio_colega"], 0)  # desligada vale zero
             self.assertEqual(app.regras_configuradas(c)["bonus_apoio_colega"], 15)  # valor guardado
         # religar volta ao valor guardado
-        self.client.post("/config/regras/tabela", cookies=self.gestor, data=self.form())
+        self.client.post("/config/regras/tabela", cookies=self.helena, data=self.form())
         with app.db() as c:
             self.assertEqual(app.regras(c)["bonus_apoio_colega"], 15)
 
     def test_valores_invalidos_sao_recusados(self):
         for ruim in ({"bonus_sla": "-5"}, {"mult_3": "9"}, {"sla_P1": "0"}, {"pontos_por_complexidade": "abc"}):
-            r = self.client.post("/config/regras/tabela", cookies=self.gestor, data=self.form(**ruim))
+            r = self.client.post("/config/regras/tabela", cookies=self.helena, data=self.form(**ruim))
             self.assertEqual(r.status_code, 303)
             self.assertIn("inv%C3%A1lidas", r.headers["location"], ruim)
         with app.db() as c:

@@ -3137,8 +3137,15 @@ def descartar_solicitacao(request: Request, sid: int, motivo: str = Form(...)):
 
 @app.get("/ranking", response_class=HTMLResponse)
 def ver_ranking(request: Request, temporada: int | None = None, setor_id: int | None = None):
-    u = usuario_do_cookie(request, "sess_painel") or usuario_do_cookie(request, "sess_campo")
-    if not u:
+    painel = usuario_do_cookie(request, "sess_painel")
+    campo_u = usuario_do_cookie(request, "sess_campo")
+    if painel and eh_gestor_tecnico(painel):
+        u = painel
+    elif campo_u:
+        u = campo_u
+    elif painel:
+        raise HTTPException(403, "O ranking é exclusivo das equipes de técnicos e dos gestores técnicos.")
+    else:
         return redirect("/login")
     with db() as c:
         temporadas = c.execute("SELECT * FROM temporadas ORDER BY numero DESC").fetchall()
@@ -3149,7 +3156,16 @@ def ver_ranking(request: Request, temporada: int | None = None, setor_id: int | 
         rg = regras(c)
     return render(request, "ranking.html", u=u, individual=individual, equipes=equipes, medalhas=meds,
                   temporadas=temporadas, temporada=temporada, setores=setores, setor_id=setor_id, rg=rg,
-                  campo="executor" in u["papeis"])
+                  campo="executor" in u["papeis"] and not eh_gestor_tecnico(u))
+
+
+@app.get("/gestor/pontuacao", response_class=HTMLResponse)
+def pontuacao(request: Request):
+    u = exige_painel(request, "gestor_tecnico")
+    with db() as c:
+        ctx = dict(u=u, regras_json=json.dumps(regras_configuradas(c), ensure_ascii=False, indent=2), rg=regras_configuradas(c),
+                   rg_ativas=cfg(c, "regras_ativas", {}), temporadas=c.execute("SELECT * FROM temporadas ORDER BY numero DESC").fetchall())
+    return render(request, "pontuacao.html", **ctx)
 
 
 @app.get("/config", response_class=HTMLResponse)
@@ -3185,7 +3201,7 @@ def _numero(f, nome, minimo, maximo, tipo):
 
 @app.post("/config/regras/tabela")
 async def salvar_regras_tabela(request: Request):
-    u = exige_painel(request, "gestor")
+    u = exige_painel(request, "gestor_tecnico")
     f = await request.form()
     try:
         novas = {
@@ -3198,33 +3214,33 @@ async def salvar_regras_tabela(request: Request):
             "bonus_apoio_colega": _numero(f, "bonus_apoio_colega", 0, 200, int),
         }
     except ValueError as e:
-        return redirect(f"/config?msg=Regras inválidas: {e}&aba=pontos")
+        return redirect(f"/gestor/pontuacao?msg=Regras inválidas: {e}")
     ativas = {k: f.get(f"ativa_{k}") == "on" for k in REGRAS_ATIVAVEIS}
     with db() as c:
         set_cfg(c, "regras", novas)
         set_cfg(c, "regras_ativas", ativas)
     log.info("regras de pontuação alteradas por %s", u["nome"])
-    return redirect("/config?msg=Regras de pontuação atualizadas&aba=pontos")
+    return redirect("/gestor/pontuacao?msg=Regras de pontuação atualizadas")
 
 
 @app.post("/config/regras")
 def salvar_regras(request: Request, regras_json: str = Form(...)):
-    u = exige_painel(request, "gestor")
+    u = exige_painel(request, "gestor_tecnico")
     try:
         novas = json.loads(regras_json)
         if set(REGRAS_PADRAO) - set(novas):
             raise ValueError(f"faltam chaves: {', '.join(sorted(set(REGRAS_PADRAO) - set(novas)))}")
     except ValueError as e:
-        return redirect(f"/config?msg=Regras inválidas: {e}")
+        return redirect(f"/gestor/pontuacao?msg=Regras inválidas: {e}")
     with db() as c:
         set_cfg(c, "regras", novas)
     log.info("regras de pontuação alteradas por %s", u["nome"])
-    return redirect("/config?msg=Regras de pontuação atualizadas")
+    return redirect("/gestor/pontuacao?msg=Regras de pontuação atualizadas")
 
 
 @app.post("/config/temporada")
 def nova_temporada(request: Request, nome: str = Form(...)):
-    exige_painel(request, "gestor")
+    exige_painel(request, "gestor_tecnico")
     with db() as c:
         n = temporada_atual(c)
         c.execute("UPDATE temporadas SET fim=? WHERE numero=?", (agora(), n))
