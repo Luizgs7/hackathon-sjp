@@ -573,3 +573,8 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 /* Progresso do técnico: faixa no topo da lista, em todos os tamanhos de tela */
 .df-stats.df-stats-topo { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 @media (min-width: 1100px) { .df-stats.df-stats-topo { display: grid; max-width: 720px; } }
+
+/* Prioridade: bandeira e quem priorizou */
+.df-prio-wrap { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; }
+.df-prio-por { color: var(--muted); }
+.df-badge[class*="df-priority-"] .df-icon { width: 14px; height: 14px; }

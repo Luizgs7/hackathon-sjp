@@ -514,6 +514,31 @@
       "path": "static/ui/icons/minus.svg",
       "url": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/regular/minus.svg",
       "sha256": "5a068d1cfd707fde5ddb0ce0623958123b6a5afba98401318983aeb0fdad6382"
+    },
+    {
+      "path": "static/ui/icons/flag.svg",
+      "url": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/regular/flag.svg",
+      "sha256": "2460f65cc31b6c3ab52ff936b56cfd38b3f179aab5c27fbd810f177d0c7ad24d"
+    },
+    {
+      "path": "static/ui/icons/path.svg",
+      "url": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/regular/path.svg",
+      "sha256": "76f5e16efb2333fb42f40d5685c2d3b0bb037597fa8253ee1974dfece3514f44"
+    },
+    {
+      "path": "static/ui/icons/bell-simple.svg",
+      "url": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/regular/bell-simple.svg",
+      "sha256": "aaf724a33627c38b17d03407d0bcfb3c2c461d7269f9bc07eef0a961f976eea3"
+    },
+    {
+      "path": "static/ui/icons/flag-fill.svg",
+      "url": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/flag-fill.svg",
+      "sha256": "fe8b8db7361da173e7c053c6854dafffe9f638d919e2b703e68b5bdf7accc66c"
+    },
+    {
+      "path": "static/ui/icons/bell-simple-fill.svg",
+      "url": "https://raw.githubusercontent.com/phosphor-icons/core/2b75f3ad12b420c9504ef05df8d2564a28f8500e/assets/fill/bell-simple-fill.svg",
+      "sha256": "e612600c2192e72b752dfadc9eaf6f371b2014c977f9e3b11a8af82e3abe160d"
     }
   ],
   "compilers": {

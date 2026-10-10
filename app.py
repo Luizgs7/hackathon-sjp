@@ -283,6 +283,7 @@ MIGRACOES = [
     ("usuarios", "disponivel", "INTEGER NOT NULL DEFAULT 1"),
     ("tarefas", "km_percorrido", "REAL NOT NULL DEFAULT 0"),
     ("usuarios", "area_id", "INTEGER"),
+    ("tarefas", "prioridade_por", "TEXT"),
     ("autoatendimento", "modo", "TEXT NOT NULL DEFAULT 'ia'"),
     ("autoatendimento", "atendente_id", "INTEGER"),
     ("autoatendimento", "modo_desde", "TEXT"),
@@ -1789,9 +1790,10 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
         ajustada_por = t["prioridade_ajustada_por"]
         if prioridade != t["prioridade"] and ia.get("prioridade") and prioridade != ia["prioridade"]:
             ajustada_por = u["nome"]
+        priorizou = (f"IA, confirmada por {u['nome']}" if ia.get("prioridade") == prioridade else u["nome"])
         c.execute("UPDATE tarefas SET executor_id=?, tipo_id=?, setor_id=?, prioridade=?, prioridade_ajustada_por=?, "
-                  "ia_status=? WHERE id=?",
-                  (executor_id, tipo_id, tipo["setor_id"], prioridade, ajustada_por, ia_status, tid))
+                  "ia_status=?, prioridade_por=? WHERE id=?",
+                  (executor_id, tipo_id, tipo["setor_id"], prioridade, ajustada_por, ia_status, priorizou, tid))
         area = c.execute("SELECT nome FROM setores WHERE id=?", (tipo["setor_id"],)).fetchone()["nome"]
         texto = f"Encaminhado a {ex['nome']} · área {area} · {tipo['nome']} · {prioridade} ({PRIORIDADES[prioridade]})"
         if ia_status in ("aceita", "editada") and t["ia_status"] == "sugerida":
@@ -1840,8 +1842,8 @@ def ajustar_prioridade(request: Request, tid: int, prioridade: str = Form(...), 
             return redirect(f"/tarefa/{tid}?msg=A criticidade já é {prioridade}")
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
         papel = "gestor" if "gestor" in u["papeis"] else "atendente"
-        c.execute("UPDATE tarefas SET prioridade=?, prioridade_ajustada_por=?, atualizado_em=? WHERE id=?",
-                  (prioridade, u["nome"], agora(), tid))
+        c.execute("UPDATE tarefas SET prioridade=?, prioridade_ajustada_por=?, prioridade_por=?, atualizado_em=? WHERE id=?",
+                  (prioridade, u["nome"], u["nome"], agora(), tid))
         texto = (f"Criticidade ajustada manualmente: {t['prioridade'] or 'sem prioridade'} → {prioridade} "
                  f"({PRIORIDADES[prioridade]})")
         if ia.get("prioridade"):

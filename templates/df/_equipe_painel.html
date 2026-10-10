@@ -46,7 +46,7 @@
       {% if fila %}
       <details class="df-details"><summary><span>Fila deste técnico ({{ fila|length }})</span></summary>
         <div class="df-details-body"><ul class="df-stack-sm" style="margin:0;padding-left:18px">
-          {% for x in fila %}<li><small>{{ ui.prio(x.prioridade) }} <a href="/tarefa/{{ x.id }}">#{{ x.id }} · {{ x.titulo }}</a> · {{ x.local or '—' }}</small></li>{% endfor %}
+          {% for x in fila %}<li><small>{{ ui.prio(x.prioridade, x.prioridade_por or x.prioridade_ajustada_por) }} <a href="/tarefa/{{ x.id }}">#{{ x.id }} · {{ x.titulo }}</a> · {{ x.local or '—' }}</small></li>{% endfor %}
         </ul></div></details>
       {% endif %}
     </article>

@@ -78,8 +78,9 @@
 <span class="df-st df-st-{{ s }}">{{ icon(STATUS_ICONES.get(s, 'info')) }}{{ STATUS[s][1] }}</span>
 {%- endmacro %}
 
-{% macro prio(p) -%}
-{% if p %}<span class="df-badge df-priority-{{ p|lower }}" title="Criticidade {{ PRIORIDADES[p] }}">{{ p }} · {{ PRIORIDADES[p] }}</span>{% else %}<span class="df-badge">sem criticidade</span>{% endif %}
+{# Criticidade com ícone de bandeira e, quando conhecido, quem priorizou #}
+{% macro prio(p, por=None) -%}
+{% if p %}<span class="df-prio-wrap"><span class="df-badge df-priority-{{ p|lower }}" title="Criticidade {{ PRIORIDADES[p] }}{{ ' · priorizada por ' ~ por if por }}">{{ icon('flag-fill') }}{{ p }} · {{ PRIORIDADES[p] }}</span>{% if por %}<small class="df-prio-por">por {{ por }}</small>{% endif %}</span>{% else %}<span class="df-badge">sem criticidade</span>{% endif %}
 {%- endmacro %}
 
 {% macro fonte(f) -%}

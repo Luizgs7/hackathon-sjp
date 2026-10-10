@@ -19,13 +19,13 @@
     <div id="p-pend" role="tabpanel" aria-labelledby="t-pend" tabindex="0"><div class="df-list">
     {% for t in pendentes %}
       <a class="df-mission df-new" href="/campo/{{ t.id }}"><span class="df-mission-ico">{{ ui.icon('list-checks') }}</span>
-        <span class="df-mission-body"><h3>{{ t.titulo }}</h3><span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local }}</span>{{ ui.prio(t.prioridade) }}</span></span><span class="df-radio" aria-hidden="true"></span></a>
+        <span class="df-mission-body"><h3>{{ t.titulo }}</h3><span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local }}</span>{{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}</span></span><span class="df-radio" aria-hidden="true"></span></a>
     {% else %}{{ ui.empty('Nenhuma missão nova. Aguarde novas missões.', 'shield-check') }}{% endfor %}
     </div></div>
     <div id="p-and" role="tabpanel" aria-labelledby="t-and" tabindex="0" hidden><div class="df-list">
     {% for t in andamento %}
       <a class="df-mission" href="/campo/{{ t.id }}"><span class="df-mission-ico">{{ ui.icon('wrench') }}</span>
-        <span class="df-mission-body"><h3>{{ t.titulo }}</h3><span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local }}</span>{{ ui.prio(t.prioridade) }}{{ ui.status(t.status) }}</span></span><span class="df-radio" aria-hidden="true"></span></a>
+        <span class="df-mission-body"><h3>{{ t.titulo }}</h3><span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local }}</span>{{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}{{ ui.status(t.status) }}</span></span><span class="df-radio" aria-hidden="true"></span></a>
     {% else %}{{ ui.empty('Nenhuma missão em andamento.', 'wrench') }}{% endfor %}
     </div></div>
     <div id="p-conc" role="tabpanel" aria-labelledby="t-conc" tabindex="0" hidden><div class="df-list">

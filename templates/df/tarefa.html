@@ -167,7 +167,7 @@
   {% if t.status not in ('concluido', 'cancelado') %}
   <section class="df-card" aria-labelledby="crit-t">
     <header><h2 id="crit-t">Criticidade</h2>
-      <div>{{ ui.prio(t.prioridade) }}{% if ia and ia.prioridade %} <small>· sugestão da IA: {{ ia.prioridade }} – {{ PRIORIDADES[ia.prioridade] }}</small>{% endif %}
+      <div>{{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}{% if ia and ia.prioridade %} <small>· sugestão da IA: {{ ia.prioridade }} – {{ PRIORIDADES[ia.prioridade] }}</small>{% endif %}
         {% if t.prioridade_ajustada_por %}<br><small>{{ ui.icon('pencil-simple') }}Ajustada manualmente por {{ t.prioridade_ajustada_por }}</small>{% endif %}</div></header>
     <details class="df-details">
       <summary>Discorda da criticidade? Ajustar manualmente</summary>

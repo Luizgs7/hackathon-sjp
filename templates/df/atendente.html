@@ -98,7 +98,7 @@
     <div class="df-list">
     {% for t in tarefas %}
       <a class="df-item-card" href="/tarefa/{{ t.id }}">
-        <div class="df-item-top">{{ ui.status(t.status) }} {{ ui.prio(t.prioridade) }}</div>
+        <div class="df-item-top">{{ ui.status(t.status) }} {{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}</div>
         <h3><span class="df-code">#{{ t.id }}</span> {{ t.titulo }}</h3>
         <small>{{ 'Origem: ' ~ SISTEMAS[t.origem].nome ~ ' ' ~ t.external_id if t.origem != 'web' else 'Cadastro web' }} · {{ t.criado_em|datahora }}</small>
       </a>

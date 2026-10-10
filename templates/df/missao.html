@@ -28,7 +28,7 @@
 <div class="df-page-head">
   <div class="df-stack-sm" style="width:100%">
     <p class="df-row"><a class="df-link" href="/campo">← Voltar</a><b class="df-mono">#{{ t.id }}</b></p>
-    <div class="df-item-top">{{ ui.status(t.status) }} {{ ui.prio(t.prioridade) }}</div>
+    <div class="df-item-top">{{ ui.status(t.status) }} {{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}</div>
     <h1>{{ t.titulo }}</h1>
   </div>
 </div>

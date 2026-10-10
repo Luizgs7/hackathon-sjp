@@ -22,7 +22,7 @@
 
 {% macro cartao(t) -%}
 <a class="df-item-card" href="/tarefa/{{ t.id }}">
-  <div class="df-item-top">{{ ui.prio(t.prioridade) }}
+  <div class="df-item-top">{{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}
     {% if t.status != STATUS_OFICIAL[t.status] %}{{ ui.status(t.status) }}{% endif %}
     {% if t.ia_status == 'analisando' %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}triando…</span>
     {% elif t.ia_status == 'sugerida' and t.status in ('novo', 'devolvido', 'reaberto') %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}sugestão p/ conferir</span>{% endif %}</div>
