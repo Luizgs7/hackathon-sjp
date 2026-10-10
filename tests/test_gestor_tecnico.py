@@ -44,5 +44,5 @@ class GestorTecnicoTests(UiFlowBase):
         with app.db() as c:
             for _ in range(3):
                 app.garantir_gestor_tecnico(c)
-            self.assertEqual(c.execute("SELECT count(*) FROM usuarios WHERE papeis='gestor_tecnico'").fetchone()[0],5)  # um por área técnica
+            self.assertEqual(c.execute("SELECT count(*) FROM usuarios WHERE papeis='gestor_tecnico'").fetchone()[0],3)  # três gestores técnicos
             self.assertEqual(c.execute("SELECT papeis FROM usuarios WHERE nome='Paula Mendes'").fetchone()[0],'gestor,atendente')

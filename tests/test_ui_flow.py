@@ -734,7 +734,7 @@ class BancoNovoComHistoricoTests(unittest.TestCase):
             with app.db() as c:
                 self.assertGreater(c.execute("SELECT count(*) FROM tarefas").fetchone()[0], 100)
                 areas = {r["area_id"] for r in c.execute("SELECT area_id FROM usuarios WHERE papeis='gestor_tecnico'")}
-                self.assertEqual(areas, {2, 3, 4, 5, 6})
+                self.assertEqual(areas, {2, 3, 5})  # Suporte, Telecom e Telefonia
                 self.assertTrue(all(e["setor_id"] for e in app.carga_executores(c)))
 
 
@@ -768,7 +768,9 @@ class RotaDoTecnicoTests(UiFlowBase):
         self.assertEqual(len(dados["paradas"]), 2)
         self.assertGreater(dados["total_km"], 0)
         self.assertGreaterEqual(len(dados["caminho"]), 3)
-        vazio = self.client.get("/campo/rota", cookies={"sess_campo": app.assinar(self.users["Larissa Moura"])})  # sem missões
+        with app.db() as c:  # técnico novo, sem missões
+            novo = c.execute("INSERT INTO usuarios(nome,papeis,equipe_id,avatar) VALUES('Técnico Sem Missões','executor',3,'')").lastrowid
+        vazio = self.client.get("/campo/rota", cookies={"sess_campo": app.assinar(novo)})
         self.assertIn("Nenhuma missão aguardando", vazio.text)
 
 

@@ -328,16 +328,51 @@ def init_db():
         garantir_gestor_tecnico(c)
         if SEED_HISTORICO and not cfg(c, "historico_metricas"):
             seed_historico(c)
+        organizar_demo(c)
 
 
 def garantir_gestor_tecnico(c):
     """Perfil fictício adicional, também aplicado aos bancos existentes da demonstração."""
     # Cada gestor técnico responde por uma área e só enxerga os chamados dela.
-    for nome, setor in (("Roberto Nunes", 2), ("Helena Prado", 3), ("Otávio Brandão", 4), ("Camila Duarte", 5),
-                        ("Renato Paiva", 6)):
+    for nome, setor in (("Roberto Nunes", 2), ("Helena Prado", 3), ("Camila Duarte", 5)):
         c.execute("INSERT INTO usuarios(nome,papeis,competencias,avatar,area_id) SELECT ?,'gestor_tecnico','','',? "
                   "WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE nome=?)", (nome, setor, nome))
     c.execute("UPDATE usuarios SET area_id=2 WHERE papeis='gestor_tecnico' AND area_id IS NULL")
+
+
+def organizar_demo(c):
+    """Demonstração enxuta: 3 gestores técnicos (Suporte, Telecom e Telefonia), cada um com 1 técnico.
+    Aplica-se também a bancos já existentes: o histórico dos técnicos removidos passa para os que ficam. Roda uma vez."""
+    if cfg(c, "demo_3x1"):
+        return
+    ids = {r["nome"]: r["id"] for r in c.execute("SELECT id, nome FROM usuarios")}
+    destino = {"Bruno Alves": "Marcos Vieira", "Juliana Rocha": "Rafael Costa", "Larissa Moura": "Diego Santos", "Tiago Ferreira": "Diego Santos"}
+    for antigo, novo in destino.items():
+        if antigo not in ids or novo not in ids:
+            continue
+        a, n = ids[antigo], ids[novo]
+        eq = c.execute("SELECT equipe_id FROM usuarios WHERE id=?", (n,)).fetchone()["equipe_id"]
+        c.execute("UPDATE tarefas SET executor_id=? WHERE executor_id=?", (n, a))
+        c.execute("UPDATE tarefas SET criado_por=? WHERE criado_por=?", (n, a))
+        c.execute("UPDATE pontos SET usuario_id=?, equipe_id=? WHERE usuario_id=?", (n, eq, a))
+        c.execute("UPDATE impedimentos SET apoio_id=? WHERE apoio_id=?", (n, a))
+        c.execute("UPDATE push_subs SET usuario_id=? WHERE usuario_id=?", (n, a))
+        c.execute("DELETE FROM usuarios WHERE id=?", (a,))
+    c.execute("DELETE FROM usuarios WHERE nome IN ('Otávio Brandão','Renato Paiva') AND papeis='gestor_tecnico'")
+    # áreas e equipes sem técnico saem; os tipos delas passam para Suporte Técnico (Help Desk, Telecom, Telefonia e Suporte permanecem)
+    for setor in (4, 6):
+        c.execute("UPDATE tipos SET setor_id=2 WHERE setor_id=?", (setor,))
+        c.execute("UPDATE tarefas SET setor_id=2 WHERE setor_id=?", (setor,))
+        c.execute("UPDATE solicitacoes SET setor_id=2 WHERE setor_id=?", (setor,))
+    for eq in (1, 4, 6):
+        if not c.execute("SELECT 1 FROM usuarios WHERE equipe_id=?", (eq,)).fetchone():
+            alvo = c.execute("SELECT id FROM equipes ORDER BY id LIMIT 1 OFFSET 1").fetchone()
+            c.execute("UPDATE pontos SET equipe_id=NULL WHERE equipe_id=?", (eq,))
+            c.execute("DELETE FROM equipes WHERE id=?", (eq,))
+    for setor in (4, 6):
+        if not c.execute("SELECT 1 FROM equipes WHERE setor_id=?", (setor,)).fetchone():
+            c.execute("DELETE FROM setores WHERE id=?", (setor,))
+    set_cfg(c, "demo_3x1", True)
 
 
 def seed(c):
