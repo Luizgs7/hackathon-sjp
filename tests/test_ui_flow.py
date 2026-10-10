@@ -571,6 +571,8 @@ class PainelEquipeTests(UiFlowBase):
 
     def novo(self, local, executor=None):
         tid = self.registrar(self.solicitar(local=local))
+        with app.db() as c:  # o painel é do gestor técnico: os chamados do teste pertencem à área dele (Telecom, 3)
+            c.execute("UPDATE tarefas SET setor_id=3 WHERE id=?", (tid,))
         if executor:
             self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
                 "executor_id": self.users[executor], "tipo_id": 1, "prioridade": "P2"})
@@ -580,19 +582,23 @@ class PainelEquipeTests(UiFlowBase):
         self.assertEqual(self.client.get("/gestor/equipe", cookies=self.atendente).status_code, 403)
         self.assertEqual(self.client.get("/gestor/equipe", cookies=self.tecnico).status_code, 303)
         self.assertEqual(self.client.get("/gestor/equipe", cookies=self.gt).status_code, 200)
+        # a equipe técnica é do gestor técnico: a gestora do Help Desk não vê o menu nem acessa as rotas
+        for rota in ("/gestor/equipe", "/gestor/equipe/painel", "/gestor/equipe/dados", "/gestor/equipe/historico"):
+            self.assertEqual(self.client.get(rota, cookies=self.gestor).status_code, 403, rota)
+        self.assertNotIn('href="/gestor/equipe"', self.client.get("/gestor", cookies=self.gestor).text)
+        self.assertIn('href="/gestor/equipe"', self.client.get("/gestor", cookies=self.gt).text)
         a = self.novo("UBS Centro", "Rafael Costa")
         self.novo("UBS Centro", "Rafael Costa")
         self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "a_caminho"})
         self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "em_execucao"})
         pend = self.novo("Escola Municipal Sul")
-        pagina = self.client.get("/gestor/equipe/painel", cookies=self.gestor).text
+        pagina = self.client.get("/gestor/equipe/painel", cookies={"sess_painel": app.assinar(self.users["Helena Prado"])}).text
         self.assertIn("chamado(s) no backlog", pagina)
         self.assertIn("Rafael Costa", pagina)
         self.assertIn("Em atendimento agora", pagina)
         self.assertIn(f"#{a}", pagina)
         self.assertIn("UBS Centro", pagina)
-        self.assertIn(f"#{pend}", pagina)
-        self.assertIn("Direcionar", pagina)
+        self.assertNotIn(f"#{pend}", pagina)  # chamado ainda sem técnico fica na fila do Help Desk
 
     def test_ranking_por_distancia_e_inativo_fora(self):
         a = self.novo("UBS Centro", "Rafael Costa")
@@ -611,10 +617,10 @@ class PainelEquipeTests(UiFlowBase):
 
     def test_dados_do_mapa(self):
         self.novo("UBS Centro")
-        r = self.client.get("/gestor/equipe/dados", cookies=self.gestor)
+        r = self.client.get("/gestor/equipe/dados", cookies={"sess_painel": app.assinar(self.users["Helena Prado"])})
         self.assertEqual(r.status_code, 200)
         j = r.json()
-        self.assertEqual(len(j["pendentes"]), 1)
+        self.assertEqual(j["pendentes"], [])  # direcionar chamados novos é do Help Desk; o gestor técnico só vê o que é da área
         self.assertTrue(j["tecnicos"] and len(j["tecnicos"][0]["posicao"]) == 2)
         self.assertEqual(self.client.get("/gestor/equipe/dados", cookies=self.atendente).status_code, 403)
 
@@ -893,7 +899,7 @@ class PessoasEHistoricoTests(UiFlowBase):
             "executor_id": self.users["Rafael Costa"], "tipo_id": 1, "prioridade": "P3"})
         for para in ("a_caminho", "em_execucao"):
             self.client.post(f"/campo/{tid}/avancar", cookies=self.tecnico, data={"para": para})
-        r = self.client.get("/gestor/equipe/historico", cookies=self.gestor)
+        r = self.client.get("/gestor/equipe/historico", cookies={"sess_painel": app.assinar(self.users["Helena Prado"])})
         self.assertEqual(r.status_code, 200)
         self.assertIn("Rafael Costa", r.text)
         self.assertIn(f"#{tid}", r.text)
@@ -911,7 +917,7 @@ class CargaPorTecnicoTests(UiFlowBase):
         self.assertEqual(raf["etapas"]["encaminhado"], 1)
         self.assertEqual(raf["carga"], raf["total"] + raf["conf"])
         self.assertTrue(any(e["nome"] == "Telecom e Redes" and e["chamados"] >= 1 for e in d["equipes"]))
-        pagina = self.client.get("/gestor/equipe/painel", cookies=self.gestor).text
+        pagina = self.client.get("/gestor/equipe/painel", cookies={"sess_painel": app.assinar(self.users["Helena Prado"])}).text
         self.assertIn("Carga por técnico", pagina)
         self.assertIn("Carga por equipe", pagina)
         self.assertIn("Rafael Costa", pagina)

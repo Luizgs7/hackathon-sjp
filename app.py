@@ -1814,7 +1814,7 @@ def painel_equipe(c, u=None):
 
 @app.get("/gestor/equipe", response_class=HTMLResponse)
 def equipe_pagina(request: Request):
-    u = exige_painel(request, "gestor", "gestor_tecnico")
+    u = exige_painel(request, "gestor_tecnico")
     return render(request, "equipe.html", u=u)
 
 
@@ -1840,7 +1840,7 @@ def historico_rotas(c, u, dias=7):
 
 @app.get("/gestor/equipe/historico", response_class=HTMLResponse)
 def equipe_historico(request: Request, dias: int = 7):
-    u = exige_painel(request, "gestor", "gestor_tecnico")
+    u = exige_painel(request, "gestor_tecnico")
     with db() as c:
         tecnicos = historico_rotas(c, u, dias if dias in (7, 30) else 7)
     return render(request, "_historico_rotas.html", tecnicos=tecnicos, dias=dias if dias in (7, 30) else 7)
@@ -1848,7 +1848,7 @@ def equipe_historico(request: Request, dias: int = 7):
 
 @app.get("/gestor/equipe/painel", response_class=HTMLResponse)
 def equipe_painel(request: Request):
-    u = exige_painel(request, "gestor", "gestor_tecnico")
+    u = exige_painel(request, "gestor_tecnico")
     with db() as c:
         dados = painel_equipe(c, u)
         tipos = c.execute("SELECT id, setor_id FROM tipos ORDER BY id").fetchall()
@@ -1857,7 +1857,7 @@ def equipe_painel(request: Request):
 
 @app.get("/gestor/equipe/dados")
 def equipe_dados(request: Request):
-    u = exige_painel(request, "gestor", "gestor_tecnico")
+    u = exige_painel(request, "gestor_tecnico")
     with db() as c:
         d = painel_equipe(c, u)
     return JSONResponse({
