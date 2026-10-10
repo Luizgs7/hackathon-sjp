@@ -29,6 +29,13 @@ ESTADO = {"online": True}
 app = FastAPI(title="SisChamados Legado (simulado)")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 templates = Jinja2Templates(directory=BASE / "templates")
+def _sprite_inline():
+    """Ícones embutidos na página: sem arquivo externo para revalidar, então não piscam nas atualizações automáticas."""
+    from markupsafe import Markup
+    raw = (BASE / "static" / "ui" / "phosphor.svg").read_text(encoding="utf-8")
+    return Markup(raw[raw.index("<svg"):].replace("<svg ", '<svg style="display:none" aria-hidden="true" focusable="false" ', 1))
+
+templates.env.globals["SPRITE_INLINE"] = _sprite_inline()
 templates.env.filters["datahora"] = lambda s: f"{s[8:10]}/{s[5:7]} {s[11:16]}" if s else ""
 
 

@@ -1,5 +1,5 @@
 {# Macros DataForge para as telas do produto. Textos e atributos são escapados pelo Jinja; nunca usar |safe com dados de usuários. #}
-{% macro icon(name) -%}<svg class="df-icon" aria-hidden="true" focusable="false"><use href="/static/ui/phosphor.svg#{{ name }}"/></svg>{%- endmacro %}
+{% macro icon(name) -%}<svg class="df-icon" aria-hidden="true" focusable="false"><use href="#{{ name }}"/></svg>{%- endmacro %}
 
 {% macro attrs_out(attrs) -%}{% for k, v in (attrs or {}).items() %}{% if v is sameas true %} {{ k }}{% elif v is not none and v is not sameas false %} {{ k }}="{{ v }}"{% endif %}{% endfor %}{%- endmacro %}
 

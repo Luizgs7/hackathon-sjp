@@ -24,7 +24,7 @@
   });
 
   /* ---------- botões ocupados: impede envio duplicado e restaura ao terminar ---------- */
-  const loader = '<span class="df-button-loader" aria-hidden="true"><svg class="df-icon" aria-hidden="true" focusable="false"><use href="/static/ui/phosphor.svg#spinner"/></svg></span>';
+  const loader = '<span class="df-button-loader" aria-hidden="true"><svg class="df-icon" aria-hidden="true" focusable="false"><use href="#spinner"/></svg></span>';
   const setBusy = (btn, on) => {
     if (!btn) return;
     if (on) {
@@ -53,7 +53,7 @@
       box = document.createElement('div');
       box.className = 'df-notice df-notice-danger df-form-error';
       box.setAttribute('role', 'alert');
-      box.innerHTML = '<svg class="df-icon" aria-hidden="true" focusable="false"><use href="/static/ui/phosphor.svg#warning"/></svg><div><span data-msg></span> <button type="button" class="df-button df-secondary df-size-small" data-retry>Tentar novamente</button></div>';
+      box.innerHTML = '<svg class="df-icon" aria-hidden="true" focusable="false"><use href="#warning"/></svg><div><span data-msg></span> <button type="button" class="df-button df-secondary df-size-small" data-retry>Tentar novamente</button></div>';
       form.prepend(box);
     }
     $('[data-msg]', box).textContent = text;
@@ -124,7 +124,7 @@
     n.id = 'df-session';
     n.className = 'df-notice df-notice-warn';
     n.setAttribute('role', 'alert');
-    n.innerHTML = '<svg class="df-icon" aria-hidden="true" focusable="false"><use href="/static/ui/phosphor.svg#lock-simple"/></svg><div><b>Sua sessão expirou.</b> <a href="/login">Entrar novamente</a></div>';
+    n.innerHTML = '<svg class="df-icon" aria-hidden="true" focusable="false"><use href="#lock-simple"/></svg><div><b>Sua sessão expirou.</b> <a href="/login">Entrar novamente</a></div>';
     ($('.df-toasts') || document.body).append(n);
   };
   const isPoll = el => el && el.hasAttribute('hx-trigger') && /every/.test(el.getAttribute('hx-trigger'));
@@ -321,7 +321,7 @@ document.addEventListener('error', e => {
   if (!img || img.tagName !== 'IMG' || !img.hasAttribute('data-foto')) return;
   const box = document.createElement('div');
   box.className = 'df-empty';
-  box.innerHTML = '<svg class="df-icon" aria-hidden="true" focusable="false"><use href="/static/ui/phosphor.svg#image"/></svg><p></p>';
+  box.innerHTML = '<svg class="df-icon" aria-hidden="true" focusable="false"><use href="#image"/></svg><p></p>';
   box.querySelector('p').textContent = img.dataset.vazio || 'Imagem indisponível.';
   img.replaceWith(box);
 }, true);

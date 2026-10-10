@@ -1252,9 +1252,25 @@ async def lifespan(_app):
 
 
 app = FastAPI(title="Missões SJP – API", lifespan=lifespan)
+@app.middleware("http")
+async def cache_estaticos(request: Request, call_next):
+    resp = await call_next(request)
+    if request.url.path.startswith("/static/") and resp.status_code == 200:
+        longo = request.url.path.endswith((".woff2", ".png", ".svg", ".jpg", ".ico"))
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable" if longo else "public, max-age=300, must-revalidate"
+    return resp
+
+
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 app.mount("/uploads", StaticFiles(directory=UPLOADS), name="uploads")
 templates = Jinja2Templates(directory=BASE / "templates")
+def _sprite_inline():
+    """Ícones embutidos na página: sem arquivo externo para revalidar, então não piscam nas atualizações automáticas."""
+    from markupsafe import Markup
+    raw = (BASE / "static" / "ui" / "phosphor.svg").read_text(encoding="utf-8")
+    return Markup(raw[raw.index("<svg"):].replace("<svg ", '<svg style="display:none" aria-hidden="true" focusable="false" ', 1))
+
+templates.env.globals["SPRITE_INLINE"] = _sprite_inline()
 templates.env.globals["upload_existe"] = lambda nome: bool(nome) and (UPLOADS / Path(str(nome)).name).is_file()
 templates.env.globals.update(STATUS=STATUS, PRIORIDADES=PRIORIDADES, MOTIVOS=MOTIVOS_IMPEDIMENTO, MOTIVOS_DEVOLUCAO=MOTIVOS_DEVOLUCAO,
                              STATUS_OFICIAL=STATUS_OFICIAL, STATUS_OFICIAIS=STATUS_OFICIAIS,
