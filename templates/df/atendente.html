@@ -28,12 +28,8 @@
   <small id="ind-fila" class="htmx-indicator" role="status">atualizando…</small>
 </div>
 
-{% if not sel %}
-<section class="df-select-empty" aria-label="Nenhuma solicitação selecionada">
-  <span class="df-select-ico">{{ ui.icon('tray') }}</span>
-  <h2>Selecione uma solicitação</h2>
-  <p class="df-muted">Escolha uma solicitação da lista para conferir a conversa e registrar o chamado.</p>
-</section>
+{% if not sel and solicitacoes %}
+{% call ui.notice('', 'info', 'info') %}<b>{{ solicitacoes|length }} solicitação{{ 'ões' if solicitacoes|length > 1 else '' }} aguardando registro.</b> Abra a lista de solicitações (no celular, pelo menu no topo) para conferir a conversa e registrar o chamado.{% endcall %}
 {% endif %}
 
 <section id="conversas" aria-live="polite" hx-get="/atendente/conversas" hx-trigger="load, every 5s"></section>

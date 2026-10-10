@@ -623,3 +623,8 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-rota-mover { display: grid; gap: 4px; }
 .df-rota-mover form { margin: 0; }
 @media (max-width: 520px) { .df-rota-lista > li { grid-template-columns: 36px minmax(0, 1fr); } .df-rota-mover { grid-column: 2; display: flex; } }
+
+/* Kanban: todas as colunas com a mesma largura (320 px), sem rolagem interna; o quadro rola na horizontal */
+.df-board, .df-board.df-board { grid-auto-columns: 320px; }
+@media (max-width: 520px) { .df-board, .df-board.df-board { grid-auto-columns: min(84vw, 320px); } }
+.df-board .df-board-col { max-height: none; overflow-y: visible; }

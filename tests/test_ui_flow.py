@@ -948,3 +948,13 @@ class SairDaContaTests(UiFlowBase):
         self.assertEqual(r.headers["location"], "/login")
         # sem sessão, o assistente também leva ao login
         self.assertTrue(self.client.get("/servidor").headers["location"].startswith("/login"))
+
+
+class FilaCompactaTests(UiFlowBase):
+    def test_sem_bloco_vazio_grande_na_fila(self):
+        pag = self.client.get("/atendente", cookies=self.atendente).text
+        self.assertNotIn("Selecione uma solicitação", pag)
+        self.solicitar()
+        pag = self.client.get("/atendente", cookies=self.atendente).text
+        self.assertNotIn("df-select-empty", pag)
+        self.assertIn("aguardando registro", pag)
