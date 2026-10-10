@@ -116,10 +116,32 @@
   </section>
   {% endif %}
 
+  {% if t.status in ('novo', 'reaberto') and t.gt_destino_id %}
+  <section class="df-card" aria-labelledby="gtd-t">
+    <header><h2 id="gtd-t">{{ ui.icon('paper-plane-right') }} {{ 'Alocar técnico' if gt else 'Aguardando o gestor técnico' }}</h2>
+      <small>Encaminhado por {{ t.gt_encaminhado_por }} ao gestor técnico {{ gt_destino.nome if gt_destino else '' }}{% if setor %} · área {{ setor.nome }}{% endif %}. {{ 'Escolha o técnico da sua área abaixo.' if gt else 'Ele escolhe o técnico da área e o chamado passa a Encaminhado.' }}</small></header>
+  </section>
+  {% elif t.status in ('novo', 'reaberto') and not gt %}
+  <section class="df-card" aria-labelledby="egt-t">
+    <header><h2 id="egt-t">{{ ui.icon('users') }} Encaminhar ao gestor técnico</h2>
+      <small>Escolha o gestor técnico responsável. Ele recebe o chamado na área dele e aloca o técnico.</small></header>
+    <form class="df-form" method="post" action="/tarefa/{{ t.id }}/encaminhar-gt" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      {% set gt_opts = [] %}{% for g in gestores_tecnicos %}{% set _ = gt_opts.append((g.id, g.area ~ ' · ' ~ g.nome)) %}{% endfor %}
+      {% set area_sug = (tipo.setor_id if tipo else t.setor_id) %}
+      {% set gt_sug = (gestores_tecnicos|selectattr('area', 'equalto', setor.nome)|map(attribute='id')|first) if setor else '' %}
+      {{ ui.select('gestor_tecnico_id', 'Gestor técnico', gt_opts, gt_sug, required=True, id='egt-gt') }}
+      {% set prio_opts = [] %}{% for p, n in PRIORIDADES.items() %}{% set _ = prio_opts.append((p, p ~ ' – ' ~ n)) %}{% endfor %}
+      {{ ui.select('prioridade', 'Criticidade', prio_opts, (t.prioridade or sug.prioridade or 'P3'), id='egt-prio') }}
+      {{ ui.field('observacao', 'Orientação ao gestor técnico (opcional)', '', id='egt-obs') }}
+      <div class="df-form-actions">{{ ui.button('Encaminhar ao gestor técnico', glyph='paper-plane-right') }}</div>
+    </form>
+  </section>
+  {% endif %}
+
   {% if (na_fila or t.status == 'encaminhado') and not gestor_hd and not (t.status == 'devolvido' and not gt) %}
   <section class="df-card" aria-labelledby="dec-t">
     <header>
-      <h2 id="dec-t">{{ 'Reavaliar chamado devolvido' if t.status == 'devolvido' else ('Avaliação do atendimento' if na_fila else 'Reencaminhar') }}</h2>
+      <h2 id="dec-t">{{ 'Reavaliar chamado devolvido' if t.status == 'devolvido' else ('Alocar técnico' if (gt and t.gt_destino_id) else ('Avaliação do atendimento' if na_fila else 'Reencaminhar')) }}</h2>
       <small>{% if t.status == 'devolvido' %}O técnico devolveu este chamado{% if ultimo %} ({{ ultimo.texto }}){% endif %}. Direcione a outro técnico da sua área ou cancele com justificativa obrigatória.{% else %}{{ 'Este chamado está na fila do atendimento. Resolva aqui mesmo ou encaminhe para a área técnica.' if na_fila else 'O técnico ainda não iniciou: dá para trocar a área ou o técnico.' }}{% endif %}</small>
     </header>
 

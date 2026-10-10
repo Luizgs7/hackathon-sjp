@@ -311,6 +311,8 @@ MIGRACOES = [
     ("tarefas", "secretaria", "TEXT NOT NULL DEFAULT ''"),
     ("tarefas", "prioridade_ajustada_por", "TEXT"),
     ("tarefas", "resolvido_atendimento_por", "TEXT"),
+    ("tarefas", "gt_destino_id", "INTEGER"),
+    ("tarefas", "gt_encaminhado_por", "TEXT"),
     ("solicitacoes", "email", "TEXT NOT NULL DEFAULT ''"),
     ("solicitacoes", "secretaria", "TEXT NOT NULL DEFAULT ''"),
 ]
@@ -1013,7 +1015,8 @@ def indicadores(c, setor_id=None):
                         " GROUP BY i.motivo ORDER BY n DESC LIMIT 3", p).fetchall()
     return {
         "recebidas": sum(por_status.values()),
-        "novos": sum(por_status.get(s, 0) for s in FILA_ATENDIMENTO),
+        "novos": c.execute(f"SELECT count(*) FROM tarefas t{w}{' AND ' if w else ' WHERE '}t.status IN ({','.join('?' * len(FILA_ATENDIMENTO))}) "
+                           "AND t.gt_destino_id IS NULL", [*p, *FILA_ATENDIMENTO]).fetchone()[0],
         "em_execucao": sum(por_status.get(s, 0) for s in ("encaminhado", "a_caminho", "em_execucao")),
         "devolvidos": por_status.get("devolvido", 0),
         "cancelados": por_status.get("cancelado", 0),
@@ -1638,7 +1641,7 @@ def fila_atendimento(c):
     """Chamados que aguardam avaliação do atendimento: novos, devolvidos pelo técnico e reabertos pela demandante."""
     fila = c.execute(
         "SELECT t.*, (SELECT max(criado_em) FROM eventos WHERE tarefa_id=t.id AND para=t.status) entrou_em "
-        f"FROM tarefas t WHERE t.status IN ({','.join('?' * len(FILA_ATENDIMENTO))})", FILA_ATENDIMENTO).fetchall()
+        f"FROM tarefas t WHERE t.status IN ({','.join('?' * len(FILA_ATENDIMENTO))}) AND t.gt_destino_id IS NULL", FILA_ATENDIMENTO).fetchall()
     itens = []
     for t in fila:
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
@@ -1767,9 +1770,13 @@ def mover_formulario(request: Request, tid: int, para: str = ""):
             raise HTTPException(409, f"Não é possível mover de {STATUS[t['status']][1]} para {STATUS.get(para, ('', para))[1]}.")
         ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
         sug = ia if t["ia_status"] == "sugerida" else {}
-        ctx = dict(t=t, para=para, sug=sug)
-        if para == "encaminhado":
-            gt = eh_gestor_tecnico(u)
+        gt = eh_gestor_tecnico(u)
+        via_gt = para == "encaminhado" and not gt and t["status"] in FILA_ATENDIMENTO
+        ctx = dict(t=t, para=para, sug=sug, via_gt=via_gt)
+        if via_gt:
+            ctx["gestores_tecnicos"] = c.execute("SELECT u.id, u.nome, s.nome area FROM usuarios u JOIN setores s ON s.id=u.area_id "
+                                                 "WHERE u.papeis LIKE '%gestor_tecnico%' ORDER BY s.nome").fetchall()
+        elif para == "encaminhado":
             ctx |= dict(tipos=[x for x in c.execute("SELECT t.*, s.nome setor FROM tipos t JOIN setores s ON s.id=t.setor_id").fetchall()
                                if not gt or x["setor_id"] == u["area_id"]],
                         executores=carga_executores(c, u["area_id"] if gt else None))
@@ -2056,6 +2063,9 @@ def tarefa_detalhe(request: Request, tid: int):
                    if not eh_gestor_tecnico(u) or x["setor_id"] == u["area_id"]],
             executores=carga_executores(c, u["area_id"] if eh_gestor_tecnico(u) else None),
             todos=c.execute("SELECT * FROM usuarios ORDER BY nome").fetchall(),
+            gestores_tecnicos=c.execute("SELECT u.id, u.nome, s.nome area FROM usuarios u JOIN setores s ON s.id=u.area_id "
+                                        "WHERE u.papeis LIKE '%gestor_tecnico%' ORDER BY s.nome").fetchall(),
+            gt_destino=c.execute("SELECT nome FROM usuarios WHERE id=?", (t["gt_destino_id"],)).fetchone() if t["gt_destino_id"] else None,
             eventos=c.execute("SELECT * FROM eventos WHERE tarefa_id=? ORDER BY id DESC", (tid,)).fetchall(),
             impedimentos=c.execute("SELECT i.*, u.nome apoio FROM impedimentos i LEFT JOIN usuarios u ON u.id=i.apoio_id "
                                    "WHERE tarefa_id=? ORDER BY id DESC", (tid,)).fetchall(),
@@ -2128,7 +2138,7 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
             ajustada_por = u["nome"]
         priorizou = (f"IA, confirmada por {u['nome']}" if ia.get("prioridade") == prioridade else u["nome"])
         c.execute("UPDATE tarefas SET executor_id=?, tipo_id=?, setor_id=?, prioridade=?, prioridade_ajustada_por=?, "
-                  "ia_status=?, prioridade_por=? WHERE id=?",
+                  "ia_status=?, prioridade_por=?, gt_destino_id=NULL, gt_encaminhado_por=NULL WHERE id=?",
                   (executor_id, tipo_id, tipo["setor_id"], prioridade, ajustada_por, ia_status, priorizou, tid))
         area = c.execute("SELECT nome FROM setores WHERE id=?", (tipo["setor_id"],)).fetchone()["nome"]
         texto = f"Encaminhado a {ex['nome']} · área {area} · {tipo['nome']} · {prioridade} ({PRIORIDADES[prioridade]})"
@@ -2141,6 +2151,35 @@ def atribuir(request: Request, tid: int, executor_id: int = Form(...), tipo_id: 
                      f"{t['titulo']} · {t['local']}", f"/campo/{tid}")
     em_segundo_plano(processar_outbox)
     return redirect(f"/tarefa/{tid}?msg=Chamado encaminhado a {ex['nome']} – notificação push enviada")
+
+
+@app.post("/tarefa/{tid}/encaminhar-gt")
+def encaminhar_ao_gestor_tecnico(request: Request, tid: int, gestor_tecnico_id: int = Form(...), prioridade: str = Form(""),
+                                 observacao: str = Form("")):
+    """O Help Desk escolhe um dos gestores técnicos; ele recebe o chamado na área dele e aloca o técnico."""
+    u = exige_painel(request, "atendente", "gestor")
+    if eh_gestor_tecnico(u):
+        raise HTTPException(403, "O gestor técnico aloca o técnico direto no chamado da sua área.")
+    with db() as c:
+        t = tarefa_ou_404(c, tid)
+        if t["status"] not in FILA_ATENDIMENTO:
+            raise HTTPException(409, "Só chamados novos ou reabertos podem ser encaminhados ao gestor técnico.")
+        gt = c.execute("SELECT * FROM usuarios WHERE id=? AND papeis LIKE '%gestor_tecnico%'", (gestor_tecnico_id,)).fetchone()
+        if not gt or not gt["area_id"]:
+            raise HTTPException(422, "Escolha um gestor técnico válido.")
+        if prioridade and prioridade not in PRIORIDADES:
+            raise HTTPException(422, "Criticidade inválida")
+        area = c.execute("SELECT nome FROM setores WHERE id=?", (gt["area_id"],)).fetchone()["nome"]
+        nova_prio = prioridade or t["prioridade"] or "P3"
+        c.execute("UPDATE tarefas SET setor_id=?, gt_destino_id=?, gt_encaminhado_por=?, prioridade=?, prioridade_por=? WHERE id=?",
+                  (gt["area_id"], gt["id"], u["nome"], nova_prio, u["nome"] if prioridade else t["prioridade_por"], tid))
+        texto = f"Encaminhado ao gestor técnico {gt['nome']} · área {area} · {nova_prio} ({PRIORIDADES[nova_prio]})"
+        if observacao.strip():
+            texto += f" · Obs.: {observacao.strip()}"
+        registrar_evento(c, tid, u["nome"], papel_painel(u), texto)
+        notificar(c, [f"u:{gt['id']}"], f"Chamado #{tid} aguarda alocação de técnico",
+                  f"{t['titulo']} · encaminhado por {u['nome']}", f"/tarefa/{tid}", f"u:{u['id']}")
+    return redirect(f"/tarefa/{tid}?msg=Chamado encaminhado a {gt['nome']} ({area}) para alocar o técnico")
 
 
 @app.post("/tarefa/{tid}/resolver-atendimento")

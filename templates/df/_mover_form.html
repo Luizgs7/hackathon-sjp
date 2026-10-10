@@ -1,10 +1,17 @@
 {# Formulário do modal "Mover chamado": soltar um cartão no quadro só abre a ação; o status muda no endpoint existente. #}
 {% import "df/_ui.html" as ui %}
 {% set destino = STATUS[para][1] %}
-{% set acao = {'encaminhado': 'atribuir', 'executado': 'resolver-atendimento', 'cancelado': 'cancelar'}[para] %}
-<form class="df-form" method="post" action="/tarefa/{{ t.id }}/{{ acao }}" data-mover-form data-destino="{{ destino }}" data-tid="{{ t.id }}">
-  <p class="df-muted" style="margin:0"><b>#{{ t.id }} · {{ t.titulo }}</b><br>{{ STATUS[t.status][1] }} → <b>{{ destino }}</b></p>
-  {% if para == 'encaminhado' %}
+{% set acao = {'encaminhado': ('encaminhar-gt' if via_gt else 'atribuir'), 'executado': 'resolver-atendimento', 'cancelado': 'cancelar'}[para] %}
+<form class="df-form" method="post" action="/tarefa/{{ t.id }}/{{ acao }}" data-mover-form data-destino="{{ 'o gestor técnico' if via_gt else destino }}" data-tid="{{ t.id }}">
+  <p class="df-muted" style="margin:0"><b>#{{ t.id }} · {{ t.titulo }}</b><br>{{ STATUS[t.status][1] }} → <b>{{ 'Gestor técnico (aloca o técnico)' if via_gt else destino }}</b></p>
+  {% if via_gt %}
+    <small>Escolha o gestor técnico responsável. Ele recebe o chamado na área dele e aloca o técnico.</small>
+    {% set gt_opts = [] %}{% for g in gestores_tecnicos %}{% set _ = gt_opts.append((g.id, g.area ~ ' · ' ~ g.nome)) %}{% endfor %}
+    {{ ui.select('gestor_tecnico_id', 'Gestor técnico', gt_opts, '', required=True, id='mv-gt') }}
+    {% set prio_opts = [] %}{% for p, n in PRIORIDADES.items() %}{% set _ = prio_opts.append((p, p ~ ' – ' ~ n)) %}{% endfor %}
+    {{ ui.select('prioridade', 'Criticidade', prio_opts, (t.prioridade or sug.prioridade or 'P3'), id='mv-prio') }}
+    {{ ui.field('observacao', 'Orientação ao gestor técnico (opcional)', '', id='mv-obs') }}
+  {% elif para == 'encaminhado' %}
     {% if sug %}<small>Campos pré-preenchidos pela IA. Revise e edite se necessário.</small>{% endif %}
     <div class="df-form-row">
       {% set tipo_opts = [] %}{% for tp in tipos %}{% set _ = tipo_opts.append((tp.id, tp.setor ~ ' › ' ~ tp.nome)) %}{% endfor %}
@@ -25,6 +32,6 @@
   <p class="df-error" role="alert" data-mover-erro hidden></p>
   <div class="df-form-actions">
     <button type="button" class="df-button df-ghost df-size-medium" data-dialog-close><span class="df-button-content">Cancelar</span></button>
-    {{ ui.button({'encaminhado': 'Encaminhar e notificar', 'executado': 'Registrar solução', 'cancelado': 'Cancelar chamado'}[para], glyph={'encaminhado': 'paper-plane-right', 'executado': 'check', 'cancelado': 'x'}[para], style='danger' if para == 'cancelado' else 'primary') }}
+    {{ ui.button({'encaminhado': ('Encaminhar ao gestor técnico' if via_gt else 'Encaminhar e notificar'), 'executado': 'Registrar solução', 'cancelado': 'Cancelar chamado'}[para], glyph={'encaminhado': 'paper-plane-right', 'executado': 'check', 'cancelado': 'x'}[para], style='danger' if para == 'cancelado' else 'primary') }}
   </div>
 </form>

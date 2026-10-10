@@ -42,8 +42,12 @@ class KanbanDndTests(UiFlowBase):
         self.assertIn("/static/ui/quadro_dnd.js", html)
 
     def test_formularios_de_cada_destino(self):
-        r = self.mover("encaminhado")
+        r = self.mover("encaminhado")  # gestora do Help Desk: escolhe 1 dos gestores técnicos, quem aloca é ele
         self.assertEqual(r.status_code, 200)
+        self.assertIn(f"/tarefa/{self.tid}/encaminhar-gt", r.text)
+        self.assertIn('name="gestor_tecnico_id"', r.text)
+        self.assertNotIn('name="executor_id"', r.text)
+        r = self.mover("encaminhado", cookies=self.helena)  # gestor técnico: aloca o técnico da área
         self.assertIn(f"/tarefa/{self.tid}/atribuir", r.text)
         self.assertIn('name="executor_id"', r.text)
         self.assertIn(f"/tarefa/{self.tid}/resolver-atendimento", self.mover("executado").text)

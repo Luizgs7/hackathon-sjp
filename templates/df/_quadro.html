@@ -24,6 +24,7 @@
 <a class="df-item-card" href="/tarefa/{{ t.id }}"{% if alvos[t.id] %} draggable="true"{% endif %}>
   <div class="df-item-top">{{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}
     {% if t.status != STATUS_OFICIAL[t.status] %}{{ ui.status(t.status) }}{% endif %}
+    {% if t.gt_destino_id and t.status in ('novo', 'reaberto') %}<span class="df-badge">{{ ui.icon('users') }}aguardando gestor técnico</span>{% endif %}
     {% if t.ia_status == 'analisando' %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}triando…</span>
     {% elif t.ia_status == 'sugerida' and t.status in ('novo', 'devolvido', 'reaberto') %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}sugestão p/ conferir</span>{% endif %}</div>
   <h3><span class="df-code">#{{ t.id }}</span> {{ t.titulo }}</h3>

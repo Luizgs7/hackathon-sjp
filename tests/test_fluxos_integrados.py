@@ -121,3 +121,39 @@ class FluxosIntegradosTests(UiFlowBase):
                 self.assertEqual(area, t["setor_id"], f"chamado {t['id']} com técnico de outra área")
                 gestor = c.execute("SELECT count(*) FROM usuarios WHERE papeis='gestor_tecnico' AND area_id=?", (t["setor_id"],)).fetchone()[0]
                 self.assertEqual(gestor, 1, f"área {t['setor_id']} sem gestor técnico")
+
+    def test_helpdesk_encaminha_ao_gestor_tecnico_que_aloca_o_tecnico(self):
+        with app.db() as c:
+            area_id = c.execute("SELECT id FROM setores WHERE nome='Telecom'").fetchone()["id"]
+            tipo = c.execute("SELECT id FROM tipos WHERE setor_id=?", (area_id,)).fetchone()["id"]
+            gts = {r["nome"]: r["id"] for r in c.execute("SELECT nome, id FROM usuarios WHERE papeis='gestor_tecnico'")}
+        tid = self.registrar(self.solicitar())
+        helena, camila = self.cookie("Helena Prado"), self.cookie("Camila Duarte")
+        pagina = self.client.get(f"/tarefa/{tid}", cookies=self.gestor).text
+        self.assertIn("Encaminhar ao gestor técnico", pagina)           # o botão existe para a gestora do Help Desk
+        for nome in ("Roberto Nunes", "Helena Prado", "Camila Duarte"):  # e ela escolhe entre os 3 gestores técnicos
+            self.assertIn(nome, pagina)
+        # só gestor/atendente encaminham; gestor técnico e técnico não
+        self.assertEqual(self.client.post(f"/tarefa/{tid}/encaminhar-gt", cookies=helena, data={"gestor_tecnico_id": gts["Helena Prado"]}).status_code, 403)
+        r = self.client.post(f"/tarefa/{tid}/encaminhar-gt", cookies=self.gestor, data={
+            "gestor_tecnico_id": gts["Helena Prado"], "prioridade": "P2", "observacao": "Urgente para a UBS"})
+        self.assertEqual(r.status_code, 303)
+        t = self.tarefa(tid)
+        self.assertEqual((t["status"], t["setor_id"], t["gt_destino_id"], t["prioridade"]), ("novo", area_id, gts["Helena Prado"], "P2"))
+        self.assertTrue(any(f"#{tid} aguarda alocação" in a for a in self.avisos("Helena Prado")))
+        self.assertFalse(any(f"#{tid}" in a for a in self.avisos("Camila Duarte")))
+        # sai da fila do atendimento; o gestor da área enxerga e a de outra área não
+        self.assertNotIn(f"#{tid}", self.client.get("/atendente/fila", cookies=self.atendente).text)
+        self.assertIn("aguardando gestor técnico", self.client.get("/gestor/quadro", cookies=helena).text)
+        self.assertNotIn(f"#{tid}", self.client.get("/gestor/quadro", cookies=camila).text)
+        self.assertIn("Alocar técnico", self.client.get(f"/tarefa/{tid}", cookies=helena).text)
+        self.assertIn("Aguardando o gestor técnico", self.client.get(f"/tarefa/{tid}", cookies=self.gestor).text)
+        # o gestor técnico aloca o técnico da área; o chamado passa a Encaminhado e o técnico é avisado
+        r = self.client.post(f"/tarefa/{tid}/atribuir", cookies=helena, data={
+            "executor_id": self.users["Rafael Costa"], "tipo_id": tipo, "prioridade": "P2"})
+        self.assertEqual(r.status_code, 303)
+        t = self.tarefa(tid)
+        self.assertEqual((t["status"], t["executor_id"], t["gt_destino_id"]), ("encaminhado", self.users["Rafael Costa"], None))
+        self.assertIn(f"Nova missão #{tid}", self.avisos("Rafael Costa"))
+        # chamado já encaminhado não pode ser reencaminhado ao gestor técnico
+        self.assertEqual(self.client.post(f"/tarefa/{tid}/encaminhar-gt", cookies=self.gestor, data={"gestor_tecnico_id": gts["Camila Duarte"]}).status_code, 409)
