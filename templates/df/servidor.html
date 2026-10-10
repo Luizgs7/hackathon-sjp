@@ -35,6 +35,7 @@
       <button type="button" class="df-button df-secondary df-size-small" data-falar hx-post="/servidor/atendente" hx-include="#estado-chat" hx-target="#conversa"><span class="df-button-content">{{ ui.icon('headset') }}Falar com atendente</span></button>
     </div>
     {% endif %}
+    <div id="acoes-fixas" class="df-chat-actions">{% include "df/_servidor_acoes.html" %}</div>
     <form id="form-chat" class="df-composer-card" hx-post="/servidor/chat" hx-target="#conversa" hx-include="#estado-chat" hx-indicator="#digitando" autocomplete="off">
       <label class="df-sr" for="pergunta">Escreva sua mensagem</label>
       <textarea id="pergunta" name="pergunta" rows="2" required placeholder="Escreva sua mensagem. Ex.: o computador da recepção está sem internet desde cedo"></textarea>

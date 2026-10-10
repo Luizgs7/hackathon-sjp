@@ -2,8 +2,8 @@
 <div id="msgs" class="df-chat-log" role="log" aria-live="polite" aria-label="Mensagens da conversa" hx-get="/atendente/conversa/{{ a.token }}?fragmento=1" hx-trigger="every 4s" hx-swap="outerHTML">
 {% for c in msgs %}
 {% if c.autor == 'sistema' %}<div class="df-chat-notice" role="status">{{ c.texto }}</div>
-{% elif c.autor == 'atendente' %}<div class="df-bubble me"><small>{{ ui.icon('headset') }}Atendente</small>{{ c.texto }}</div>
-{% elif c.autor == 'servidor' %}<div class="df-bubble ia"><small>Servidor</small>{{ c.texto }}</div>
-{% else %}<div class="df-bubble ia"><small>{{ ui.icon('sparkle') }}Assistente</small>{{ c.texto }}</div>{% endif %}
+{% elif c.autor == 'atendente' %}<div class="df-msg df-msg-me"><div class="df-bubble me">{{ c.texto }}</div><small class="df-msg-hora">{{ c.criado_em[11:16] }}</small></div>
+{% elif c.autor == 'servidor' %}<div class="df-msg"><div class="df-bubble ia"><small>{{ servidor_nome }}</small>{{ c.texto }}</div><small class="df-msg-hora">{{ c.criado_em[11:16] }}</small></div>
+{% else %}<div class="df-msg"><div class="df-bubble ia"><small>{{ ui.icon('sparkle') }}Assistente</small>{{ c.texto }}</div><small class="df-msg-hora">{{ c.criado_em[11:16] }}</small></div>{% endif %}
 {% endfor %}
 </div>

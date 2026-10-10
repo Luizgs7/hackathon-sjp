@@ -2,34 +2,61 @@
 {% import "df/_ui.html" as ui %}
 {% set nav_perfil = 'painel' %}
 {% set ativo = 'atendimento' %}
+{% set flush = true %}
 {% block title %}Conversa com o servidor{% endblock %}
 {% block main %}
-<a href="/atendente">{{ ui.icon('caret-left') }}Voltar à fila</a>
-<div class="df-page-head">
-  <div>
-    <h1>Conversa com o servidor</h1>
-    <p>{{ email or 'E-mail não informado' }} · {% if modo == 'aguardando' %}aguardando atendente{% elif modo == 'humano' %}com {{ atendente_nome }}{% else %}{{ 'encerrada' if a.resolvido else 'com o assistente' }}{% endif %}</p>
+<section class="df-chat-page df-chat-atendente" aria-labelledby="chat-titulo">
+  <header class="df-chat-head df-chat-head-pessoa">
+    <a class="df-button df-ghost df-icon-button" href="/atendente" aria-label="Voltar à fila"><span class="df-button-content">{{ ui.icon('caret-left') }}</span></a>
+    {{ ui.avatar(servidor_nome) }}
+    <div class="df-chat-quem">
+      <h1 id="chat-titulo">{{ servidor_nome }}</h1>
+      <small>{{ email or 'E-mail não informado' }} ·
+        {% if chamado %}chamado aberto{% elif a.resolvido %}encerrada{% elif modo == 'aguardando' %}aguardando atendente{% elif modo == 'humano' %}com {{ atendente_nome }}{% else %}com o assistente{% endif %}</small>
+    </div>
+    {% if modo == 'humano' and a.atendente_id == u.id and not chamado and not a.resolvido %}
+    <details class="df-chat-menu" data-menu>
+      <summary class="df-button df-secondary df-size-small" aria-label="Ações da conversa"><span class="df-button-content">{{ ui.icon('list') }}Ações</span></summary>
+      <div class="df-menu-panel df-chat-menu-painel">
+        <form method="post" action="/atendente/conversa/{{ a.token }}/chamado" data-df-form>{{ ui.button('Abrir chamado desta conversa', style='secondary', size='small', glyph='note-pencil', cls='df-wide') }}</form>
+        <form method="post" action="/atendente/conversa/{{ a.token }}/devolver" data-df-form>{{ ui.button('Devolver ao assistente', style='ghost', size='small', glyph='arrows-clockwise', cls='df-wide') }}</form>
+        <form method="post" action="/atendente/conversa/{{ a.token }}/encerrar" data-df-form data-confirm="Encerrar a conversa sem abrir chamado?" data-confirm-label="Encerrar">{{ ui.button('Encerrar sem chamado', style='ghost', size='small', glyph='check', cls='df-wide') }}</form>
+      </div>
+    </details>
+    {% endif %}
+  </header>
+
+  {% include "df/_conversa_msgs.html" %}
+
+  <div class="df-chat-dock">
+    {% if chamado %}
+    <div class="df-chat-notice">Solicitação <b class="df-mono">{{ chamado.protocolo }}</b> aberta a partir desta conversa. {{ ui.button('Ir para a fila', href='/atendente?sol=' ~ chamado.id, style='secondary', size='small') }}</div>
+    {% elif a.resolvido %}
+    <div class="df-chat-notice">Conversa encerrada.</div>
+    {% elif modo == 'humano' and a.atendente_id == u.id %}
+    <form id="form-resposta" class="df-composer-card" method="post" action="/atendente/conversa/{{ a.token }}/responder" hx-post="/atendente/conversa/{{ a.token }}/responder" hx-target="#msgs" hx-swap="outerHTML" autocomplete="off">
+      <label class="df-sr" for="texto">Sua resposta</label>
+      <textarea id="texto" name="texto" rows="2" required placeholder="Escreva para o servidor… (Enter envia, Shift+Enter quebra a linha)"></textarea>
+      <div class="df-composer-foot">{{ ui.button('Enviar', size='small', glyph='paper-plane-right') }}</div>
+    </form>
+    {% elif modo == 'humano' %}
+    <div class="df-chat-notice">{{ atendente_nome }} já assumiu esta conversa.</div>
+    {% else %}
+    <form method="post" action="/atendente/conversa/{{ a.token }}/assumir" data-df-form class="df-chat-assumir">{{ ui.button('Assumir conversa', glyph='headset', cls='df-wide') }}</form>
+    {% endif %}
   </div>
-</div>
-{% include "df/_conversa_msgs.html" %}
-{% if chamado %}
-<section class="df-card"><p>Solicitação <b class="df-mono">{{ chamado.protocolo }}</b> aberta a partir desta conversa.</p>{{ ui.button('Ir para a fila de atendimento', href='/atendente?sol=' ~ chamado.id, style='secondary') }}</section>
-{% elif a.resolvido %}
-<section class="df-card"><p>Conversa encerrada.</p></section>
-{% elif modo == 'humano' and a.atendente_id == u.id %}
-<form class="df-composer-card" method="post" action="/atendente/conversa/{{ a.token }}/responder" data-df-form>
-  <label class="df-sr" for="texto">Sua resposta</label>
-  <textarea id="texto" name="texto" rows="3" required placeholder="Escreva para o servidor"></textarea>
-  <div class="df-composer-foot">{{ ui.button('Enviar resposta', size='small', glyph='paper-plane-right') }}</div>
-</form>
-<div class="df-chat-actions">
-  <form method="post" action="/atendente/conversa/{{ a.token }}/chamado" data-df-form>{{ ui.button('Abrir chamado desta conversa', style='secondary', size='small', glyph='note-pencil') }}</form>
-  <form method="post" action="/atendente/conversa/{{ a.token }}/devolver" data-df-form>{{ ui.button('Devolver ao assistente', style='ghost', size='small', glyph='arrows-clockwise') }}</form>
-  <form method="post" action="/atendente/conversa/{{ a.token }}/encerrar" data-df-form data-confirm="Encerrar a conversa sem abrir chamado?" data-confirm-label="Encerrar">{{ ui.button('Encerrar sem chamado', style='ghost', size='small', glyph='check') }}</form>
-</div>
-{% elif modo == 'humano' %}
-<section class="df-card"><p>{{ atendente_nome }} já assumiu esta conversa.</p></section>
-{% else %}
-<form method="post" action="/atendente/conversa/{{ a.token }}/assumir" data-df-form>{{ ui.button('Assumir conversa', glyph='headset') }}</form>
-{% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const log = () => document.getElementById('msgs');
+  const rolar = () => { const l = log(); if (l) l.scrollTop = l.scrollHeight; };
+  rolar();
+  document.body.addEventListener('htmx:afterSwap', e => { if (e.detail.target && (e.detail.target.id === 'msgs' || (e.detail.elt && e.detail.elt.id === 'msgs'))) rolar(); });
+  document.body.addEventListener('htmx:afterRequest', e => { const f = document.getElementById('form-resposta'); if (f && e.detail.elt === f && e.detail.successful) { f.reset(); f.texto.focus(); } });
+  const f = document.getElementById('form-resposta');
+  if (f) f.texto.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (f.checkValidity()) htmx.trigger(f, 'submit'); else f.reportValidity(); } });
+})();
+</script>
 {% endblock %}

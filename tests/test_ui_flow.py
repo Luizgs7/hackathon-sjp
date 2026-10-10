@@ -749,6 +749,14 @@ class BancoNovoComHistoricoTests(unittest.TestCase):
                 areas = {r["area_id"] for r in c.execute("SELECT area_id FROM usuarios WHERE papeis='gestor_tecnico'")}
                 self.assertEqual(areas, {2, 3, 5})  # Suporte, Telecom e Telefonia
                 self.assertTrue(all(e["setor_id"] for e in app.carga_executores(c)))
+                nomes = sorted(e["nome"] for e in app.carga_executores(c, todos=True))
+                self.assertEqual(nomes, ["Diego Santos", "Marcos Vieira", "Rafael Costa"])  # 1 técnico por gestor técnico
+                self.assertEqual(c.execute("SELECT count(*) FROM usuarios WHERE papeis='gestor_tecnico'").fetchone()[0], 3)
+                # todo usuário tem avisos de exemplo para o sino; o solicitante também
+                sem = [u["nome"] for u in c.execute("SELECT id, nome FROM usuarios") if not c.execute(
+                    "SELECT 1 FROM notificacoes WHERE dest=?", (f"u:{u['id']}",)).fetchone()]
+                self.assertEqual(sem, [])
+                self.assertTrue(c.execute("SELECT 1 FROM notificacoes WHERE dest LIKE 's:%'").fetchone())
 
 
 class RotaDoTecnicoTests(UiFlowBase):
@@ -1047,3 +1055,35 @@ class ModalNovaTarefaTests(UiFlowBase):
         auto = self.client.get("/atendente?nova=1", cookies=self.atendente).text
         self.assertIn("showModal()", auto)  # vindo de "Novo chamado" do painel, já abre o modal
         self.assertNotIn("showModal()", pag)
+
+
+class ChatDoAtendenteTests(UiFlowBase):
+    def test_tela_em_padrao_de_chat_e_envio_por_htmx(self):
+        self.client.post("/servidor/chat", data={"pergunta": "Meu computador não liga"})
+        self.client.post("/servidor/atendente", data={"estado_chat": ""})
+        tok = self.client.cookies.get("auto_token")
+        pag = self.client.get(f"/atendente/conversa/{tok}", cookies=self.atendente).text
+        self.assertIn("df-chat-atendente", pag)
+        self.assertIn("Assumir conversa", pag)
+        self.client.post(f"/atendente/conversa/{tok}/assumir", cookies=self.atendente)
+        pag = self.client.get(f"/atendente/conversa/{tok}", cookies=self.atendente).text
+        self.assertIn('id="form-resposta"', pag)
+        self.assertIn("Abrir chamado desta conversa", pag)
+        r = self.client.post(f"/atendente/conversa/{tok}/responder", cookies={**self.atendente}, data={"texto": "Olá, vou ajudar."},
+                             headers={"HX-Request": "true"})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Olá, vou ajudar.", r.text)
+        self.assertNotIn("<html", r.text)  # só o fragmento
+        self.assertIn("df-msg-hora", r.text)
+
+    def test_acoes_do_solicitante_ficam_fixas_no_rodape(self):
+        self.client.post("/servidor/chat", data={"pergunta": "Meu computador não liga"})
+        pag = self.client.get("/servidor").text
+        self.assertIn('id="acoes-fixas"', pag)
+        self.assertIn("Abrir chamado", pag)
+        self.client.post("/servidor/atendente", data={"estado_chat": ""})
+        tok = self.client.cookies.get("auto_token")
+        self.client.post(f"/atendente/conversa/{tok}/assumir", cookies=self.atendente)
+        frag = self.client.get("/servidor/mensagens").text
+        self.assertIn('hx-swap-oob="true"', frag)
+        self.assertIn("Abrir chamado", frag)  # continua à vista depois que o atendente assume

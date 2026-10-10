@@ -1,0 +1,10 @@
+{# Ações fixas do rodapé do chat do solicitante: sempre à vista, sem depender da rolagem da conversa #}
+{% import "df/_ui.html" as ui %}
+{% if conversa and not conversa_resolvida %}
+  {% if not chamado_chat and conversa[-1].fonte != 'fora_escopo' %}
+  {% if modo|default('ia') == 'ia' %}<form method="post" action="/servidor/resolvido" data-df-form><input type="hidden" name="estado_chat" value="{{ estado_chat|default('') }}">{{ ui.button('Resolvido, obrigado!', size='small', style='secondary', glyph='check') }}</form>{% endif %}
+  {% if modo|default('ia') == 'ia' %}<button type="button" class="df-button df-secondary df-size-small" hx-post="/servidor/atendente" hx-include="#estado-chat" hx-target="#conversa"><span class="df-button-content">{{ ui.icon('headset') }}Falar com atendente</span></button>{% endif %}
+  {{ ui.button('Abrir chamado', href='/servidor/solicitar?via=ia', size='small', style='secondary', glyph='note-pencil') }}
+  {% endif %}
+  <form method="post" action="/servidor/nova" data-df-form data-confirm="Iniciar uma nova conversa? Seus atendimentos continuam em Chamados." data-confirm-label="Nova conversa">{{ ui.button('Nova conversa', size='small', style='ghost', glyph='arrows-clockwise') }}</form>
+{% endif %}

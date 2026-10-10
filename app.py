@@ -329,6 +329,8 @@ def init_db():
         if SEED_HISTORICO and not cfg(c, "historico_metricas"):
             seed_historico(c)
         organizar_demo(c)
+        if SEED_HISTORICO:
+            semear_notificacoes(c)
 
 
 def garantir_gestor_tecnico(c):
@@ -338,6 +340,41 @@ def garantir_gestor_tecnico(c):
         c.execute("INSERT INTO usuarios(nome,papeis,competencias,avatar,area_id) SELECT ?,'gestor_tecnico','','',? "
                   "WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE nome=?)", (nome, setor, nome))
     c.execute("UPDATE usuarios SET area_id=2 WHERE papeis='gestor_tecnico' AND area_id IS NULL")
+
+
+def semear_notificacoes(c):
+    """Avisos de exemplo para cada perfil, para a demonstração do sino. Roda uma vez, junto com os dados de exemplo."""
+    if cfg(c, "notif_demo_v1"):
+        return
+    exemplos = {
+        "atendente": [("Nova solicitação SOL-0007", "Impressora da recepção sem toner", "/atendente", 0),
+                      ("Conversa aguardando atendente", "Um servidor pediu para falar com uma pessoa.", "/atendente", 0),
+                      ("Chamado #12 reaberto", "O solicitante informou que o problema voltou.", "/atendente", 1)],
+        "gestor": [("Chamado #8 devolvido pelo técnico", "Pertence a outra área. Aguardando reavaliação do gestor técnico.", "/gestor", 0),
+                   ("Chamado #5 cancelado", "Duplicado do #4. Justificativa registrada.", "/gestor", 1),
+                   ("Chamado #3 concluído", "Resolução confirmada pelo solicitante (5★).", "/gestor", 1)],
+        "gestor_tecnico": [("Chamado #9 devolvido pelo técnico", "Falta informação do solicitante. Reavalie ou cancele com justificativa.", "/gestor", 0),
+                           ("Impedimento aberto no chamado #6", "Falta de material. Precisa de ação da gestão.", "/gestor/equipe", 0),
+                           ("Nova temporada do placar disponível", "Confira o ranking da equipe.", "/ranking", 1)],
+        "executor": [("Nova missão #10", "Ponto de rede solto · UBS Centro · P2 (Alta)", "/campo", 0),
+                     ("Missão #7 atualizada", "O gestor técnico alterou a criticidade para P1.", "/campo", 0),
+                     ("Você subiu no ranking", "Parabéns! Mais 20 pontos confirmados pelo solicitante.", "/ranking", 1)],
+    }
+    for u in c.execute("SELECT id, papeis FROM usuarios").fetchall():
+        papeis = u["papeis"].split(",")
+        chave = ("gestor_tecnico" if "gestor_tecnico" in papeis else "executor" if "executor" in papeis
+                 else "gestor" if "gestor" in papeis else "atendente")
+        for i, (titulo, texto, url, lida) in enumerate(exemplos[chave]):
+            c.execute("INSERT INTO notificacoes(dest,titulo,texto,url,lida,criada_em) VALUES(?,?,?,?,?,?)",
+                      (f"u:{u['id']}", titulo, texto, url, lida, (datetime.now() - timedelta(hours=2 + 3 * i)).strftime("%Y-%m-%d %H:%M:%S")))
+    for i, (titulo, texto, url, lida) in enumerate((
+            ("Chamado #12: Encaminhado", "Seu chamado foi encaminhado à equipe técnica.", "/meus-chamados", 0),
+            ("Atendente respondeu na conversa", "Vou verificar agora o seu computador.", "/servidor", 0),
+            ("Chamado #8: Aguardando sua confirmação", "O técnico informou que o serviço foi feito.", "/meus-chamados", 1))):
+        c.execute("INSERT INTO notificacoes(dest,titulo,texto,url,lida,criada_em) VALUES(?,?,?,?,?,?)",
+                  (f"s:{SOLICITANTE_DEMO['email'].lower()}", titulo, texto, url, lida,
+                   (datetime.now() - timedelta(hours=1 + 4 * i)).strftime("%Y-%m-%d %H:%M:%S")))
+    set_cfg(c, "notif_demo_v1", True)
 
 
 def organizar_demo(c):
@@ -2686,7 +2723,7 @@ def servidor_chat(request: Request, pergunta: str = Form(...), estado_chat: str 
         conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
         chamado = chamado_da_conversa(c, token)
     estado = estado_conversa(token, conversa)
-    resp = render(request, "_servidor_chat.html", conversa=conversa, estado_chat=estado, chamado_chat=chamado, **humano)
+    resp = render(request, "_servidor_chat.html", conversa=conversa, estado_chat=estado, chamado_chat=chamado, oob=True, **humano)
     resp.set_cookie("auto_token", token, httponly=True, samesite="lax")
     if len(estado) <= 3800:
         resp.set_cookie("auto_estado", estado, httponly=True, samesite="lax", max_age=86400,
@@ -2765,7 +2802,7 @@ def _msg_sistema(c, token, texto):
 def _chat_fragmento(request, c, token):
     conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
     return render(request, "_servidor_chat.html", conversa=conversa, estado_chat=estado_conversa(token, conversa),
-                  chamado_chat=chamado_da_conversa(c, token), **_contexto_humano(c, token))
+                  chamado_chat=chamado_da_conversa(c, token), oob=True, **_contexto_humano(c, token))
 
 
 @app.post("/servidor/atendente", response_class=HTMLResponse)
@@ -2831,6 +2868,12 @@ def _conversa_ou_404(c, token):
     return a
 
 
+def _nome_servidor(email):
+    base = (email or "").split("@")[0].replace(".", " ").replace("_", " ").strip()
+    partes = [p for p in base.split() if p.lower() not in ("demo", "teste")]
+    return " ".join(partes).title() if partes else "Servidor"
+
+
 @app.get("/atendente/conversa/{token}", response_class=HTMLResponse)
 def atendente_conversa(request: Request, token: str, fragmento: int = 0):
     u = exige_painel(request, "atendente", "gestor")
@@ -2841,7 +2884,8 @@ def atendente_conversa(request: Request, token: str, fragmento: int = 0):
         email = c.execute("SELECT email FROM conversa_acessos WHERE token=?", (token,)).fetchone()
         chamado = chamado_da_conversa(c, token)
     return render(request, "_conversa_msgs.html" if fragmento else "atendente_conversa.html", u=u, a=a, msgs=msgs,
-                  email=email["email"] if email else "", chamado=chamado, **humano)
+                  email=email["email"] if email else "", chamado=chamado,
+                  servidor_nome=_nome_servidor(email["email"] if email else ""), **humano)
 
 
 @app.post("/atendente/conversa/{token}/assumir")
@@ -2873,6 +2917,10 @@ def conversa_responder(request: Request, token: str, texto: str = Form(...)):
             em = c.execute("SELECT email FROM conversa_acessos WHERE token=?", (token,)).fetchone()
             if em:
                 notificar(c, [f"s:{em['email'].lower()}"], f"{u['nome']} respondeu na conversa", texto.strip(), "/servidor")
+        if request.headers.get("HX-Request"):
+            msgs = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
+            em = c.execute("SELECT email FROM conversa_acessos WHERE token=?", (token,)).fetchone()
+            return render(request, "_conversa_msgs.html", a=a, msgs=msgs, servidor_nome=_nome_servidor(em["email"] if em else ""))
     return redirect(f"/atendente/conversa/{token}")
 
 
