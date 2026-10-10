@@ -83,3 +83,25 @@ class DemoStoreTests(unittest.IsolatedAsyncioTestCase):
         self.fail_write=True
         with self.assertRaises(httpx.HTTPStatusError):
             await self.stores[0].finish(lease)
+
+
+class MigracaoDeBancoAntigoTests(unittest.TestCase):
+    def test_banco_de_versao_anterior_e_migrado_e_o_login_volta_a_funcionar(self):
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from fastapi.testclient import TestClient
+        import app
+        with tempfile.TemporaryDirectory() as d, patch.object(app, "DB_PATH", Path(d) / "x.db"), patch.object(app, "SEED_HISTORICO", False):
+            app.init_db()
+            con = sqlite3.connect(Path(d) / "x.db")
+            for stmt in ("ALTER TABLE usuarios DROP COLUMN area_id", "ALTER TABLE tarefas DROP COLUMN km_percorrido",
+                         "DROP TABLE notificacoes", "DROP TABLE rota_log"):
+                con.execute(stmt)
+            con.commit()
+            con.close()
+            cli = TestClient(app.app, raise_server_exceptions=False)
+            self.assertEqual(cli.get("/login").status_code, 500)  # esquema antigo quebra
+            app.init_db()                                          # migração aplicada a cada restauração na demo
+            self.assertEqual(cli.get("/login").status_code, 200)

@@ -105,6 +105,8 @@ if os.getenv("BLOB_READ_WRITE_TOKEN"):
             lease = None
             try:
                 lease = await shared.load(write=request.method not in ("GET", "HEAD", "OPTIONS"))
+                # O snapshot compartilhado pode vir de uma versão anterior: aplica as colunas e tabelas novas antes de atender.
+                await asyncio.to_thread(produto.init_db)
                 response = await call_next(request)
                 body = b"".join([part async for part in response.body_iterator])
                 await shared.finish(lease, commit=response.status_code < 500)
