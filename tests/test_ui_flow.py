@@ -532,3 +532,61 @@ class DisponibilidadeEKmTests(UiFlowBase):
         pag = self.client.get("/gestor/metricas", cookies=self.gestor).text
         self.assertIn("Km rodados", pag)
         self.assertIn("Rafael Costa", pag)
+
+
+class PainelEquipeTests(UiFlowBase):
+    def setUp(self):
+        super().setUp()
+        with app.db() as c:
+            app.garantir_gestor_tecnico(c)
+            gt = c.execute("SELECT id FROM usuarios WHERE papeis='gestor_tecnico'").fetchone()["id"]
+        self.gt = {"sess_painel": app.assinar(gt)}
+
+    def novo(self, local, executor=None):
+        tid = self.registrar(self.solicitar(local=local))
+        if executor:
+            self.client.post(f"/tarefa/{tid}/atribuir", cookies=self.atendente, data={
+                "executor_id": self.users[executor], "tipo_id": 1, "prioridade": "P2"})
+        return tid
+
+    def test_acesso_e_conteudo(self):
+        self.assertEqual(self.client.get("/gestor/equipe", cookies=self.atendente).status_code, 403)
+        self.assertEqual(self.client.get("/gestor/equipe", cookies=self.tecnico).status_code, 303)
+        self.assertEqual(self.client.get("/gestor/equipe", cookies=self.gt).status_code, 200)
+        a = self.novo("UBS Centro", "Rafael Costa")
+        self.novo("UBS Centro", "Rafael Costa")
+        self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "a_caminho"})
+        self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "em_execucao"})
+        pend = self.novo("Escola Municipal Sul")
+        pagina = self.client.get("/gestor/equipe/painel", cookies=self.gt).text
+        self.assertIn("chamado(s) no backlog", pagina)
+        self.assertIn("Rafael Costa", pagina)
+        self.assertIn("Em atendimento agora", pagina)
+        self.assertIn(f"#{a}", pagina)
+        self.assertIn("UBS Centro", pagina)
+        self.assertIn(f"#{pend}", pagina)
+        self.assertIn("Direcionar", pagina)
+
+    def test_ranking_por_distancia_e_inativo_fora(self):
+        a = self.novo("UBS Centro", "Rafael Costa")
+        self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "a_caminho"})
+        self.client.post(f"/campo/{a}/avancar", cookies=self.tecnico, data={"para": "em_execucao"})
+        self.novo("UBS Centro")
+        with app.db() as c:
+            d = app.painel_equipe(c)
+        rank = d["pendentes"][0]["ranking"]
+        self.assertEqual(rank[0]["nome"], "Rafael Costa")  # já está no mesmo local: 0 km
+        self.assertEqual(rank[0]["km"], 0)
+        self.client.post("/campo/disponibilidade", cookies=self.tecnico, data={"ativo": 0})
+        with app.db() as c:
+            nomes = [r["nome"] for r in app.painel_equipe(c)["pendentes"][0]["ranking"]]
+        self.assertNotIn("Rafael Costa", nomes)
+
+    def test_dados_do_mapa(self):
+        self.novo("UBS Centro")
+        r = self.client.get("/gestor/equipe/dados", cookies=self.gt)
+        self.assertEqual(r.status_code, 200)
+        j = r.json()
+        self.assertEqual(len(j["pendentes"]), 1)
+        self.assertTrue(j["tecnicos"] and len(j["tecnicos"][0]["posicao"]) == 2)
+        self.assertEqual(self.client.get("/gestor/equipe/dados", cookies=self.atendente).status_code, 403)

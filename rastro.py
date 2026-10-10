@@ -63,3 +63,10 @@ def distancia_km(tarefa_id):
         dx = (lo2 - lo1) * 111.0 * math.cos(math.radians((la1 + la2) / 2))
         total += math.hypot(dx, dy)
     return round(total, 2)
+
+
+def km_entre(a, b):
+    """Distância aproximada em km entre dois pontos (lat, lng) próximos."""
+    dy = (b[0] - a[0]) * 111.0
+    dx = (b[1] - a[1]) * 111.0 * math.cos(math.radians((a[0] + b[0]) / 2))
+    return math.hypot(dx, dy)

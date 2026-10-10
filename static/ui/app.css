@@ -526,3 +526,12 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-chat-notice { justify-self: center; text-align: center; font-size: 13px; color: var(--text-muted, #5b6470); background: var(--df-brand-semantic-surface-hover); border-radius: 999px; padding: 6px 14px; max-width: 90%; }
 .df-chat-estado { display: inline-flex; gap: 6px; align-items: center; }
 .df-bubble-humano { border-color: var(--df-brand-semantic-primary-subtle); background: var(--df-brand-semantic-primary-subtle); }
+
+
+/* Painel da equipe técnica */
+.df-mapa-equipe { height: 320px; }
+@media (min-width: 1024px) { .df-mapa-equipe { height: 380px; } }
+.df-equipe-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.df-equipe-grid .df-card { display: grid; gap: 10px; align-content: start; }
+.df-bar { height: 8px; border-radius: 999px; background: var(--df-brand-semantic-surface-hover); overflow: hidden; margin: 6px 0; }
+.df-bar > span { display: block; height: 100%; background: var(--df-brand-semantic-primary, #1e4560); border-radius: 999px; }

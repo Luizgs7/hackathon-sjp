@@ -32,7 +32,7 @@ from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadF
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from rastro import distancia_km, estado as rastro_estado
+from rastro import BASE as BASE_RASTRO, destino as rastro_destino, distancia_km, estado as rastro_estado, km_entre
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 BASE = Path(__file__).parent
@@ -1530,6 +1530,89 @@ def gestor_quadro(request: Request, setor_id: int | None = None):
 PERIODOS = {30: "Últimos 30 dias", 60: "Últimos 60 dias", 90: "Últimos 90 dias"}
 
 
+# ---------------------------------------------------------------- painel da equipe técnica (backlog e proximidade)
+def chave_local(t):
+    """Chamados no mesmo local compartilham coordenadas (simuladas) e a mesma rota."""
+    return (t["local"] or "").strip().lower() or t["id"]
+
+
+def _posicao_do_tecnico(c, tid_ativos):
+    """Posição atual: no local do chamado em execução, ou ao longo da rota se está a caminho; senão, na base."""
+    for t in tid_ativos:
+        if t["status"] == "em_execucao":
+            return list(rastro_estado(chave_local(t), "em_execucao", "2000-01-01 00:00:00")["posicao"]), t
+    for t in tid_ativos:
+        if t["status"] == "a_caminho":
+            ini = c.execute("SELECT criado_em FROM eventos WHERE tarefa_id=? AND para='a_caminho' ORDER BY id DESC LIMIT 1",
+                            (t["id"],)).fetchone()
+            est = rastro_estado(chave_local(t), "a_caminho", ini["criado_em"] if ini else None)
+            if est:
+                return list(est["posicao"]), t
+    return list(BASE_RASTRO), None
+
+
+def painel_equipe(c):
+    tecnicos, ativos_por = [], {}
+    for r in c.execute("SELECT t.*, tp.nome tipo FROM tarefas t LEFT JOIN tipos tp ON tp.id=t.tipo_id "
+                       f"WHERE t.executor_id IS NOT NULL AND t.status IN ({','.join('?' * len(ATIVOS))}) "
+                       "ORDER BY t.prioridade, t.id", ATIVOS):
+        ativos_por.setdefault(r["executor_id"], []).append(r)
+    for e in carga_executores(c, todos=True):
+        ativas = ativos_por.get(e["id"], [])
+        pos, atual = _posicao_do_tecnico(c, ativas)
+        etapas = {s: sum(1 for t in ativas if t["status"] == s) for s in ATIVOS}
+        tecnicos.append({
+            "id": e["id"], "nome": e["nome"], "equipe": e["equipe"], "disponivel": bool(e["disponivel"]),
+            "total": len(ativas), "etapas": etapas,
+            "criticas": sum(1 for t in ativas if t["prioridade"] in ("P1", "P2")),
+            "atual": atual, "posicao": pos, "ativas": ativas,
+            "km_hoje": round(sum(t["km_percorrido"] or 0 for t in ativas), 1),
+        })
+    maior = max([t["total"] for t in tecnicos] + [1])
+    for t in tecnicos:
+        t["pct"] = round(100 * t["total"] / maior)
+    # chamados aguardando direcionamento, com sugestão por distância e carga
+    pendentes = []
+    for item in fila_atendimento(c):
+        t = item["t"]
+        alvo = rastro_destino(chave_local(t))
+        ranking = sorted(({"id": x["id"], "nome": x["nome"], "total": x["total"], "km": round(km_entre(x["posicao"], alvo), 1),
+                           "atual": x["atual"]} for x in tecnicos if x["disponivel"]), key=lambda x: (x["km"], x["total"]))
+        pendentes.append({"t": t, "prio": item["prio"], "alvo": list(alvo), "ranking": ranking[:3],
+                          "ia": item["ia"]})
+    return {"tecnicos": tecnicos, "pendentes": pendentes}
+
+
+@app.get("/gestor/equipe", response_class=HTMLResponse)
+def equipe_pagina(request: Request):
+    u = exige_painel(request, "gestor", "gestor_tecnico")
+    return render(request, "equipe.html", u=u)
+
+
+@app.get("/gestor/equipe/painel", response_class=HTMLResponse)
+def equipe_painel(request: Request):
+    exige_painel(request, "gestor", "gestor_tecnico")
+    with db() as c:
+        dados = painel_equipe(c)
+        tipos = c.execute("SELECT id, setor_id FROM tipos ORDER BY id").fetchall()
+    return render(request, "_equipe_painel.html", **dados, tipo_padrao=tipos[0]["id"] if tipos else 1)
+
+
+@app.get("/gestor/equipe/dados")
+def equipe_dados(request: Request):
+    exige_painel(request, "gestor", "gestor_tecnico")
+    with db() as c:
+        d = painel_equipe(c)
+    return JSONResponse({
+        "base": list(BASE_RASTRO),
+        "tecnicos": [{"nome": t["nome"], "posicao": t["posicao"], "disponivel": t["disponivel"], "total": t["total"],
+                      "atual": ({"id": t["atual"]["id"], "titulo": t["atual"]["titulo"], "local": t["atual"]["local"],
+                                 "status": t["atual"]["status"]} if t["atual"] else None)} for t in d["tecnicos"]],
+        "pendentes": [{"id": p["t"]["id"], "titulo": p["t"]["titulo"], "local": p["t"]["local"], "prio": p["prio"],
+                       "alvo": p["alvo"]} for p in d["pendentes"]],
+    }, headers={"Cache-Control": "no-store"})
+
+
 @app.get("/gestor/metricas", response_class=HTMLResponse)
 def gestor_metricas(request: Request, dias: int = 90, setor_id: int | None = None):
     u = exige_painel(request, "gestor", "gestor_tecnico")
@@ -1829,7 +1912,7 @@ def campo_avancar(request: Request, tid: int, para: str = Form(...), observacao:
                   "em_execucao": "Executor chegou ao local e iniciou o atendimento"}
         mudar_status(c, t, para, u, "executor", textos[para] + (f" · {observacao}" if observacao else ""))
         if para == "em_execucao":
-            c.execute("UPDATE tarefas SET km_percorrido=? WHERE id=?", (distancia_km(tid), tid))
+            c.execute("UPDATE tarefas SET km_percorrido=? WHERE id=?", (distancia_km(chave_local(t)), tid))
     em_segundo_plano(processar_outbox)
     msg = "Atendimento iniciado no local" if para == "em_execucao" else "Status atualizado: a caminho"
     return redirect(f"/campo/{tid}?msg={msg}")
@@ -2731,5 +2814,5 @@ def rastro(request: Request, tid: int, token: str = ""):
                 raise HTTPException(403, "Acesso restrito ao gestor ou ao link do chamado")
         ini = c.execute("SELECT criado_em FROM eventos WHERE tarefa_id=? AND para='a_caminho' ORDER BY id DESC LIMIT 1",
                         (tid,)).fetchone()
-    dados = rastro_estado(tid, t["status"], ini["criado_em"] if ini else None)
+    dados = rastro_estado(chave_local(t), t["status"], ini["criado_em"] if ini else None)
     return JSONResponse(dados or {"simulado": True, "ativo": False}, headers={"Cache-Control": "no-store"})

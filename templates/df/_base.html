@@ -9,6 +9,7 @@
   {% if not gestor_tecnico %}{% set _ = nav.append(('atendimento', '/atendente', 'Atendimento', 'tray')) %}{% endif %}
   {% if 'gestor' in papeis or gestor_tecnico %}
     {% set _ = nav.append(('painel', '/gestor', 'Equipes técnicas' if gestor_tecnico else 'Painel', 'squares-four')) %}
+    {% set _ = nav.append(('equipe', '/gestor/equipe', 'Equipe', 'users')) %}
     {% set _ = nav.append(('metricas', '/gestor/metricas', 'Métricas', 'chart-bar')) %}
   {% endif %}
   {% set _ = nav.append(('ranking', '/ranking', 'Ranking', 'trophy-fill')) %}

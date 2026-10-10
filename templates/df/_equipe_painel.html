@@ -1,0 +1,55 @@
+{% import "df/_ui.html" as ui %}
+{% if pendentes %}
+<section class="df-card" aria-labelledby="pend-t">
+  <header><h2 id="pend-t">{{ ui.icon('map-pin') }}Chamados aguardando direcionamento ({{ pendentes|length }})</h2>
+    <small>Os técnicos ativos aparecem do mais próximo ao mais distante do local, com a carga atual. A distância é a do ponto onde o técnico está agora.</small></header>
+  <div class="df-stack">
+    {% for p in pendentes %}{% set t = p.t %}
+    <article class="df-card" aria-label="Chamado #{{ t.id }}">
+      <div class="df-item-top">{{ ui.prio(p.prio) }}<b><a href="/tarefa/{{ t.id }}">#{{ t.id }} · {{ t.titulo }}</a></b></div>
+      <p class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.local or 'Local não informado' }}</span><span>{{ ui.status(t.status) }}</span></p>
+      <div class="df-stack-sm">
+        {% for r in p.ranking %}
+        <form class="df-row" method="post" action="/tarefa/{{ t.id }}/atribuir" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+          <input type="hidden" name="executor_id" value="{{ r.id }}">
+          <input type="hidden" name="tipo_id" value="{{ t.tipo_id or p.ia.tipo_id or tipo_padrao }}">
+          <input type="hidden" name="prioridade" value="{{ p.prio }}">
+          <span class="df-pessoa">{{ ui.avatar(r.nome, 'sm') }}<span><b>{{ r.nome }}</b><br><small>{{ r.km|dec }} km do local · {{ r.total }} ativa(s){% if r.atual %} · atendendo #{{ r.atual.id }}{% endif %}</small></span></span>
+          {{ ui.button('Direcionar', size='small', style='secondary' if loop.index > 1 else 'primary', glyph='paper-plane-right') }}
+        </form>
+        {% else %}<small class="df-muted">Nenhum técnico ativo no momento.</small>{% endfor %}
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section aria-labelledby="bk-t">
+  <h2 id="bk-t">Backlog por técnico</h2>
+  <div class="df-equipe-grid">
+  {% for t in tecnicos %}
+    <article class="df-card" aria-label="{{ t.nome }}">
+      <div class="df-row"><span class="df-pessoa">{{ ui.avatar(t.nome) }}<span><b>{{ t.nome }}</b><br><small>{{ t.equipe }}</small></span></span>
+        {% if t.disponivel %}<span class="df-badge">Ativo</span>{% else %}<span class="df-badge df-ia">Inativo</span>{% endif %}</div>
+      <div><div class="df-row"><b>{{ t.total }} chamado(s) no backlog</b>{% if t.criticas %}<span class="df-badge df-priority-p1">{{ t.criticas }} crítico(s)/alto(s)</span>{% endif %}</div>
+        <div class="df-bar" role="img" aria-label="Carga relativa: {{ t.pct }}% da maior carga da equipe"><span style="width:{{ t.pct }}%"></span></div>
+        <small class="df-muted">Aguardando {{ t.etapas.encaminhado }} · a caminho {{ t.etapas.a_caminho }} · em execução {{ t.etapas.em_execucao }} · impedido {{ t.etapas.impedido }}</small></div>
+      <div>
+        <small class="df-muted">Em atendimento agora</small>
+        {% if t.atual %}
+          <p style="margin:2px 0"><a href="/tarefa/{{ t.atual.id }}"><b>#{{ t.atual.id }} · {{ t.atual.titulo }}</b></a><br>
+            <span class="df-item-meta"><span>{{ ui.icon('map-pin') }}{{ t.atual.local or 'Local não informado' }}</span><span>{{ ui.status(t.atual.status) }}</span></span></p>
+        {% else %}<p class="df-muted" style="margin:2px 0">Nenhum chamado em atendimento.</p>{% endif %}
+      </div>
+      {% set fila = t.ativas|rejectattr('id', 'equalto', t.atual.id if t.atual else 0)|list %}
+      {% if fila %}
+      <details class="df-details"><summary><span>Fila deste técnico ({{ fila|length }})</span></summary>
+        <div class="df-details-body"><ul class="df-stack-sm" style="margin:0;padding-left:18px">
+          {% for x in fila %}<li><small>{{ ui.prio(x.prioridade) }} <a href="/tarefa/{{ x.id }}">#{{ x.id }} · {{ x.titulo }}</a> · {{ x.local or '—' }}</small></li>{% endfor %}
+        </ul></div></details>
+      {% endif %}
+    </article>
+  {% endfor %}
+  </div>
+</section>
