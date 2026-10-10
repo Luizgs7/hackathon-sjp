@@ -325,3 +325,19 @@ document.addEventListener('error', e => {
   box.querySelector('p').textContent = img.dataset.vazio || 'Imagem indisponível.';
   img.replaceWith(box);
 }, true);
+
+
+/* Kanban: barra de rolagem superior espelha o scroll horizontal do quadro */
+(() => {
+  const ligar = () => document.querySelectorAll('[data-board-scrolltop]').forEach(topo => {
+    const b = topo.nextElementSibling; if (!b || !b.classList.contains('df-board')) return;
+    topo.firstElementChild.style.width = b.scrollWidth + 'px';
+    if (topo.dataset.ligado) return; topo.dataset.ligado = '1';
+    let trava = false;
+    topo.addEventListener('scroll', () => { if (trava) { trava = false; return; } trava = true; b.scrollLeft = topo.scrollLeft; }, { passive: true });
+    b.addEventListener('scroll', () => { if (trava) { trava = false; return; } trava = true; topo.scrollLeft = b.scrollLeft; }, { passive: true });
+  });
+  document.addEventListener('DOMContentLoaded', ligar);
+  document.addEventListener('htmx:afterSettle', () => { ligar(); const t = document.querySelector('[data-board-scrolltop]'), b = document.querySelector('.df-board'); if (t && b) t.scrollLeft = b.scrollLeft; });
+  window.addEventListener('resize', ligar);
+})();

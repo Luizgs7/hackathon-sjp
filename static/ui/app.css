@@ -628,3 +628,25 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-board, .df-board.df-board { grid-auto-columns: 320px; }
 @media (max-width: 520px) { .df-board, .df-board.df-board { grid-auto-columns: min(84vw, 320px); } }
 .df-board .df-board-col { max-height: none; overflow-y: visible; }
+
+/* Regras de pontuação em tabela */
+.df-regra { display: grid; grid-template-columns: 120px minmax(0, 1fr) 140px 90px; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.df-regra-cat { justify-self: start; padding: 4px 10px; border-radius: 6px; background: var(--df-brand-semantic-surface-hover); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.df-regra-val { display: inline-flex; align-items: center; gap: 6px; }
+.df-regra-val input { width: 90px; text-align: right; }
+.df-regra-ativa { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+@media (max-width: 767px) { .df-regra { grid-template-columns: minmax(0, 1fr) auto; } .df-regra-cat { grid-column: 1 / -1; } .df-regra-txt { grid-column: 1 / -1; } }
+
+/* Kanban: barra de rolagem horizontal no topo, sincronizada com o quadro */
+.df-board-scrolltop { overflow-x: auto; overflow-y: hidden; height: 14px; margin-bottom: 6px; }
+.df-board-scrolltop > div { height: 1px; }
+
+/* Kanban: colunas de 380 px para os cartões quebrarem menos linhas */
+.df-board, .df-board.df-board { grid-auto-columns: 380px; }
+@media (max-width: 520px) { .df-board, .df-board.df-board { grid-auto-columns: min(88vw, 380px); } }
+
+/* Indicadores do quadro: 12 por vez, em grades que dividem 12 (sem linha sozinha) */
+.df-kpis.df-kpis-wide { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (min-width: 480px) { .df-kpis.df-kpis-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 700px) { .df-kpis.df-kpis-wide { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .df-kpis.df-kpis-wide { grid-template-columns: repeat(6, minmax(0, 1fr)); } }

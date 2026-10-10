@@ -45,15 +45,34 @@
 </div></div>
 <div id="p-pontos" role="tabpanel" aria-labelledby="t-pontos" tabindex="0" hidden><div class="df-stack">
   <section class="df-card" aria-labelledby="reg-t">
-    <header><h2 id="reg-t">Regras de pontuação</h2><small>JSON editável. Salvar só é possível com JSON válido.</small></header>
-    <form class="df-form" method="post" action="/config/regras" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-json-form>
-      <div class="df-field">
-        <label for="regras_json">Regras (JSON)</label>
-        <textarea id="regras_json" name="regras_json" rows="14" class="df-mono" data-json aria-describedby="regras-ajuda" spellcheck="false">{{ regras_json }}</textarea>
-        <small id="regras-ajuda" class="df-help" role="status">JSON válido</small>
+    <header><h2 id="reg-t">{{ ui.icon('shield-check') }} Regras de pontuação</h2><small>Edite os valores e ligue ou desligue cada regra. Regra desligada não pontua, e o valor fica guardado.</small></header>
+    <form class="df-form" method="post" action="/config/regras/tabela" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form>
+      {% macro linha(cat, texto, nome, valor, chave=None, passo='1', sufixo='pts') -%}
+      <div class="df-regra">
+        <span class="df-regra-cat">{{ cat }}</span>
+        <label for="r-{{ nome }}" class="df-regra-txt">{{ texto }}</label>
+        <span class="df-regra-val"><input id="r-{{ nome }}" name="{{ nome }}" type="number" inputmode="decimal" step="{{ passo }}" min="0" value="{{ valor }}" required> <small>{{ sufixo }}</small></span>
+        {% if chave %}<label class="df-regra-ativa"><input type="checkbox" name="ativa_{{ chave }}"{% if rg_ativas.get(chave) is not false %} checked{% endif %}> Ativa</label>{% else %}<span></span>{% endif %}
       </div>
-      <div class="df-form-actions">{{ ui.button('Salvar regras') }}</div>
+      {%- endmacro %}
+      {{ linha('Entrega', 'Chamado concluído pelo executor (pontos × complexidade 1 a 5)', 'pontos_por_complexidade', rg.pontos_por_complexidade, 'pontos_por_complexidade') }}
+      {% for n in range(1, 6) %}{{ linha('Avaliação', 'Nota ' ~ n ~ ' do demandante: multiplica a entrega', 'mult_' ~ n, rg.multiplicador_nota[n|string], None, '0.05', '×') }}{% endfor %}
+      {% for p in ['P1', 'P2', 'P3', 'P4'] %}{{ linha('Prazo', 'Prazo (SLA) da criticidade ' ~ p ~ ' · ' ~ PRIORIDADES[p], 'sla_' ~ p, rg.sla_minutos[p], None, '1', 'min') }}{% endfor %}
+      {{ linha('Prazo', 'Bônus por concluir dentro do SLA', 'bonus_sla', rg.bonus_sla, 'bonus_sla') }}
+      {{ linha('Qualidade', 'Resolução confirmada sem reabertura', 'bonus_sem_reabertura', rg.bonus_sem_reabertura, 'bonus_sem_reabertura') }}
+      {{ linha('Colaboração', 'Apoio à missão de um colega', 'bonus_apoio_colega', rg.bonus_apoio_colega, 'bonus_apoio_colega') }}
+      {{ linha('Colaboração', 'Gestor que remove um impedimento', 'bonus_desbloqueio_gestor', rg.bonus_desbloqueio_gestor, 'bonus_desbloqueio_gestor') }}
+      <div class="df-form-actions">{{ ui.button('Salvar regras', glyph='check') }}</div>
     </form>
+    <details class="df-details"><summary><span>Avançado: editar como JSON</span></summary>
+      <div class="df-details-body">
+        <form class="df-form" method="post" action="/config/regras" hx-boost="true" hx-swap="innerHTML show:window:top" data-df-form data-json-form>
+          <div class="df-field"><label for="regras_json">Regras (JSON)</label>
+            <textarea id="regras_json" name="regras_json" rows="10" class="df-mono" data-json aria-describedby="regras-ajuda" spellcheck="false">{{ regras_json }}</textarea>
+            <small id="regras-ajuda" class="df-help" role="status">JSON válido</small></div>
+          <div class="df-form-actions">{{ ui.button('Salvar JSON', style='secondary') }}</div>
+        </form>
+      </div></details>
   </section>
   <section class="df-card" aria-labelledby="temp-t">
     <header><h2 id="temp-t">{{ ui.icon('calendar-blank') }} Temporadas do placar</h2></header>

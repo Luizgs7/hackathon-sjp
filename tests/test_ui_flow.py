@@ -958,3 +958,49 @@ class FilaCompactaTests(UiFlowBase):
         pag = self.client.get("/atendente", cookies=self.atendente).text
         self.assertNotIn("df-select-empty", pag)
         self.assertIn("aguardando registro", pag)
+
+
+class RegrasDePontuacaoTests(UiFlowBase):
+    def form(self, **extra):
+        base = {"pontos_por_complexidade": "20", "mult_1": "0.5", "mult_2": "0.75", "mult_3": "1", "mult_4": "1.2", "mult_5": "1.5",
+                "sla_P1": "60", "sla_P2": "240", "sla_P3": "1440", "sla_P4": "4320", "bonus_sla": "20", "bonus_sem_reabertura": "15",
+                "bonus_desbloqueio_gestor": "10", "bonus_apoio_colega": "15"}
+        for k in ("pontos_por_complexidade", "bonus_sla", "bonus_sem_reabertura", "bonus_desbloqueio_gestor", "bonus_apoio_colega"):
+            base[f"ativa_{k}"] = "on"
+        return {**base, **extra}
+
+    def test_tabela_edita_valores_e_liga_desliga(self):
+        pag = self.client.get("/config", cookies=self.gestor).text
+        self.assertIn('name="mult_5"', pag)
+        self.assertIn("Regra desligada não pontua", pag)
+        self.assertEqual(self.client.post("/config/regras/tabela", cookies=self.atendente, data=self.form()).status_code, 403)
+        dados = self.form(bonus_sla="33", mult_5="1.8")
+        del dados["ativa_bonus_apoio_colega"]  # desliga
+        r = self.client.post("/config/regras/tabela", cookies=self.gestor, data=dados)
+        self.assertEqual(r.status_code, 303)
+        with app.db() as c:
+            r = app.regras(c)
+            self.assertEqual(r["bonus_sla"], 33)
+            self.assertEqual(r["multiplicador_nota"]["5"], 1.8)
+            self.assertEqual(r["bonus_apoio_colega"], 0)  # desligada vale zero
+            self.assertEqual(app.regras_configuradas(c)["bonus_apoio_colega"], 15)  # valor guardado
+        # religar volta ao valor guardado
+        self.client.post("/config/regras/tabela", cookies=self.gestor, data=self.form())
+        with app.db() as c:
+            self.assertEqual(app.regras(c)["bonus_apoio_colega"], 15)
+
+    def test_valores_invalidos_sao_recusados(self):
+        for ruim in ({"bonus_sla": "-5"}, {"mult_3": "9"}, {"sla_P1": "0"}, {"pontos_por_complexidade": "abc"}):
+            r = self.client.post("/config/regras/tabela", cookies=self.gestor, data=self.form(**ruim))
+            self.assertEqual(r.status_code, 303)
+            self.assertIn("inv%C3%A1lidas", r.headers["location"], ruim)
+        with app.db() as c:
+            self.assertEqual(app.regras(c)["bonus_sla"], 20)
+
+
+class KpiDoQuadroTests(UiFlowBase):
+    def test_doze_indicadores_para_cada_perfil(self):
+        helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}
+        for ck in (self.gestor, helena):
+            html = self.client.get("/gestor/quadro", cookies=ck).text
+            self.assertEqual(html.count('<div class="df-kpi '), 12, "12 indicadores dividem em linhas completas")

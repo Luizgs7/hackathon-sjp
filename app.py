@@ -276,8 +276,21 @@ def set_cfg(c, chave, valor):
               (chave, json.dumps(valor, ensure_ascii=False)))
 
 
+# Regras que o gestor pode ligar ou desligar: desligada vale zero na pontuação (o valor configurado fica guardado).
+REGRAS_ATIVAVEIS = ("pontos_por_complexidade", "bonus_sla", "bonus_sem_reabertura", "bonus_desbloqueio_gestor", "bonus_apoio_colega")
+
+
+def regras_configuradas(c):
+    return json.loads(json.dumps(cfg(c, "regras", REGRAS_PADRAO)))
+
+
 def regras(c):
-    return cfg(c, "regras", REGRAS_PADRAO)
+    r = regras_configuradas(c)
+    ativas = cfg(c, "regras_ativas", {})
+    for k in REGRAS_ATIVAVEIS:
+        if ativas.get(k) is False:
+            r[k] = 0
+    return r
 
 
 def temporada_atual(c):
@@ -3093,7 +3106,8 @@ def config(request: Request):
     u = exige_painel(request, "gestor")
     with db() as c:
         ctx = dict(
-            u=u, regras_json=json.dumps(regras(c), ensure_ascii=False, indent=2),
+            u=u, regras_json=json.dumps(regras_configuradas(c), ensure_ascii=False, indent=2),
+            rg=regras_configuradas(c), rg_ativas=cfg(c, "regras_ativas", {}),
             setores=c.execute("SELECT * FROM setores").fetchall(),
             equipes=c.execute("SELECT e.*, s.nome setor FROM equipes e JOIN setores s ON s.id=e.setor_id").fetchall(),
             tipos=c.execute("SELECT t.*, s.nome setor FROM tipos t JOIN setores s ON s.id=t.setor_id").fetchall(),
@@ -3106,6 +3120,40 @@ def config(request: Request):
                               "LEFT JOIN setores s ON s.id=u.area_id ORDER BY u.papeis, u.nome").fetchall(),
         )
     return render(request, "config.html", **ctx)
+
+
+def _numero(f, nome, minimo, maximo, tipo):
+    try:
+        v = tipo(str(f.get(nome, "")).replace(",", "."))
+    except ValueError:
+        raise ValueError(f"valor inválido em {nome}")
+    if not minimo <= v <= maximo:
+        raise ValueError(f"{nome} deve ficar entre {minimo} e {maximo}")
+    return v
+
+
+@app.post("/config/regras/tabela")
+async def salvar_regras_tabela(request: Request):
+    u = exige_painel(request, "gestor")
+    f = await request.form()
+    try:
+        novas = {
+            "pontos_por_complexidade": _numero(f, "pontos_por_complexidade", 0, 200, int),
+            "multiplicador_nota": {str(n): _numero(f, f"mult_{n}", 0, 3, float) for n in range(1, 6)},
+            "sla_minutos": {p: _numero(f, f"sla_{p}", 1, 100000, int) for p in ("P1", "P2", "P3", "P4")},
+            "bonus_sla": _numero(f, "bonus_sla", 0, 200, int),
+            "bonus_sem_reabertura": _numero(f, "bonus_sem_reabertura", 0, 200, int),
+            "bonus_desbloqueio_gestor": _numero(f, "bonus_desbloqueio_gestor", 0, 200, int),
+            "bonus_apoio_colega": _numero(f, "bonus_apoio_colega", 0, 200, int),
+        }
+    except ValueError as e:
+        return redirect(f"/config?msg=Regras inválidas: {e}&aba=pontos")
+    ativas = {k: f.get(f"ativa_{k}") == "on" for k in REGRAS_ATIVAVEIS}
+    with db() as c:
+        set_cfg(c, "regras", novas)
+        set_cfg(c, "regras_ativas", ativas)
+    log.info("regras de pontuação alteradas por %s", u["nome"])
+    return redirect("/config?msg=Regras de pontuação atualizadas&aba=pontos")
 
 
 @app.post("/config/regras")
