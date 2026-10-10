@@ -726,3 +726,7 @@ body[data-theme="dark"] { --df-scroll-thumb: #5b5f61; }
 .df-chat-head-pessoa .df-chat-quem, .df-chat-head-pessoa h1 { text-align: left; }
 .df-chat-atendente .df-chat-notice { align-self: center; width: auto; max-width: 92%; }
 .df-dialog.df-modal-form { overflow-y: auto; }
+
+/* Mapa no tema escuro: escurece os tiles para não ofuscar */
+body[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
+body[data-theme="dark"] .leaflet-container { background: #1b1d1f; }
