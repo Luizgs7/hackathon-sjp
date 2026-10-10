@@ -8,7 +8,7 @@
 <div class="df-page-head">
   <div>
     <h1>Equipe técnica</h1>
-    <p>Backlog de cada técnico, o chamado em atendimento e a localização, para decidir quem recebe um novo chamado. Atualiza a cada 5 s. <small id="ind-eq" class="htmx-indicator" role="status">atualizando…</small></p>
+    <p>Backlog de cada técnico, o chamado em atendimento e a localização, para decidir quem recebe um novo chamado. Atualiza a cada 5 s.</p>
   </div>
 </div>
 <section class="df-card" aria-labelledby="eq-mapa-t">
@@ -20,7 +20,7 @@
   <div class="df-row"><h2 id="hist-t">{{ ui.icon('path') }}Histórico de rotas executadas</h2><span class="df-strip"><a class="df-chip" href="#" hx-get="/gestor/equipe/historico?dias=7" hx-target="#historico-rotas">7 dias</a><a class="df-chip" href="#" hx-get="/gestor/equipe/historico?dias=30" hx-target="#historico-rotas">30 dias</a></span></div>
   <div id="historico-rotas" hx-get="/gestor/equipe/historico" hx-trigger="load" aria-live="polite"><div class="df-skeleton-group"><div class="df-skeleton"></div></div></div>
 </section>
-<div id="equipe-painel" class="df-stack" aria-live="polite" hx-get="/gestor/equipe/painel" hx-trigger="load, every 5s" hx-indicator="#ind-eq">
+<div id="equipe-painel" class="df-stack" aria-live="polite" hx-get="/gestor/equipe/painel" hx-trigger="load, every 5s">
   <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando a equipe"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
 </div>
 {% endblock %}

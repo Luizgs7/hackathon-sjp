@@ -1,0 +1,30 @@
+{# Formulário do modal "Mover chamado": soltar um cartão no quadro só abre a ação; o status muda no endpoint existente. #}
+{% import "df/_ui.html" as ui %}
+{% set destino = STATUS[para][1] %}
+{% set acao = {'encaminhado': 'atribuir', 'executado': 'resolver-atendimento', 'cancelado': 'cancelar'}[para] %}
+<form class="df-form" method="post" action="/tarefa/{{ t.id }}/{{ acao }}" data-mover-form data-destino="{{ destino }}" data-tid="{{ t.id }}">
+  <p class="df-muted" style="margin:0"><b>#{{ t.id }} · {{ t.titulo }}</b><br>{{ STATUS[t.status][1] }} → <b>{{ destino }}</b></p>
+  {% if para == 'encaminhado' %}
+    {% if sug %}<small>Campos pré-preenchidos pela IA. Revise e edite se necessário.</small>{% endif %}
+    <div class="df-form-row">
+      {% set tipo_opts = [] %}{% for tp in tipos %}{% set _ = tipo_opts.append((tp.id, tp.setor ~ ' › ' ~ tp.nome)) %}{% endfor %}
+      {{ ui.select('tipo_id', 'Tipo de tarefa', tipo_opts, (sug.tipo_id or t.tipo_id), required=True, id='mv-tipo') }}
+      {% set prio_opts = [] %}{% for p, n in PRIORIDADES.items() %}{% set _ = prio_opts.append((p, p ~ ' – ' ~ n)) %}{% endfor %}
+      {{ ui.select('prioridade', 'Criticidade', prio_opts, ((t.prioridade if t.prioridade_ajustada_por else sug.prioridade) or t.prioridade or 'P3'), required=True, id='mv-prio') }}
+    </div>
+    {% set ex_opts = [] %}{% for e in executores %}{% set _ = ex_opts.append((e.id, e.equipe ~ ' › ' ~ e.nome ~ ' · ' ~ e.carga ~ ' ativa(s)')) %}{% endfor %}
+    {{ ui.select('executor_id', 'Executor', ex_opts, (sug.executor_id or t.executor_id), required=True, id='mv-exec') }}
+    {{ ui.field('observacao', 'Orientação ao executor (opcional)', '', id='mv-obs') }}
+  {% elif para == 'executado' %}
+    <small>Resolver no atendimento (1º nível): o solicitante confirma pelo link, como nos demais chamados.</small>
+    {{ ui.textarea('solucao', 'Solução dada ao solicitante', '', rows=3, required=True, id='mv-solucao') }}
+  {% else %}
+    <small>O cancelamento fica registrado na trilha do chamado e avisa o técnico, se houver.</small>
+    {{ ui.textarea('motivo', 'Justificativa do cancelamento', '', rows=3, required=True, id='mv-motivo') }}
+  {% endif %}
+  <p class="df-error" role="alert" data-mover-erro hidden></p>
+  <div class="df-form-actions">
+    <button type="button" class="df-button df-ghost df-size-medium" data-dialog-close><span class="df-button-content">Cancelar</span></button>
+    {{ ui.button({'encaminhado': 'Encaminhar e notificar', 'executado': 'Registrar solução', 'cancelado': 'Cancelar chamado'}[para], glyph={'encaminhado': 'paper-plane-right', 'executado': 'check', 'cancelado': 'x'}[para], style='danger' if para == 'cancelado' else 'primary') }}
+  </div>
+</form>

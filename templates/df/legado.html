@@ -60,8 +60,8 @@
   </section>
 
   <section class="df-stack" aria-labelledby="lista-t">
-    <h2 id="lista-t">Chamados <small id="ind" class="htmx-indicator">atualizando…</small></h2>
-    <div id="lista" aria-live="polite" hx-get="/lista" hx-trigger="load, every 3s" hx-indicator="#ind">
+    <h2 id="lista-t">Chamados</h2>
+    <div id="lista" aria-live="polite" hx-get="/lista" hx-trigger="load, every 3s">
       <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando chamados"><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
     </div>
     <small class="df-muted">Integração: envia para {{ plataforma }}/api/integracao/legado/tarefas · recebe em /api/atualizacoes</small>

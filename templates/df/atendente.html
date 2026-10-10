@@ -26,7 +26,6 @@
     <p>Chamados novos, devolvidos pelo time técnico e reabertos. Avalie cada um: resolva no atendimento ou encaminhe para a área técnica.</p>
   </div>
   <div class="df-actions">
-    <small id="ind-fila" class="htmx-indicator" role="status">atualizando…</small>
     <button type="button" class="df-button df-primary df-size-medium" data-dialog-open="modal-nova-tarefa"><span class="df-button-content">{{ ui.icon('plus') }}Nova tarefa</span></button>
   </div>
 </div>
@@ -37,7 +36,7 @@
 
 <section id="conversas" aria-live="polite" hx-get="/atendente/conversas" hx-trigger="load, every 5s"></section>
 
-<section id="fila" aria-live="polite" aria-label="Fila de atendimento" hx-get="/atendente/fila" hx-trigger="load, every 5s" hx-indicator="#ind-fila">
+<section id="fila" aria-live="polite" aria-label="Fila de atendimento" hx-get="/atendente/fila" hx-trigger="load, every 5s">
   <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando a fila"><div class="df-skeleton"></div><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
 </section>
 

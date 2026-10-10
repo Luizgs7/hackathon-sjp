@@ -1473,7 +1473,7 @@ def pagina_de_erro(request, codigo, detalhe):
 async def erro_http(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 303:
         return RedirectResponse(exc.headers["Location"], status_code=303)
-    if request.url.path.startswith("/api/"):
+    if request.url.path.startswith("/api/") or request.headers.get("X-Requested-With") == "fetch":
         return JSONResponse({"erro": exc.detail}, status_code=exc.status_code)
     return pagina_de_erro(request, exc.status_code, str(exc.detail))
 
@@ -1686,8 +1686,52 @@ def gestor_quadro(request: Request, setor_id: int | None = None, q: str = ""):
     for s in FINAIS:
         colunas[s] = sorted(colunas[s], key=lambda t: t["atualizado_em"], reverse=True)[:10]
     impedidos = [t for t in tarefas if t["status"] == "impedido"]
+    alvos = {t["id"]: " ".join(sorted(alvos_arrasto(u, t["status"]))) for t in tarefas}
     return render(request, "_quadro.html", colunas=colunas, totais=totais, impedidos=impedidos, ind=ind,
-                  busca=q, n_busca=len(tarefas), so_area=eh_gestor_tecnico(u))
+                  busca=q, n_busca=len(tarefas), so_area=eh_gestor_tecnico(u), alvos=alvos)
+
+
+# Arrastar no quadro só abre a ação certa: quem muda o status continua sendo o endpoint existente (TRANSICOES vale sempre).
+ARRASTE = {
+    "novo": {"encaminhado", "executado", "cancelado"},
+    "reaberto": {"encaminhado", "executado", "cancelado"},
+    "devolvido": {"encaminhado", "executado", "cancelado"},
+    "encaminhado": {"cancelado"},
+    "a_caminho": {"cancelado"},
+    "em_execucao": {"cancelado"},
+    "impedido": {"cancelado"},
+}
+
+
+def alvos_arrasto(u, status):
+    """Estados oficiais para onde este perfil pode soltar o cartão. Resolver no atendimento é do gestor Help Desk;
+    reavaliar um devolvido é do gestor técnico da área (mesmas regras de /atribuir)."""
+    alvos = set(ARRASTE.get(status, ())) & TRANSICOES[status]
+    if eh_gestor_tecnico(u):
+        alvos.discard("executado")
+    elif status == "devolvido":
+        alvos.discard("encaminhado")
+    return alvos
+
+
+@app.get("/tarefa/{tid}/mover", response_class=HTMLResponse)
+def mover_formulario(request: Request, tid: int, para: str = ""):
+    """Formulário do modal aberto ao soltar um cartão do quadro (ou pelo botão Mover)."""
+    u = exige_painel(request, "gestor", "gestor_tecnico")
+    with db() as c:
+        t = tarefa_ou_404(c, tid)
+        exige_acesso(u, t)
+        if para not in alvos_arrasto(u, t["status"]):
+            raise HTTPException(409, f"Não é possível mover de {STATUS[t['status']][1]} para {STATUS.get(para, ('', para))[1]}.")
+        ia = json.loads(t["ia_json"]) if t["ia_json"] else {}
+        sug = ia if t["ia_status"] == "sugerida" else {}
+        ctx = dict(t=t, para=para, sug=sug)
+        if para == "encaminhado":
+            gt = eh_gestor_tecnico(u)
+            ctx |= dict(tipos=[x for x in c.execute("SELECT t.*, s.nome setor FROM tipos t JOIN setores s ON s.id=t.setor_id").fetchall()
+                               if not gt or x["setor_id"] == u["area_id"]],
+                        executores=carga_executores(c, u["area_id"] if gt else None))
+    return render(request, "_mover_form.html", **ctx)
 
 
 PERIODOS = {30: "Últimos 30 dias", 60: "Últimos 60 dias", 90: "Últimos 90 dias"}

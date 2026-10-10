@@ -730,3 +730,30 @@ body[data-theme="dark"] { --df-scroll-thumb: #5b5f61; }
 /* Mapa no tema escuro: escurece os tiles para não ofuscar */
 body[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.9); }
 body[data-theme="dark"] .leaflet-container { background: #1b1d1f; }
+
+/* Arrastar e soltar no quadro do gestor */
+.df-dnd-card { display: grid; gap: 4px; }
+.df-dnd-card .df-item-card[draggable="true"] { cursor: grab; -webkit-user-drag: element; }
+.df-dnd-card.df-em-arraste { opacity: .45; }
+.df-mover-btn { justify-self: end; }
+.df-board-col { transition: opacity .15s, outline-color .15s; }
+body.df-arrastando .df-board-col.df-alvo { outline: 2px dashed var(--primary); outline-offset: -2px; }
+body.df-arrastando .df-board-col.df-alvo.df-alvo-sobre { outline-style: solid; background: var(--df-brand-semantic-surface-default); }
+body.df-arrastando .df-board-col.df-sem-alvo { opacity: .4; }
+body.df-arrastando .df-item-card { user-select: none; }
+@media (pointer: coarse) { .df-dnd-card .df-item-card[draggable="true"] { cursor: pointer; } }
+
+/* Mobile: a ação principal da página ocupa a linha, sem ficar solta no meio */
+@media (max-width: 520px) {
+  .df-page-head > .df-actions { width: 100%; }
+  .df-page-head > .df-actions > .df-button { width: 100%; }
+}
+
+/* Select: texto longo não quebra nem vaza da caixa; termina em reticências (a lista aberta mostra o texto inteiro) */
+.df-ui select { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@supports (appearance: base-select) {
+  .df-ui select selectedcontent { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .df-ui select > button { min-width: 0; }
+}
+/* durante o arrasto as colunas ocupam a altura toda do quadro: a área de soltar fica grande, mesmo vazia */
+body.df-arrastando .df-board { align-items: stretch; }

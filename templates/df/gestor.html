@@ -8,7 +8,7 @@
 <div class="df-page-head">
   <div>
     <h1>{{ 'Gestão das equipes técnicas' if 'gestor_tecnico' in u.papeis else 'Painel de missões' }}</h1>
-    <p>Chamados registrados pelo atendimento · atualiza a cada 3 s; passe o mouse nos indicadores para ver o cálculo. <small id="ind" class="htmx-indicator" role="status">atualizando…</small></p>
+    <p>Chamados registrados pelo atendimento · atualiza a cada 3 s; passe o mouse nos indicadores para ver o cálculo.</p>
   </div>
   <form class="df-filters" hx-get="/gestor/quadro" hx-target="#quadro" hx-trigger="change, input delay:300ms, submit" role="search">
     <div class="df-field df-search df-search-quadro">{{ ui.icon('magnifying-glass') }}<label class="df-sr" for="busca-quadro">Buscar chamados em aberto</label><input id="busca-quadro" type="search" name="q" placeholder="Buscar por ID, descrição, local…" autocomplete="off"></div>
@@ -18,7 +18,14 @@
     {{ ui.button('Métricas e capacitação', href='/gestor/metricas', style='secondary') }}{% if 'gestor_tecnico' not in u.papeis %}{{ ui.button('Novo chamado', href='/atendente?nova=1', style='secondary') }}{% endif %}
   </form>
 </div>
-<div id="quadro" class="df-stack" aria-live="polite" hx-get="/gestor/quadro" hx-trigger="load, every 3s" hx-include="[name=setor_id],[name=q]" hx-indicator="#ind">
+<div id="quadro" class="df-stack" aria-live="polite" hx-get="/gestor/quadro" hx-trigger="load, every 3s" hx-include="[name=setor_id],[name=q]">
   <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando o quadro"><div class="df-skeleton"></div><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
 </div>
+<p id="quadro-aviso" class="df-sr" role="status" aria-live="polite"></p>
+<dialog id="modal-mover" class="df-dialog df-modal-medium df-modal-form" aria-labelledby="modal-mover-titulo">
+  <div class="df-row"><h2 id="modal-mover-titulo" style="font-size:20px;margin:0">Mover chamado</h2>
+    <button type="button" class="df-button df-ghost df-icon-button" data-dialog-close aria-label="Fechar"><span class="df-button-content">{{ ui.icon('x') }}</span></button></div>
+  <div id="modal-mover-corpo"></div>
+</dialog>
 {% endblock %}
+{% block scripts %}<script src="/static/ui/quadro_dnd.js?v=20261010"></script>{% endblock %}

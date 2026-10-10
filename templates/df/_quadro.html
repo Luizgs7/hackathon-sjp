@@ -20,7 +20,8 @@
   {% for r in ind.motivos %}{{ r.motivo }} ({{ r.n }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
 
 {% macro cartao(t) -%}
-<a class="df-item-card" href="/tarefa/{{ t.id }}">
+<div class="df-dnd-card" data-tid="{{ t.id }}" data-status="{{ t.status }}" data-alvos="{{ alvos[t.id] }}">
+<a class="df-item-card" href="/tarefa/{{ t.id }}"{% if alvos[t.id] %} draggable="true"{% endif %}>
   <div class="df-item-top">{{ ui.prio(t.prioridade, t.prioridade_por or t.prioridade_ajustada_por) }}
     {% if t.status != STATUS_OFICIAL[t.status] %}{{ ui.status(t.status) }}{% endif %}
     {% if t.ia_status == 'analisando' %}<span class="df-badge df-ia">{{ ui.icon('sparkle') }}triando…</span>
@@ -30,6 +31,8 @@
   <span class="df-item-meta"><span>{% if t.executor %}{{ ui.avatar(t.executor, 'sm') }} {{ t.executor }}{% else %}sem executor{% endif %}</span><span>{{ t.atualizado_em|hora }}</span>
     {% if t.origem != 'web' %}<span>{{ SISTEMAS[t.origem].nome }} {{ t.external_id }}</span>{% endif %}</span>
 </a>
+{% if alvos[t.id] %}<button type="button" class="df-button df-ghost df-size-small df-mover-btn" data-mover-abrir aria-label="Mover chamado {{ t.id }}"><span class="df-button-content">{{ ui.icon('arrow-right') }}Mover…</span></button>{% endif %}
+</div>
 {%- endmacro %}
 
 <section class="df-blocked-strip{{ ' df-calm' if not impedidos }}" aria-labelledby="imp-t">
@@ -46,7 +49,7 @@
 <div class="df-board-scrolltop" data-board-scrolltop aria-hidden="true"><div></div></div>
 <div class="df-board" role="region" aria-label="Quadro de chamados por estado" tabindex="0">
   {% for s in STATUS_OFICIAIS %}
-  <section class="df-board-col" aria-labelledby="col-{{ s }}">
+  <section class="df-board-col" aria-labelledby="col-{{ s }}" data-col="{{ s }}">
     <header><span id="col-{{ s }}">{{ ui.icon('tray') if s == 'novo' else '' }}{{ STATUS[s][1] }}</span><span class="df-badge">{{ totais[s] }}</span></header>
     {% if totais[s] > colunas[s]|length %}<small>Mostrando os {{ colunas[s]|length }} mais recentes · histórico em <a href="/gestor/metricas">Métricas</a></small>{% endif %}
     {% for t in colunas[s] %}{{ cartao(t) }}{% else %}<small class="df-muted">Nenhuma tarefa neste estado.</small>{% endfor %}

@@ -6,7 +6,7 @@ class GestorTecnicoTests(UiFlowBase):
     def test_distinct_profile_login_and_technical_permissions(self):
         login=self.client.get('/login')
         self.assertIn('Gestor do atendimento · Paula Mendes',login.text)
-        self.assertIn('Gestor técnico · Roberto Nunes',login.text)
+        self.assertIn('Gestor Suporte Técnico · Roberto Nunes',login.text)
         uid=self.users['Roberto Nunes']
         r=self.client.post('/login',data={'uid':uid})
         self.assertEqual(r.status_code,303)
