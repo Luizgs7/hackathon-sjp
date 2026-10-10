@@ -5,6 +5,8 @@ Os chamados de TI são segmentados em 6 **áreas**: Help Desk, Suporte Técnico,
 Status oficiais: **Novo → Encaminhado → Executado → Concluído**, com **Devolvido** (o técnico devolve à triagem), **Reaberto** (a demandante indica pendência) e **Cancelado**. Enquanto está Encaminhado, o técnico registra as etapas de campo (a caminho, em execução, impedido).
 Plano de referência: [`../sdd/plano-prototipo-1h.md`](../sdd/plano-prototipo-1h.md).
 
+> **Versão no ar (10 de outubro de 2026):** perfis de teste, fluxo atual e limitações em [`docs/VERSAO_NO_AR.md`](docs/VERSAO_NO_AR.md). Site: https://dataforge-prototipo.vercel.app
+
 ## Como rodar
 
 Requisitos: Python 3.11+ (testado com 3.13) e acesso à internet só para a IA de testes e para o push do navegador.
