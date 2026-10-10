@@ -36,6 +36,8 @@
 </section>
 {% endif %}
 
+<section id="conversas" aria-live="polite" hx-get="/atendente/conversas" hx-trigger="load, every 5s"></section>
+
 <section id="fila" aria-live="polite" aria-label="Fila de atendimento" hx-get="/atendente/fila" hx-trigger="load, every 5s" hx-indicator="#ind-fila">
   <div class="df-skeleton-group" aria-busy="true" aria-label="Carregando a fila"><div class="df-skeleton"></div><div class="df-skeleton"></div><div class="df-skeleton"></div></div>
 </section>

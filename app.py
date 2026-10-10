@@ -279,6 +279,9 @@ def temporada_atual(c):
 # Colunas incluídas depois da primeira versão: bancos já existentes recebem um ALTER TABLE na inicialização.
 MIGRACOES = [
     ("autoatendimento", "jev_json", "TEXT"),
+    ("autoatendimento", "modo", "TEXT NOT NULL DEFAULT 'ia'"),
+    ("autoatendimento", "atendente_id", "INTEGER"),
+    ("autoatendimento", "modo_desde", "TEXT"),
     ("tarefas", "email", "TEXT NOT NULL DEFAULT ''"),
     ("tarefas", "secretaria", "TEXT NOT NULL DEFAULT ''"),
     ("tarefas", "prioridade_ajustada_por", "TEXT"),
@@ -1949,6 +1952,7 @@ def contar_auto_resolvidos(c, inicio="", somente_ia=False):
     if somente_ia:
         sql += " AND EXISTS (SELECT 1 FROM auto_msgs m WHERE m.token=a.token AND m.autor='assistente' AND m.fonte IN ('llm','jev'))"
         sql += " AND NOT EXISTS (SELECT 1 FROM auto_msgs m WHERE m.token=a.token AND m.autor='assistente' AND coalesce(m.fonte,'') NOT IN ('llm','jev'))"
+        sql += " AND NOT EXISTS (SELECT 1 FROM auto_msgs m WHERE m.token=a.token AND m.autor IN ('atendente','sistema'))"
     return c.execute(sql, (inicio,)).fetchone()[0]
 
 
@@ -2140,7 +2144,8 @@ def servidor(request: Request):
         conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall() if token else []
         minhas = solicitacoes_do_visitante(request, c)
         chamado = chamado_da_conversa(c, token)
-    return render(request, "servidor.html", conversa=conversa, minhas=minhas,
+        humano = _contexto_humano(c, token)
+    return render(request, "servidor.html", conversa=conversa, minhas=minhas, **humano,
                   chamado_chat=chamado, estado_chat=estado_conversa(token, conversa) if token else "")
 
 
@@ -2156,13 +2161,16 @@ def servidor_chat(request: Request, pergunta: str = Form(...), estado_chat: str 
             c.execute('INSERT OR IGNORE INTO conversa_acessos(token,email) VALUES(?,?)', (token,email))
         c.execute("INSERT INTO auto_msgs(token,autor,texto,criado_em) VALUES(?,?,?,?)", (token, "servidor", pergunta, agora()))
     with db() as c:
-        resposta, fonte = responder_autoatendimento(c, token, pergunta)
-        c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
-                  (token, "assistente", resposta, fonte, agora()))
+        humano = _contexto_humano(c, token)
+        if humano["modo"] == "ia" or chamado_da_conversa(c, token):
+            resposta, fonte = responder_autoatendimento(c, token, pergunta)
+            c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
+                      (token, "assistente", resposta, fonte, agora()))
+        # Com atendente na conversa (ou na fila), o assistente não responde: quem fala é a pessoa.
         conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
         chamado = chamado_da_conversa(c, token)
     estado = estado_conversa(token, conversa)
-    resp = render(request, "_servidor_chat.html", conversa=conversa, estado_chat=estado, chamado_chat=chamado)
+    resp = render(request, "_servidor_chat.html", conversa=conversa, estado_chat=estado, chamado_chat=chamado, **humano)
     resp.set_cookie("auto_token", token, httponly=True, samesite="lax")
     if len(estado) <= 3800:
         resp.set_cookie("auto_estado", estado, httponly=True, samesite="lax", max_age=86400,
@@ -2219,6 +2227,176 @@ def servidor_status(request: Request):
         token = _sessao_auto(request, c)
         chamado = chamado_da_conversa(c, token)
     return render(request, '_chat_status.html', chamado_chat=chamado)
+
+
+# ---------------------------------------------------------------- conversa com atendente humano
+def _contexto_humano(c, token):
+    """Modo da conversa: 'ia' (assistente), 'aguardando' (pediu atendente) ou 'humano' (atendente assumiu)."""
+    row = c.execute("SELECT a.modo, a.atendente_id, u.nome FROM autoatendimento a LEFT JOIN usuarios u ON u.id=a.atendente_id "
+                    "WHERE a.token=?", (token,)).fetchone() if token else None
+    return {"modo": row["modo"] if row else "ia", "atendente_nome": row["nome"] if row else None}
+
+
+def _msg_sistema(c, token, texto):
+    c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
+              (token, "sistema", texto, "sistema", agora()))
+
+
+def _chat_fragmento(request, c, token):
+    conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
+    return render(request, "_servidor_chat.html", conversa=conversa, estado_chat=estado_conversa(token, conversa),
+                  chamado_chat=chamado_da_conversa(c, token), **_contexto_humano(c, token))
+
+
+@app.post("/servidor/atendente", response_class=HTMLResponse)
+def servidor_falar_com_atendente(request: Request, estado_chat: str = Form("")):
+    """O servidor pede para falar com uma pessoa: a conversa entra na fila do atendimento."""
+    with db() as c:
+        token = _sessao_auto(request, c, estado_chat)
+        if not token:
+            token = secrets.token_urlsafe(16)
+            c.execute("INSERT INTO autoatendimento(token,criado_em) VALUES(?,?)", (token, agora()))
+        email = email_solicitante_atual(request, c)
+        if email:
+            c.execute("INSERT OR IGNORE INTO conversa_acessos(token,email) VALUES(?,?)", (token, email))
+        atual = c.execute("SELECT modo, resolvido FROM autoatendimento WHERE token=?", (token,)).fetchone()
+        if atual["resolvido"] or chamado_da_conversa(c, token):
+            raise HTTPException(409, "Esta conversa já foi encerrada ou virou chamado.")
+        if atual["modo"] == "ia":
+            c.execute("UPDATE autoatendimento SET modo='aguardando', modo_desde=? WHERE token=?", (agora(), token))
+            _msg_sistema(c, token, "Pedido enviado ao Helpdesk. Um atendente vai assumir a conversa; você pode "
+                                   "continuar escrevendo e ele verá todo o histórico.")
+        resp = _chat_fragmento(request, c, token)
+    resp.set_cookie("auto_token", token, httponly=True, samesite="lax", secure=request.url.scheme == "https")
+    return resp
+
+
+@app.get("/servidor/mensagens", response_class=HTMLResponse)
+def servidor_mensagens(request: Request):
+    """Atualização periódica da conversa quando há atendente envolvido."""
+    with db() as c:
+        token = _sessao_auto(request, c)
+        if not token:
+            return HTMLResponse("")
+        return _chat_fragmento(request, c, token)
+
+
+def conversas_na_fila(c):
+    return c.execute(
+        "SELECT a.token, a.modo, a.modo_desde, a.atendente_id, u.nome atendente, "
+        "(SELECT texto FROM auto_msgs m WHERE m.token=a.token AND m.autor='servidor' ORDER BY id LIMIT 1) primeira, "
+        "(SELECT texto FROM auto_msgs m WHERE m.token=a.token AND m.autor='servidor' ORDER BY id DESC LIMIT 1) ultima, "
+        "(SELECT count(*) FROM auto_msgs m WHERE m.token=a.token) total "
+        "FROM autoatendimento a LEFT JOIN usuarios u ON u.id=a.atendente_id "
+        "WHERE a.resolvido=0 AND a.modo IN ('aguardando','humano') AND a.solicitacao_id IS NULL "
+        "ORDER BY (a.modo='aguardando') DESC, a.modo_desde").fetchall()
+
+
+@app.get("/atendente/conversas", response_class=HTMLResponse)
+def atendente_conversas(request: Request):
+    exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        conversas = conversas_na_fila(c)
+    return render(request, "_conversas_fila.html", conversas=conversas)
+
+
+def _conversa_ou_404(c, token):
+    a = c.execute("SELECT * FROM autoatendimento WHERE token=?", (token,)).fetchone()
+    if not a:
+        raise HTTPException(404, "Conversa não encontrada")
+    return a
+
+
+@app.get("/atendente/conversa/{token}", response_class=HTMLResponse)
+def atendente_conversa(request: Request, token: str, fragmento: int = 0):
+    u = exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        a = _conversa_ou_404(c, token)
+        msgs = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
+        humano = _contexto_humano(c, token)
+        email = c.execute("SELECT email FROM conversa_acessos WHERE token=?", (token,)).fetchone()
+        chamado = chamado_da_conversa(c, token)
+    return render(request, "_conversa_msgs.html" if fragmento else "atendente_conversa.html", u=u, a=a, msgs=msgs,
+                  email=email["email"] if email else "", chamado=chamado, **humano)
+
+
+@app.post("/atendente/conversa/{token}/assumir")
+def conversa_assumir(request: Request, token: str):
+    u = exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        a = _conversa_ou_404(c, token)
+        if a["resolvido"] or a["solicitacao_id"]:
+            raise HTTPException(409, "Conversa já encerrada ou convertida em chamado")
+        if a["modo"] == "humano" and a["atendente_id"] != u["id"]:
+            raise HTTPException(409, "Outro atendente já assumiu esta conversa")
+        if a["modo"] != "humano":
+            c.execute("UPDATE autoatendimento SET modo='humano', atendente_id=?, modo_desde=? WHERE token=?",
+                      (u["id"], agora(), token))
+            _msg_sistema(c, token, f"{u['nome']} assumiu a conversa.")
+    return redirect(f"/atendente/conversa/{token}")
+
+
+@app.post("/atendente/conversa/{token}/responder")
+def conversa_responder(request: Request, token: str, texto: str = Form(...)):
+    u = exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        a = _conversa_ou_404(c, token)
+        if a["modo"] != "humano" or a["atendente_id"] != u["id"] or a["resolvido"]:
+            raise HTTPException(409, "Assuma a conversa antes de responder")
+        if texto.strip():
+            c.execute("INSERT INTO auto_msgs(token,autor,texto,fonte,criado_em) VALUES(?,?,?,?,?)",
+                      (token, "atendente", texto.strip(), "atendente", agora()))
+    return redirect(f"/atendente/conversa/{token}")
+
+
+@app.post("/atendente/conversa/{token}/devolver")
+def conversa_devolver(request: Request, token: str):
+    u = exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        a = _conversa_ou_404(c, token)
+        if a["modo"] == "humano" and a["atendente_id"] == u["id"]:
+            c.execute("UPDATE autoatendimento SET modo='ia', atendente_id=NULL WHERE token=?", (token,))
+            _msg_sistema(c, token, "O atendente devolveu a conversa ao assistente virtual.")
+    return redirect("/atendente?msg=Conversa devolvida ao assistente")
+
+
+@app.post("/atendente/conversa/{token}/encerrar")
+def conversa_encerrar(request: Request, token: str):
+    u = exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        a = _conversa_ou_404(c, token)
+        if a["modo"] != "humano" or a["atendente_id"] != u["id"]:
+            raise HTTPException(409, "Somente quem assumiu a conversa pode encerrá-la")
+        c.execute("UPDATE autoatendimento SET resolvido=1, modo='ia' WHERE token=?", (token,))
+        _msg_sistema(c, token, f"{u['nome']} encerrou o atendimento por conversa.")
+    return redirect("/atendente?msg=Conversa encerrada sem chamado")
+
+
+@app.post("/atendente/conversa/{token}/chamado")
+def conversa_abrir_chamado(request: Request, token: str):
+    """Cria a solicitação a partir da conversa; o atendente confere e registra no formulário de sempre."""
+    u = exige_painel(request, "atendente", "gestor")
+    with db() as c:
+        a = _conversa_ou_404(c, token)
+        if a["solicitacao_id"]:
+            sid = a["solicitacao_id"]
+        else:
+            msgs = c.execute("SELECT autor, texto FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall()
+            falas = [m["texto"] for m in msgs if m["autor"] == "servidor"]
+            email = c.execute("SELECT email FROM conversa_acessos WHERE token=?", (token,)).fetchone()
+            setor = c.execute("SELECT id FROM setores ORDER BY id LIMIT 1").fetchone()["id"]
+            conversa = "\n".join(f"{m['autor']}: {m['texto']}" for m in msgs)
+            cur = c.execute("INSERT INTO solicitacoes(token,nome,email,secretaria,local,contato,titulo,descricao,tentativas,"
+                            "setor_id,via_ia,conversa,criado_em) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                            (secrets.token_urlsafe(16), "Servidor (conversa de chat)", email["email"] if email else "",
+                             "", "", "", (falas[0] if falas else "Atendimento por chat")[:70],
+                             " ".join(falas) or "Conversa de chat", "Conversa com atendente", setor, 1, conversa, agora()))
+            sid = cur.lastrowid
+            c.execute("UPDATE solicitacoes SET protocolo=? WHERE id=?", (f"SOL-{sid:04d}", sid))
+            c.execute("UPDATE autoatendimento SET solicitacao_id=?, modo='ia' WHERE token=?", (sid, token))
+            _msg_sistema(c, token, f"{u['nome']} abriu a solicitação SOL-{sid:04d} a partir desta conversa. "
+                                   "Você pode consultar o andamento aqui.")
+    return redirect(f"/atendente?sol={sid}&msg=Confira os dados do solicitante e registre o chamado")
 
 
 @app.get('/servidor/dashboard', response_class=HTMLResponse)

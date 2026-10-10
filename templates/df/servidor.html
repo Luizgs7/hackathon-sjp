@@ -35,7 +35,7 @@
       <textarea id="pergunta" name="pergunta" rows="2" required placeholder="Escreva sua mensagem. Ex.: o computador da recepção está sem internet desde cedo"></textarea>
       <div class="df-composer-foot">{{ ui.button('Enviar', size='small') }}</div>
     </form>
-    <small class="df-chat-disclaimer">Nunca informe senhas. As respostas da IA podem conter erros; em caso de risco, afaste as pessoas e abra a solicitação.</small>
+    <small class="df-chat-disclaimer">Nunca informe senhas. As respostas da IA podem conter erros; em caso de risco, afaste as pessoas e abra o chamado.</small>
     {% endif %}
   </div>
 </section>
@@ -48,11 +48,12 @@
   <ol class="df-stack-sm" style="margin:0;padding-left:20px;font-size:14px">
     <li>Converse com o assistente e tente as orientações.</li>
     <li>Resolveu? Clique em <b>Resolvido</b>. Nenhum chamado é necessário.</li>
-    <li>Não resolveu? <b>Abrir solicitação</b> gera o pedido com o resumo da conversa.</li>
+    <li>Não resolveu? Escolha <b>Falar com atendente</b> para continuar a conversa com uma pessoa, ou <b>Abrir chamado</b> para gerar o pedido com o resumo.</li>
     <li>Um atendente confere e registra o chamado, e você acompanha pelo protocolo.</li>
   </ol>
   <small>Urgências também pelo telefone do Help Desk: (41) 3381-0000.</small>
-  {{ ui.button('Abrir solicitação sem o assistente', href='/servidor/solicitar', style='secondary', glyph='note-pencil') }}
+  {% if not conversa_resolvida %}<button type="button" class="df-button df-secondary df-size-md" hx-post="/servidor/atendente" hx-include="#estado-chat" hx-target="#conversa"><span class="df-button-content">{{ ui.icon('headset') }}Falar com atendente</span></button>{% endif %}
+  {{ ui.button('Abrir chamado sem o assistente', href='/servidor/solicitar', style='secondary', glyph='note-pencil') }}
 </section>
 {% endblock %}
 
@@ -76,6 +77,7 @@
     if (el === form) mostrar(form.pergunta.value);
     else if (el.matches && el.matches('[data-suggestion]')) mostrar(el.textContent);
   });
+  document.body.addEventListener('htmx:afterSwap', e => { if (e.detail.target && e.detail.target.id === 'conversa') e.detail.target.scrollTop = e.detail.target.scrollHeight; });
   document.body.addEventListener('htmx:afterRequest', e => {
     if (e.detail.elt === form && e.detail.successful) { form.reset(); form.pergunta.focus(); }
   });

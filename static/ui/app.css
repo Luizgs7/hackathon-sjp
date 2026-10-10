@@ -521,3 +521,8 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 .df-board-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
 .df-board-nav [data-board-pos] { flex: 1; text-align: center; }
 .df-board-nav button:disabled { opacity: .4; cursor: default; }
+
+/* Conversa com atendente humano */
+.df-chat-notice { justify-self: center; text-align: center; font-size: 13px; color: var(--text-muted, #5b6470); background: var(--df-brand-semantic-surface-hover); border-radius: 999px; padding: 6px 14px; max-width: 90%; }
+.df-chat-estado { display: inline-flex; gap: 6px; align-items: center; }
+.df-bubble-humano { border-color: var(--df-brand-semantic-primary-subtle); background: var(--df-brand-semantic-primary-subtle); }

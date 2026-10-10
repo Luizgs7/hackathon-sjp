@@ -449,3 +449,54 @@ class RastroApiTests(UiFlowBase):
         self.assertNotIn("mapa-tecnico", self.client.get(f"/tarefa/{tid}", cookies=self.atendente).text)
         self.assertIn("mapa-tecnico", self.client.get(f"/validar/{t['token']}").text)
         self.assertIn("mapa-tecnico", self.client.get(f"/servidor/acompanhar/{sol['token']}").text)
+
+
+class ChatComAtendenteTests(UiFlowBase):
+    def pedir_atendente(self):
+        r = self.client.post("/servidor/chat", data={"pergunta": "Meu computador não liga"})
+        self.assertEqual(r.status_code, 200)
+        tok = self.client.cookies.get("auto_token")
+        r = self.client.post("/servidor/atendente", data={"estado_chat": ""})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Aguardando um atendente", r.text)
+        return tok
+
+    def test_fluxo_completo_solicitante_e_atendente(self):
+        tok = self.pedir_atendente()
+        fila = self.client.get("/atendente/conversas", cookies=self.atendente)
+        self.assertIn("Meu computador não liga", fila.text)
+        self.assertIn("Aguardando atendente", fila.text)
+        # o assistente não responde enquanto aguarda
+        r = self.client.post("/servidor/chat", data={"pergunta": "Alguém aí?"})
+        with app.db() as c:
+            autores = [m["autor"] for m in c.execute("SELECT autor FROM auto_msgs WHERE token=? ORDER BY id", (tok,))]
+        self.assertEqual(autores.count("assistente"), 1)  # só a resposta anterior ao pedido
+        # só atendente/gestor
+        self.assertEqual(self.client.get(f"/atendente/conversa/{tok}", cookies=self.tecnico).status_code, 303)
+        self.assertEqual(self.client.post(f"/atendente/conversa/{tok}/responder", data={"texto": "x"},
+                                          cookies=self.atendente).status_code, 409)
+        self.assertEqual(self.client.post(f"/atendente/conversa/{tok}/assumir", cookies=self.atendente).status_code, 303)
+        # outro atendente não toma a conversa
+        self.assertEqual(self.client.post(f"/atendente/conversa/{tok}/assumir", cookies=self.gestor).status_code, 409)
+        self.client.post(f"/atendente/conversa/{tok}/responder", data={"texto": "Olá, vou ajudar."}, cookies=self.atendente)
+        r = self.client.get("/servidor/mensagens")
+        self.assertIn("Olá, vou ajudar.", r.text)
+        self.assertIn("Carlos Lima", r.text)
+        # abrir chamado a partir da conversa
+        r = self.client.post(f"/atendente/conversa/{tok}/chamado", cookies=self.atendente)
+        self.assertEqual(r.status_code, 303)
+        self.assertIn("/atendente?sol=", r.headers["location"])
+        self.assertEqual(self.client.get("/atendente/conversas", cookies=self.atendente).text.count("df-list-item"), 0)
+        r = self.client.get("/servidor/mensagens")
+        self.assertIn("abriu a solicitação", r.text)
+
+    def test_devolver_e_encerrar(self):
+        tok = self.pedir_atendente()
+        self.client.post(f"/atendente/conversa/{tok}/assumir", cookies=self.atendente)
+        self.client.post(f"/atendente/conversa/{tok}/devolver", cookies=self.atendente)
+        with app.db() as c:
+            self.assertEqual(c.execute("SELECT modo FROM autoatendimento WHERE token=?", (tok,)).fetchone()["modo"], "ia")
+        self.client.post(f"/atendente/conversa/{tok}/assumir", cookies=self.atendente)
+        self.client.post(f"/atendente/conversa/{tok}/encerrar", cookies=self.atendente)
+        with app.db() as c:
+            self.assertEqual(c.execute("SELECT resolvido FROM autoatendimento WHERE token=?", (tok,)).fetchone()["resolvido"], 1)

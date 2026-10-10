@@ -1,0 +1,35 @@
+{% extends "df/_base.html" %}
+{% import "df/_ui.html" as ui %}
+{% set nav_perfil = 'painel' %}
+{% set ativo = 'atendimento' %}
+{% block title %}Conversa com o servidor{% endblock %}
+{% block main %}
+<a href="/atendente">{{ ui.icon('caret-left') }}Voltar à fila</a>
+<div class="df-page-head">
+  <div>
+    <h1>Conversa com o servidor</h1>
+    <p>{{ email or 'E-mail não informado' }} · {% if modo == 'aguardando' %}aguardando atendente{% elif modo == 'humano' %}com {{ atendente_nome }}{% else %}{{ 'encerrada' if a.resolvido else 'com o assistente' }}{% endif %}</p>
+  </div>
+</div>
+{% include "df/_conversa_msgs.html" %}
+{% if chamado %}
+<section class="df-card"><p>Solicitação <b class="df-mono">{{ chamado.protocolo }}</b> aberta a partir desta conversa.</p>{{ ui.button('Ir para a fila de atendimento', href='/atendente?sol=' ~ chamado.id, style='secondary') }}</section>
+{% elif a.resolvido %}
+<section class="df-card"><p>Conversa encerrada.</p></section>
+{% elif modo == 'humano' and a.atendente_id == u.id %}
+<form class="df-composer-card" method="post" action="/atendente/conversa/{{ a.token }}/responder" data-df-form>
+  <label class="df-sr" for="texto">Sua resposta</label>
+  <textarea id="texto" name="texto" rows="3" required placeholder="Escreva para o servidor"></textarea>
+  <div class="df-composer-foot">{{ ui.button('Enviar resposta', size='small', glyph='paper-plane-right') }}</div>
+</form>
+<div class="df-chat-actions">
+  <form method="post" action="/atendente/conversa/{{ a.token }}/chamado" data-df-form>{{ ui.button('Abrir chamado desta conversa', style='secondary', size='small', glyph='note-pencil') }}</form>
+  <form method="post" action="/atendente/conversa/{{ a.token }}/devolver" data-df-form>{{ ui.button('Devolver ao assistente', style='ghost', size='small', glyph='arrows-clockwise') }}</form>
+  <form method="post" action="/atendente/conversa/{{ a.token }}/encerrar" data-df-form data-confirm="Encerrar a conversa sem abrir chamado?" data-confirm-label="Encerrar">{{ ui.button('Encerrar sem chamado', style='ghost', size='small', glyph='check') }}</form>
+</div>
+{% elif modo == 'humano' %}
+<section class="df-card"><p>{{ atendente_nome }} já assumiu esta conversa.</p></section>
+{% else %}
+<form method="post" action="/atendente/conversa/{{ a.token }}/assumir" data-df-form>{{ ui.button('Assumir conversa', glyph='headset') }}</form>
+{% endif %}
+{% endblock %}

@@ -3,16 +3,21 @@
 {% if chamado_chat %}{% include 'df/_chat_status.html' %}{% endif %}
 {% if conversa_resolvida %}<span class="df-badge" data-conversa-resolvida="{{ conversa_id }}">Resolvida pelo assistente · sem chamado</span>{% endif %}
 {% for c in conversa %}
-<div class="df-bubble {{ 'me' if c.autor == 'servidor' else 'ia' }}">{% if c.autor == 'assistente' %}<small>{{ ui.icon('sparkle') }}Assistente{{ ' (orientações padrão)' if c.fonte == 'regras' }}</small>{% endif %}{{ c.texto }}</div>
+{% if c.autor == 'sistema' %}<div class="df-chat-notice" role="status">{{ c.texto }}</div>
+{% elif c.autor == 'atendente' %}<div class="df-bubble ia df-bubble-humano"><small>{{ ui.icon('headset') }}Atendente{% if atendente_nome %} · {{ atendente_nome }}{% endif %}</small>{{ c.texto }}</div>
+{% else %}<div class="df-bubble {{ 'me' if c.autor == 'servidor' else 'ia' }}">{% if c.autor == 'assistente' %}<small>{{ ui.icon('sparkle') }}Assistente{{ ' (orientações padrão)' if c.fonte == 'regras' }}</small>{% endif %}{{ c.texto }}</div>{% endif %}
 {% else %}
 <div class="df-bubble ia df-vazio"><small>{{ ui.icon('sparkle') }}Assistente</small>Como posso ajudar? Escolha um dos exemplos abaixo ou descreva o problema com suas palavras.</div>
 {% endfor %}
+{% if modo|default('ia') != 'ia' and not chamado_chat %}<div hidden hx-get="/servidor/mensagens" hx-trigger="every 4s" hx-target="#conversa" hx-swap="innerHTML"></div>
+<div class="df-chat-notice df-chat-estado" role="status">{{ ui.icon('headset') }}{% if modo == 'humano' %}{{ atendente_nome or 'Um atendente' }} está nesta conversa{% else %}Aguardando um atendente assumir…{% endif %}</div>{% endif %}
 <div id="digitando" class="df-bubble ia typing htmx-indicator" role="status"><small>{{ ui.icon('sparkle') }}Assistente</small>digitando…</div>
 {% if conversa and not conversa_resolvida %}
 <div class="df-chat-actions">
   {% if not chamado_chat and conversa[-1].fonte != 'fora_escopo' %}
-  <form method="post" action="/servidor/resolvido" data-df-form><input type="hidden" name="estado_chat" value="{{ estado_chat|default('') }}">{{ ui.button('Resolvido, obrigado!', size='small', style='secondary', glyph='check') }}</form>
-  {{ ui.button('Não resolveu: abrir solicitação', href='/servidor/solicitar?via=ia', size='small', style='secondary', glyph='note-pencil') }}
+  {% if modo|default('ia') == 'ia' %}<form method="post" action="/servidor/resolvido" data-df-form><input type="hidden" name="estado_chat" value="{{ estado_chat|default('') }}">{{ ui.button('Resolvido, obrigado!', size='small', style='secondary', glyph='check') }}</form>{% endif %}
+  {% if modo|default('ia') == 'ia' %}<button type="button" class="df-button df-secondary df-size-small" hx-post="/servidor/atendente" hx-include="#estado-chat" hx-target="#conversa"><span class="df-button-content">{{ ui.icon('headset') }}Falar com atendente</span></button>{% endif %}
+  {{ ui.button('Abrir chamado', href='/servidor/solicitar?via=ia', size='small', style='secondary', glyph='note-pencil') }}
   {% endif %}
   <form method="post" action="/servidor/nova" data-df-form data-confirm="Iniciar uma nova conversa? Seus atendimentos continuam no dashboard." data-confirm-label="Nova conversa">{{ ui.button('Nova conversa', size='small', style='ghost', glyph='arrows-clockwise') }}</form>
 </div>

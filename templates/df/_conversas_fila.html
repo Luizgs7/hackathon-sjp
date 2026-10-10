@@ -1,0 +1,15 @@
+{% import "df/_ui.html" as ui %}
+{% if conversas %}
+<section class="df-card" aria-labelledby="conv-t">
+  <h2 id="conv-t">{{ ui.icon('headset') }}Conversas com atendente ({{ conversas|length }})</h2>
+  <div class="df-stack-sm">
+    {% for v in conversas %}
+    <a class="df-list-item" href="/atendente/conversa/{{ v.token }}">
+      <b>{{ (v.primeira or 'Conversa sem mensagem')[:80] }}</b>
+      <small>{% if v.modo == 'aguardando' %}<span class="df-badge df-ia">Aguardando atendente</span>{% else %}Com {{ v.atendente }}{% endif %} · {{ v.total }} mensagens · {{ v.modo_desde|datahora if v.modo_desde }}</small>
+      {% if v.ultima and v.ultima != v.primeira %}<small class="df-muted">Última: {{ v.ultima[:90] }}</small>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
