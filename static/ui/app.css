@@ -650,3 +650,7 @@ body[data-theme="dark"] .df-list-col .df-list-item[aria-current] { background: v
 @media (min-width: 480px) { .df-kpis.df-kpis-wide { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (min-width: 700px) { .df-kpis.df-kpis-wide { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (min-width: 1100px) { .df-kpis.df-kpis-wide { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+/* Painel do gestor: filtros em uma linha completa, sem botão sozinho */
+.df-page-head .df-filters { flex: 1 1 100%; flex-wrap: wrap; gap: 12px; align-items: end; }
+.df-page-head .df-filters .df-search-quadro { flex: 1 1 320px; max-width: 460px; }

@@ -3273,8 +3273,10 @@ def rastro(request: Request, tid: int, token: str = ""):
             "SELECT 1 FROM solicitacoes WHERE token=? AND tarefa_id=?", (token, tid)).fetchone())
         if not autorizado:
             u = usuario_do_cookie(request, "sess_painel")
-            if not u or "gestor" not in u["papeis"].split(","):
+            papeis = u["papeis"].split(",") if u else []
+            if not u or not ({"gestor", "gestor_tecnico"} & set(papeis)):
                 raise HTTPException(403, "Acesso restrito ao gestor ou ao link do chamado")
+            exige_acesso(u, t)  # gestor técnico: só chamados da sua área
         ini = c.execute("SELECT criado_em FROM eventos WHERE tarefa_id=? AND para='a_caminho' ORDER BY id DESC LIMIT 1",
                         (tid,)).fetchone()
     dados = rastro_estado(chave_local(t), t["status"], ini["criado_em"] if ini else None)

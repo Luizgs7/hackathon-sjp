@@ -1004,3 +1004,14 @@ class KpiDoQuadroTests(UiFlowBase):
         for ck in (self.gestor, helena):
             html = self.client.get("/gestor/quadro", cookies=ck).text
             self.assertEqual(html.count('<div class="df-kpi '), 12, "12 indicadores dividem em linhas completas")
+
+
+class MapaDoGestorTecnicoTests(UiFlowBase):
+    def test_gestor_tecnico_ve_o_mapa_apenas_da_sua_area(self):
+        tid = self.registrar(self.solicitar())
+        with app.db() as c:
+            c.execute("UPDATE tarefas SET setor_id=3, executor_id=? WHERE id=?", (self.users["Rafael Costa"], tid))
+        helena = {"sess_painel": app.assinar(self.users["Helena Prado"])}
+        roberto = {"sess_painel": app.assinar(self.users["Roberto Nunes"])}
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}", cookies=helena).status_code, 200)
+        self.assertEqual(self.client.get(f"/api/rastro/{tid}", cookies=roberto).status_code, 403)
