@@ -2412,6 +2412,15 @@ def email_solicitante_atual(request, c):
     return r['email'] if r else None
 
 
+def exige_solicitante(request):
+    """O assistente e os chamados do solicitante exigem login: não há acesso como visitante."""
+    with db() as c:
+        email = email_solicitante_atual(request, c)
+    if not email:
+        raise HTTPException(303, headers={"Location": "/login?msg=" + quote("Entre com o seu perfil para usar o assistente e acompanhar chamados.")})
+    return email
+
+
 def chamado_da_conversa(c, token):
     return c.execute("SELECT s.*, t.status tarefa_status FROM autoatendimento a JOIN solicitacoes s ON s.id=a.solicitacao_id "
                      "LEFT JOIN tarefas t ON t.id=s.tarefa_id WHERE a.token=?", (token,)).fetchone() if token else None
@@ -2507,6 +2516,7 @@ def rascunho_da_conversa(c, token):
 
 @app.get("/servidor", response_class=HTMLResponse)
 def servidor(request: Request):
+    exige_solicitante(request)
     with db() as c:
         token = _sessao_auto(request, c)
         conversa = c.execute("SELECT * FROM auto_msgs WHERE token=? ORDER BY id", (token,)).fetchall() if token else []
@@ -2519,6 +2529,7 @@ def servidor(request: Request):
 
 @app.post("/servidor/chat", response_class=HTMLResponse)
 def servidor_chat(request: Request, pergunta: str = Form(...), estado_chat: str = Form("")):
+    exige_solicitante(request)
     with db() as c:
         token = _sessao_auto(request, c, estado_chat)
         if not token:
@@ -2554,6 +2565,7 @@ def servidor_chat(request: Request, pergunta: str = Form(...), estado_chat: str 
 
 @app.post("/servidor/resolvido")
 def servidor_resolvido(request: Request, estado_chat: str = Form("")):
+    exige_solicitante(request)
     with db() as c:
         token = _sessao_auto(request, c, estado_chat)
         if not token:
@@ -2575,6 +2587,7 @@ def servidor_resolvido(request: Request, estado_chat: str = Form("")):
 
 @app.post("/servidor/historico", response_class=HTMLResponse)
 def servidor_historico(request: Request, estado_chat: str = Form(...)):
+    exige_solicitante(request)
     snapshot = ler_estado_conversa(estado_chat)
     if not snapshot or not snapshot.get("resolvida"):
         raise HTTPException(400, "Conversa inválida. Abra uma conversa salva no histórico.")
@@ -2586,7 +2599,8 @@ def servidor_historico(request: Request, estado_chat: str = Form(...)):
 
 
 @app.post("/servidor/nova")
-def servidor_nova():
+def servidor_nova(request: Request):
+    exige_solicitante(request)
     resp = redirect("/servidor")
     resp.delete_cookie("auto_token")
     resp.delete_cookie("auto_estado")
@@ -2595,6 +2609,7 @@ def servidor_nova():
 
 @app.get('/servidor/status', response_class=HTMLResponse)
 def servidor_status(request: Request):
+    exige_solicitante(request)
     with db() as c:
         token = _sessao_auto(request, c)
         chamado = chamado_da_conversa(c, token)
@@ -2623,6 +2638,7 @@ def _chat_fragmento(request, c, token):
 @app.post("/servidor/atendente", response_class=HTMLResponse)
 def servidor_falar_com_atendente(request: Request, estado_chat: str = Form("")):
     """O servidor pede para falar com uma pessoa: a conversa entra na fila do atendimento."""
+    exige_solicitante(request)
     with db() as c:
         token = _sessao_auto(request, c, estado_chat)
         if not token:
@@ -2648,6 +2664,7 @@ def servidor_falar_com_atendente(request: Request, estado_chat: str = Form("")):
 @app.get("/servidor/mensagens", response_class=HTMLResponse)
 def servidor_mensagens(request: Request):
     """Atualização periódica da conversa quando há atendente envolvido."""
+    exige_solicitante(request)
     with db() as c:
         token = _sessao_auto(request, c)
         if not token:
@@ -2784,6 +2801,7 @@ def servidor_dashboard():
 
 @app.get('/servidor/conversas/{token}')
 def abrir_conversa(request: Request, token: str):
+    exige_solicitante(request)
     with db() as c:
         email = email_solicitante_atual(request,c)
         row = c.execute('SELECT a.* FROM autoatendimento a JOIN conversa_acessos ca ON ca.token=a.token WHERE a.token=? AND ca.email=?', (token,email)).fetchone()
@@ -2802,6 +2820,7 @@ def abrir_conversa(request: Request, token: str):
 
 @app.get("/servidor/solicitar", response_class=HTMLResponse)
 def servidor_solicitar_form(request: Request, via: str = ""):
+    exige_solicitante(request)
     if via != "ia":
         return redirect("/servidor?msg=O chamado é aberto a partir da conversa com o assistente ou com um atendente.")
     with db() as c:
@@ -2822,6 +2841,7 @@ def servidor_solicitar(request: Request, nome: str = Form(...), email: str = For
                        local: str = Form(...), contato: str = Form(""), titulo: str = Form(...),
                        descricao: str = Form(...), tentativas: str = Form(""), setor_id: int = Form(...),
                        via_ia: int = Form(0), continuar_chat: int = Form(0)):
+    exige_solicitante(request)
     nome, email, secretaria = validar_solicitante(nome, email, secretaria)
     with db() as c:
         token_auto = _sessao_auto(request, c) if via_ia else None
@@ -2882,6 +2902,7 @@ def email_do_acesso(c, token):
 
 @app.get("/meus-chamados", response_class=HTMLResponse)
 def meus_chamados_form(request: Request):
+    exige_solicitante(request)
     token = request.cookies.get("acesso_solicitante")
     if token:
         with db() as c:
@@ -2889,19 +2910,13 @@ def meus_chamados_form(request: Request):
             if c.execute("SELECT 1 FROM acessos_solicitante WHERE token=? AND criado_em>=?", (token, (
                     datetime.now() - timedelta(days=ACESSO_DIAS)).strftime("%Y-%m-%d %H:%M:%S"))).fetchone():
                 return redirect(f"/meus-chamados/{token}")
-    return render(request, "meus_chamados_acesso.html", link=None)
+    return redirect("/login")
 
 
 @app.post("/meus-chamados", response_class=HTMLResponse)
-def meus_chamados_pedir(request: Request, email: str = Form(...)):
-    email = email.strip().lower()
-    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
-        return render(request, "meus_chamados_acesso.html", link=None, msg="Informe um e-mail válido.")
-    token = secrets.token_urlsafe(16)
-    with db() as c:
-        c.execute("INSERT INTO acessos_solicitante(token,email,criado_em) VALUES(?,?,?)", (token, email, agora()))
-    # Resposta igual exista ou não chamado para o e-mail: não revela quem tem chamados.
-    return render(request, "meus_chamados_acesso.html", link=f"/meus-chamados/{token}", email=email)
+def meus_chamados_pedir():
+    """O acesso por e-mail digitado foi removido: só entra quem faz login."""
+    return redirect("/login?msg=" + quote("Entre com o seu perfil para acompanhar os chamados."))
 
 
 @app.get("/meus-chamados/{token}", response_class=HTMLResponse)

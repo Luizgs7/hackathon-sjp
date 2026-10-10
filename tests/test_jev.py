@@ -184,6 +184,7 @@ class BackendTests(unittest.TestCase):
 
     def test_chat_http_endpoint_and_template(self):
         client = TestClient(app.app)
+        client.post("/login/solicitante")  # o assistente exige login
         with patch.object(app, "route_conversation", return_value=decision({"acao": "helpdesk"})), patch.object(app, "llm") as llm:
             response = client.post("/servidor/chat", data={"pergunta": "Impressora quebrada"})
         self.assertEqual(response.status_code, 200)

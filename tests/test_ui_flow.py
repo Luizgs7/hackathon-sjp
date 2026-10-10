@@ -59,6 +59,7 @@ class UiFlowBase(unittest.TestCase):
             self.addCleanup(p.stop)
         app.init_db()
         self.client = TestClient(app.app, follow_redirects=False)
+        self.client.post("/login/solicitante")  # o assistente e os chamados exigem login do solicitante
         with app.db() as c:
             self.users = {u["nome"]: u["id"] for u in c.execute("SELECT id, nome FROM usuarios")}
             self.setor = c.execute("SELECT id FROM setores ORDER BY id LIMIT 1").fetchone()["id"]
@@ -101,7 +102,7 @@ class PaginasTests(UiFlowBase):
         with app.db() as c:
             ex = c.execute("SELECT id FROM usuarios WHERE nome='Rafael Costa'").fetchone()["id"]
             c.execute("UPDATE tarefas SET executor_id=?, tipo_id=(SELECT id FROM tipos LIMIT 1) WHERE id=?", (ex, tid))
-        return [("/login", None), ("/servidor", None), ("/meus-chamados", None),
+        return [("/login", None), ("/servidor", None),
                 (f"/servidor/acompanhar/{sol['token']}", None), (f"/validar/{t['token']}", None),
                 ("/atendente", self.atendente), (f"/tarefa/{tid}", self.atendente), ("/gestor", self.gestor),
                 ("/gestor/metricas", self.gestor), ("/ranking", self.gestor), ("/config", self.gestor),
@@ -263,20 +264,25 @@ class CaminhosTests(UiFlowBase):
         self.assertEqual(row["via_ia"], 1)
         self.assertIn("impressora", row["conversa"].lower())
 
-    def test_meus_chamados_por_email_e_link(self):
-        sol = self.solicitar(email="ana.souza@exemplo.gov.br")
+    def test_chamados_exigem_login_do_solicitante(self):
+        sol = self.solicitar(email=app.SOLICITANTE_DEMO["email"])
         self.registrar(sol)
-        self.assertIn("Receber link de acesso", self.client.get("/meus-chamados").text)
-        r = self.client.post("/meus-chamados", data={"email": "ana.souza@exemplo.gov.br"})
-        self.assertIn("E-mail simulado", r.text)
-        link = re.search(r'href="(/meus-chamados/[^"]+)"', r.text).group(1)
-        lista = self.client.get(link)
+        # logado: /meus-chamados leva à lista do próprio solicitante
+        r = self.client.get("/meus-chamados")
+        self.assertEqual(r.status_code, 303)
+        lista = self.client.get(r.headers["location"])
         self.assertEqual(lista.status_code, 200)
         self.assertIn('<h2 id="ab-h">Em aberto</h2>', lista.text)
         self.assertEqual(lista.text.count('class="df-open-card"'), 1)
-        self.assertIn('id="meus"', lista.text)
-        invalido = self.client.post("/meus-chamados", data={"email": "nao-e-email"})
-        self.assertIn("e-mail válido", invalido.text.lower())
+        self.assertIn("Conversas", lista.text)
+        # visitante sem login: assistente, chamados e acesso por e-mail redirecionam ao login
+        visitante = TestClient(app.app, follow_redirects=False)
+        for metodo, url, dados in (("get", "/servidor", None), ("post", "/servidor/chat", {"pergunta": "oi"}), ("get", "/meus-chamados", None),
+                                   ("post", "/meus-chamados", {"email": "ana@exemplo.gov.br"}), ("get", "/servidor/solicitar?via=ia", None),
+                                   ("post", "/servidor/atendente", {})):
+            resp = getattr(visitante, metodo)(url, **({"data": dados} if dados is not None else {}))
+            self.assertEqual(resp.status_code, 303, url)
+            self.assertTrue(resp.headers["location"].startswith("/login"), url)
         self.assertEqual(self.client.get("/meus-chamados/inexistente").status_code, 404)
 
     def test_devolucao_impedimento_e_reabertura(self):

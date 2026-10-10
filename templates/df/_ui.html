@@ -124,7 +124,7 @@
   {% for s in minhas %}
   <a class="df-list-item" href="/servidor/acompanhar/{{ s.token }}"{% if atual == s.token %} aria-current="page"{% endif %} data-filter-text="{{ s.protocolo }} {{ s.titulo }}"><b>{{ s.protocolo }} · {{ s.titulo }}</b><small>{{ s.criado_em|datahora }}</small></a>
   {% else %}
-  <p class="df-muted"><small>As solicitações que você enviar aparecem aqui. <a href="/meus-chamados">Acessar com meu e-mail</a></small></p>
+  <p class="df-muted"><small>As solicitações que você enviar aparecem aqui.</small></p>
   {% endfor %}
 </nav>
 <section class="df-stack-sm" aria-labelledby="historico-conversas-titulo">

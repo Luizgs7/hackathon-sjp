@@ -57,7 +57,7 @@ class SolicitanteDemoTests(UiFlowBase):
         self.assertEqual(self.client.get('/servidor/conversas/'+token).status_code,303)
         self.assertIn('Impressora de teste sem conexão',self.client.get('/servidor').text)
         self.client.get('/meus-chamados-sair')
-        self.assertEqual(self.client.get('/servidor/conversas/'+token).status_code,404)
+        self.assertEqual(self.client.get('/servidor/conversas/'+token).status_code,303)  # sem login, vai ao login
         self.assertEqual(self.client.get('/servidor/dashboard').status_code,303)
 
     def test_manual_creation_is_not_available_to_requester(self):
@@ -144,6 +144,9 @@ class SolicitanteDemoTests(UiFlowBase):
             self.assertEqual(c.execute('SELECT count(*) FROM auto_msgs').fetchone()[0], 0)
 
     def test_demo_entry_identity_prefill_and_signout(self):
+        self.client.cookies.clear()  # começa sem sessão
+        with app.db() as c:
+            c.execute('DELETE FROM acessos_solicitante')
         login = self.client.get('/login')
         self.assertIn('Tipo de usuário', login.text)
         self.assertIn('Solicitante · Ana Souza', login.text)
